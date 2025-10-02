@@ -1,1 +1,42 @@
+name: Android CI
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          build-tools: 34.0.0
+
+      - run: yes | sdkmanager --licenses
+      - run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+
+      # تنزيل Gradle مؤقتًا إذا ما عندك gradle wrapper بالمشروع
+      - name: Download Gradle (fallback)
+        run: |
+          if [ ! -f ./gradlew ]; then
+            curl -sLo gradle-bin.zip https://services.gradle.org/distributions/gradle-8.7-bin.zip
+            mkdir -p $HOME/gradle && unzip -q gradle-bin.zip -d $HOME/gradle
+            echo "$HOME/gradle/gradle-8.7/bin" >> $GITHUB_PATH
+          fi
+
+      - name: Build Debug APK
+        run: |
+          if [ -f ./gradlew ]; then ./gradlew assembleDebug; else gradle assembleDebug; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/*.apk

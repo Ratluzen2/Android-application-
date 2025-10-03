@@ -1,41 +1,93 @@
 package com.zafer.smm.data.remote
 
-import retrofit2.http.Field
-import retrofit2.http.FormUrlEncoded
+import com.google.gson.annotations.SerializedName
+import com.zafer.smm.BuildConfig
+import com.zafer.smm.data.model.AddOrderResponse
+import com.zafer.smm.data.model.BalanceResponse
+import com.zafer.smm.data.model.ServicesResponse
+import com.zafer.smm.data.model.StatusResponse
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.Body
 import retrofit2.http.POST
 
+/**
+ * واجهة REST الخاصة بـ kd1s (API v2)
+ * BASE_URL = https://kd1s.com/api/v2/
+ *
+ * ملاحظة: نمرر المفتاح تلقائياً من BuildConfig.API_KEY في bodies الافتراضية.
+ */
 interface ApiService {
 
-    // استرجاع الخدمات: الآن يرجع ServicesResponse (غلاف يحوي "services")
-    @FormUrlEncoded
-    @POST("api/v2")
+    // 1) جلب الخدمات
+    @POST("services")
     suspend fun getServices(
-        @Field("key") key: String,
-        @Field("action") action: String = "services"
+        @Body body: KeyBody = KeyBody(BuildConfig.API_KEY)
     ): ServicesResponse
 
-    @FormUrlEncoded
-    @POST("api/v2")
-    suspend fun placeOrder(
-        @Field("key") key: String,
-        @Field("action") action: String = "add",
-        @Field("service") serviceId: Long,
-        @Field("link") link: String,
-        @Field("quantity") quantity: Int
+    // 2) إنشاء طلب جديد
+    @POST("add")
+    suspend fun addOrder(
+        @Body body: AddOrderBody
     ): AddOrderResponse
 
-    @FormUrlEncoded
-    @POST("api/v2")
-    suspend fun orderStatus(
-        @Field("key") key: String,
-        @Field("action") action: String = "status",
-        @Field("order") orderId: Long
-    ): OrderStatusResponse
+    // 3) حالة طلب
+    @POST("status")
+    suspend fun getStatus(
+        @Body body: StatusBody
+    ): StatusResponse
 
-    @FormUrlEncoded
-    @POST("api/v2")
-    suspend fun balance(
-        @Field("key") key: String,
-        @Field("action") action: String = "balance"
+    // 4) الرصيد
+    @POST("balance")
+    suspend fun getBalance(
+        @Body body: KeyBody = KeyBody(BuildConfig.API_KEY)
     ): BalanceResponse
+
+    companion object {
+        fun create(): ApiService {
+            val logging = HttpLoggingInterceptor().apply {
+                level = HttpLoggingInterceptor.Level.BASIC
+            }
+            val okHttp = OkHttpClient.Builder()
+                .addInterceptor(logging)
+                .build()
+
+            return Retrofit.Builder()
+                .baseUrl(BuildConfig.BASE_URL) // مثال: https://kd1s.com/api/v2/
+                .client(okHttp)
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
+                .create(ApiService::class.java)
+        }
+    }
 }
+
+/* ---------------------- أجسام الطلبات (Requests Bodies) ---------------------- */
+
+data class KeyBody(
+    @SerializedName("key") val key: String
+)
+
+/**
+ * الحقول الإلزامية: key, service, link, quantity
+ * باقي الحقول اختيارية وتختلف حسب نوع الخدمة في الـ SMM.
+ */
+data class AddOrderBody(
+    @SerializedName("key") val key: String,
+    @SerializedName("service") val service: Long,
+    @SerializedName("link") val link: String,
+    @SerializedName("quantity") val quantity: Int,
+    @SerializedName("runs") val runs: Int? = null,
+    @SerializedName("interval") val interval: Int? = null,
+    @SerializedName("comments") val comments: String? = null,
+    @SerializedName("username") val username: String? = null,
+    @SerializedName("user_id") val userId: String? = null
+)
+
+data class StatusBody(
+    @SerializedName("key") val key: String,
+    // هنا نتعامل مع طلب واحد للتبسيط. إن أردت "orders" لقائمة IDs عدّل النموذج حسب الحاجة.
+    @SerializedName("order") val orderId: Long
+)

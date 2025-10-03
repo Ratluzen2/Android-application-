@@ -1,51 +1,54 @@
 package com.zafer.smm.data.remote
 
-import com.zafer.smm.data.model.*
+import com.google.gson.JsonObject
+import retrofit2.Response
 import retrofit2.http.*
 
+/**
+ * واجهة REST لخادمك على هيروكو.
+ * تأكد أن BASE_URL ينتهي بـ '/'.
+ */
 interface ApiService {
 
     companion object {
-        // تأكد أن عنوانك ينتهي بـ /api/
-        const val BASE_URL = "https://ratluzen-smm-backend.herokuapp.com/api/"
-
-        // المفاتيح تريدها مكشوفة داخل الكود كما طلبت
-        const val API_KEY = "25a9ceb07be0d8b2ba88e70dcbe92"
+        // عدّلها فقط إذا تغيّر رابط هيروكو لديك
+        const val BASE_URL = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com/"
     }
 
-    // قائمة الخدمات
-    @GET("services")
-    suspend fun getServices(
-        @Header("X-API-KEY") apiKey: String = API_KEY
-    ): ServicesResponse
+    // --- Health / Docs ---
+    @GET("health")
+    suspend fun health(): Response<JsonObject>
 
-    // الرصيد
-    @GET("balance")
-    suspend fun getBalance(
-        @Header("X-API-KEY") apiKey: String = API_KEY
-    ): BalanceResponse
+    // --- Auth / Register ---
+    @POST("api/register")
+    suspend fun register(@Body body: RegisterBody): Response<JsonObject>
 
-    // إنشاء طلب
-    @POST("orders")
-    suspend fun placeOrder(
-        @Header("X-API-KEY") apiKey: String = API_KEY,
-        @Body body: Any               // ارسل Map<String, Any> أو داتا كلاس — الكود سيعمل
-    ): AddOrderResponse
+    // --- Wallet / Balance ---
+    @GET("api/user/{device_id}/balance")
+    suspend fun getBalance(@Path("device_id") deviceId: String): Response<BalanceDto>
 
-    // حالة الطلب
-    @GET("orders/{id}")
+    @POST("api/wallet/deposit")
+    suspend fun deposit(@Body body: DepositBody): Response<JsonObject>
+
+    @GET("api/wallet/transactions")
+    suspend fun walletTransactions(@Query("device_id") deviceId: String): Response<List<WalletTransaction>>
+
+    // --- Services & Orders ---
+    @GET("api/services")
+    suspend fun getServices(): Response<List<ServiceItem>>
+
+    @POST("api/order/add")
+    suspend fun addOrder(@Body body: AddOrderBody): Response<JsonObject>
+
+    @GET("api/order/{provider_order_id}/status")
     suspend fun orderStatus(
-        @Header("X-API-KEY") apiKey: String = API_KEY,
-        @Path("id") id: Long
-    ): StatusResponse
+        @Path("provider_order_id") providerOrderId: String
+    ): Response<JsonObject>
 
-    // تعريف/تسجيل المستخدم في الباكند (إن كان الباكند يدعم ذلك)
-    @POST("users")
-    suspend fun registerUser(
-        @Body user: UserDto
-    )
+    @GET("api/orders/{device_id}")
+    suspend fun orders(@Path("device_id") deviceId: String): Response<List<OrderItem>>
 
-    // المتصدرون
-    @GET("leaderboard")
-    suspend fun leaderboard(): List<LeaderboardEntry>
+    // --- Leaderboard ---
+    @GET("api/leaderboard")
+    suspend fun leaderboard(): Response<List<LeaderboardEntry>>
 }

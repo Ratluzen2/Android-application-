@@ -20,7 +20,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.zafer.smm.ui.MainViewModel
 import com.zafer.smm.data.remote.ApiService
-
 class MainActivity : ComponentActivity() {
 
     private val vm: MainViewModel by viewModels()

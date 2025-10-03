@@ -3,38 +3,49 @@ package com.zafer.smm.data.remote
 import com.zafer.smm.data.model.*
 import retrofit2.http.*
 
-// أجسام الطلب
-data class RegisterBody(val device_id: String, val username: String? = null)
-
 interface ApiService {
 
-    @POST("register")
-    suspend fun register(@Body body: RegisterBody): UserDto
+    companion object {
+        // تأكد أن عنوانك ينتهي بـ /api/
+        const val BASE_URL = "https://ratluzen-smm-backend.herokuapp.com/api/"
 
+        // المفاتيح تريدها مكشوفة داخل الكود كما طلبت
+        const val API_KEY = "25a9ceb07be0d8b2ba88e70dcbe92"
+    }
+
+    // قائمة الخدمات
     @GET("services")
-    suspend fun getServices(@Query("force") force: Boolean = false): ServicesResponse
+    suspend fun getServices(
+        @Header("X-API-KEY") apiKey: String = API_KEY
+    ): ServicesResponse
 
+    // الرصيد
     @GET("balance")
-    suspend fun balance(@Query("device_id") deviceId: String): BalanceResponse
+    suspend fun getBalance(
+        @Header("X-API-KEY") apiKey: String = API_KEY
+    ): BalanceResponse
 
+    // إنشاء طلب
     @POST("orders")
     suspend fun placeOrder(
-        @Query("device_id") deviceId: String,
-        @Query("service_id") serviceId: Int,
-        @Query("link") link: String,
-        @Query("quantity") quantity: Int
+        @Header("X-API-KEY") apiKey: String = API_KEY,
+        @Body body: Any               // ارسل Map<String, Any> أو داتا كلاس — الكود سيعمل
     ): AddOrderResponse
 
-    @GET("orders")
-    suspend fun orders(@Query("device_id") deviceId: String): List<OrderItem>
+    // حالة الطلب
+    @GET("orders/{id}")
+    suspend fun orderStatus(
+        @Header("X-API-KEY") apiKey: String = API_KEY,
+        @Path("id") id: Long
+    ): StatusResponse
 
-    @GET("order/{provider_order_id}")
-    suspend fun orderStatus(@Path("provider_order_id") providerOrderId: Long): StatusResponse
+    // تعريف/تسجيل المستخدم في الباكند (إن كان الباكند يدعم ذلك)
+    @POST("users")
+    suspend fun registerUser(
+        @Body user: UserDto
+    )
 
-    @POST("wallet/deposit")
-    suspend fun walletDeposit(
-        @Query("device_id") deviceId: String,
-        @Query("amount") amount: Double,
-        @Query("note") note: String? = null
-    ): Map<String, Boolean>
+    // المتصدرون
+    @GET("leaderboard")
+    suspend fun leaderboard(): List<LeaderboardEntry>
 }

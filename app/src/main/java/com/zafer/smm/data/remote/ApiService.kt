@@ -1,19 +1,24 @@
 package com.zafer.smm.data.remote
 
-import com.zafer.smm.model.AddOrderResponse
-import com.zafer.smm.model.BalanceResponse
-import com.zafer.smm.model.StatusResponse
+import com.zafer.smm.data.model.*
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.http.*
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import retrofit2.http.*
 
-interface ApiService {
+interface ApiRaw {
+    // بعض لوحات SMM (ومنها kd1s) تُرجع قائمة JSON مباشرةً للخدمات
+    @FormUrlEncoded
+    @POST("api/v2")
+    suspend fun services(
+        @Field("key") key: String,
+        @Field("action") action: String = "services"
+    ): List<ServiceItem>
 
     @FormUrlEncoded
-    @POST("/api/v2")
-    suspend fun placeOrder(
+    @POST("api/v2")
+    suspend fun add(
         @Field("key") key: String,
         @Field("action") action: String = "add",
         @Field("service") service: Int,
@@ -22,39 +27,36 @@ interface ApiService {
     ): AddOrderResponse
 
     @FormUrlEncoded
-    @POST("/api/v2")
-    suspend fun orderStatus(
+    @POST("api/v2")
+    suspend fun status(
         @Field("key") key: String,
         @Field("action") action: String = "status",
-        @Field("order") orderId: Long
+        @Field("order") order: Long
     ): StatusResponse
 
     @FormUrlEncoded
-    @POST("/api/v2")
+    @POST("api/v2")
     suspend fun balance(
         @Field("key") key: String,
         @Field("action") action: String = "balance"
     ): BalanceResponse
+}
 
-    companion object {
-        // مأخوذ حرفيًا من كودك
-        const val API_KEY: String = "25a9ceb07be0d8b2ba88e70dcbe92e06"
-        private const val BASE: String = "https://kd1s.com" // API_URL = https://kd1s.com/api/v2
+object ApiService {
+    // مأخوذة من كود البوت كما هي:
+    // API_URL=https://kd1s.com/api/v2  => baseUrl = https://kd1s.com/
+    // API_KEY=25a9ceb07be0d8b2ba88e70dcbe92e06
+    const val BASE_URL = "https://kd1s.com/"
+    const val API_KEY = "25a9ceb07be0d8b2ba88e70dcbe92e06"
 
-        fun create(): ApiService {
-            val log = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BODY
-            }
-            val client = OkHttpClient.Builder()
-                .addInterceptor(log)
-                .build()
-
-            return Retrofit.Builder()
-                .baseUrl(BASE)
-                .addConverterFactory(GsonConverterFactory.create())
-                .client(client)
-                .build()
-                .create(ApiService::class.java)
-        }
+    val api: ApiRaw by lazy {
+        val log = HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY }
+        val client = OkHttpClient.Builder().addInterceptor(log).build()
+        Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .addConverterFactory(GsonConverterFactory.create())
+            .client(client)
+            .build()
+            .create(ApiRaw::class.java)
     }
 }

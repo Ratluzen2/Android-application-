@@ -4,38 +4,38 @@ import retrofit2.http.Field
 import retrofit2.http.FormUrlEncoded
 import retrofit2.http.POST
 
-/**
- * واجهة الاتصال مع مزود SMM (kd1s.com/api/v2).
- * NOTE: إذا كان مزودك يعيد الخدمات داخل مفتاح "services"
- * بدّل نوع الإرجاع في getServices إلى ServicesEnvelope بدل List<ServiceItem>.
- */
 interface ApiService {
 
-    // جلب قائمة الخدمات
+    // استرجاع الخدمات: الآن يرجع ServicesResponse (غلاف يحوي "services")
     @FormUrlEncoded
     @POST("api/v2")
     suspend fun getServices(
-        @Field("action") action: String = "services",
-        @Field("key") key: String
-    ): List<ServiceItem>                 // أو: ServicesEnvelope
+        @Field("key") key: String,
+        @Field("action") action: String = "services"
+    ): ServicesResponse
 
-    // إنشاء طلب
     @FormUrlEncoded
     @POST("api/v2")
     suspend fun placeOrder(
-        @Field("action") action: String = "add",
         @Field("key") key: String,
+        @Field("action") action: String = "add",
         @Field("service") serviceId: Long,
         @Field("link") link: String,
         @Field("quantity") quantity: Int
-    ): PlaceOrderResponse
+    ): AddOrderResponse
 
-    // الاستعلام عن حالة طلب
     @FormUrlEncoded
     @POST("api/v2")
     suspend fun orderStatus(
-        @Field("action") action: String = "status",
         @Field("key") key: String,
+        @Field("action") action: String = "status",
         @Field("order") orderId: Long
     ): OrderStatusResponse
+
+    @FormUrlEncoded
+    @POST("api/v2")
+    suspend fun balance(
+        @Field("key") key: String,
+        @Field("action") action: String = "balance"
+    ): BalanceResponse
 }

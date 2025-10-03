@@ -35,7 +35,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // تسجيل أولي
         vm.register(deviceId, fullName = null, username = null)
     }
 }

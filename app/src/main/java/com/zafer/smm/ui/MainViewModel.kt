@@ -3,52 +3,66 @@ package com.zafer.smm.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zafer.smm.data.SmmRepository
-import com.zafer.smm.model.BalanceResponse
-import com.zafer.smm.model.ServiceItem
-import com.zafer.smm.model.StatusResponse
+import com.zafer.smm.data.model.*
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class MainViewModel : ViewModel() {
-
-    private val repo = SmmRepository()
-
-    private val _services = MutableStateFlow<List<ServiceItem>>(emptyList())
-    val services = _services.asStateFlow()
+class MainViewModel(
+    private val repo: SmmRepository = SmmRepository()
+) : ViewModel() {
 
     private val _loading = MutableStateFlow(false)
-    val loading = _loading.asStateFlow()
+    val loading: StateFlow<Boolean> = _loading
 
     private val _error = MutableStateFlow<String?>(null)
-    val error = _error.asStateFlow()
+    val error: StateFlow<String?> = _error
+
+    private val _services = MutableStateFlow<List<LocalMappedService>>(emptyList())
+    val services: StateFlow<List<LocalMappedService>> = _services
 
     private val _lastOrderId = MutableStateFlow<Long?>(null)
-    val lastOrderId = _lastOrderId.asStateFlow()
+    val lastOrderId: StateFlow<Long?> = _lastOrderId
 
     private val _lastStatus = MutableStateFlow<StatusResponse?>(null)
-    val lastStatus = _lastStatus.asStateFlow()
+    val lastStatus: StateFlow<StatusResponse?> = _lastStatus
 
     private val _balance = MutableStateFlow<BalanceResponse?>(null)
-    val balance = _balance.asStateFlow()
+    val balance: StateFlow<BalanceResponse?> = _balance
+
+    init {
+        refreshServices()
+    }
 
     fun refreshServices() {
-        _services.value = repo.getServices()
+        viewModelScope.launch {
+            _loading.value = true
+            _error.value = null
+            try {
+                // نعرض الكتالوج المحلي المطابق للبوت (مع IDs المدعومة)
+                val local = repo.buildLocalCatalog()
+                _services.value = local
+            } catch (t: Throwable) {
+                _error.value = t.message
+            } finally {
+                _loading.value = false
+            }
+        }
     }
 
     fun placeOrder(serviceId: Int, link: String, quantity: Int) {
-        _loading.value = true
-        _error.value = null
         viewModelScope.launch {
+            _loading.value = true
+            _error.value = null
             try {
                 val res = repo.placeOrder(serviceId, link, quantity)
-                if (res.order != null) {
-                    _lastOrderId.value = res.order
+                if (res.error != null) {
+                    _error.value = res.error
                 } else {
-                    _error.value = res.error ?: "خطأ غير معروف"
+                    _lastOrderId.value = res.order
                 }
-            } catch (e: Exception) {
-                _error.value = e.message ?: "فشل الطلب"
+            } catch (t: Throwable) {
+                _error.value = t.message
             } finally {
                 _loading.value = false
             }
@@ -56,16 +70,14 @@ class MainViewModel : ViewModel() {
     }
 
     fun checkOrderStatus() {
-        val oid = _lastOrderId.value ?: return
-        _loading.value = true
-        _error.value = null
+        val id = _lastOrderId.value ?: return
         viewModelScope.launch {
+            _loading.value = true
+            _error.value = null
             try {
-                val st = repo.orderStatus(oid)
-                _lastStatus.value = st
-                if (st.error != null) _error.value = st.error
-            } catch (e: Exception) {
-                _error.value = e.message ?: "فشل جلب الحالة"
+                _lastStatus.value = repo.getOrderStatus(id)
+            } catch (t: Throwable) {
+                _error.value = t.message
             } finally {
                 _loading.value = false
             }
@@ -73,15 +85,13 @@ class MainViewModel : ViewModel() {
     }
 
     fun fetchBalance() {
-        _loading.value = true
-        _error.value = null
         viewModelScope.launch {
+            _loading.value = true
+            _error.value = null
             try {
-                val b = repo.balance()
-                _balance.value = b
-                if (b.error != null) _error.value = b.error
-            } catch (e: Exception) {
-                _error.value = e.message ?: "فشل جلب الرصيد"
+                _balance.value = repo.getBalance()
+            } catch (t: Throwable) {
+                _error.value = t.message
             } finally {
                 _loading.value = false
             }

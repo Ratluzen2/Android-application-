@@ -1,9 +1,5 @@
 package com.zafer.smm
-// أضِف هذه الاستيرادات
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -20,6 +16,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.zafer.smm.ui.MainViewModel
 import com.zafer.smm.data.remote.ApiService
+
 class MainActivity : ComponentActivity() {
 
     private val vm: MainViewModel by viewModels()
@@ -159,9 +156,11 @@ fun MainScreen(vm: MainViewModel) {
 private fun ServiceRow(
     id: Int?, name: String?, rate: Double?, min: Int?, max: Int?, category: String?
 ) {
-    Card(Modifier
-        .fillMaxWidth()
-        .padding(vertical = 4.dp)) {
+    Card(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
         Column(Modifier.padding(12.dp)) {
             Text("ID: ${id ?: "-"}  |  ${name ?: "-"}")
             Text("Category: ${category ?: "-"}")

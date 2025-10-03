@@ -1,76 +1,85 @@
-package com.zafer.smm.data.remote
+package com.zafer.smm.data.model
 
-// كل الحقول Nullable لتقبّل أي شكل من JSON بدون أخطاء تحويل
-
-// طلب التسجيل (يحفظ المستخدم لأول مرة عبر device_id)
-data class RegisterBody(
-    val device_id: String,
-    val username: String? = null,
-    val full_name: String? = null
-)
-
-// رصيد المستخدم
-data class BalanceDto(
-    val device_id: String? = null,
-    val balance: Double? = null,
-    val currency: String? = null
-)
-
-// عنصر خدمة (كما يتوقعه واجهتك الحالية في الشاشة)
+// عناصر الخدمات (مطابقة لواجهة الهيروكو)
 data class ServiceItem(
-    val service: Int? = null,
-    val name: String? = null,
-    val category: String? = null,
-    val min: Int? = null,
-    val max: Int? = null,
-    val rate: Double? = null,
-    val type: String? = null,
-    val refills: String? = null,
-    val dripfeed: String? = null
+    val service: Int,
+    val name: String,
+    val rate: Double,
+    val min: Int,
+    val max: Int,
+    val category: String?
 )
 
-// إنشاء طلب
+// إضافة طلب
 data class AddOrderBody(
-    val service_id: Int,
+    val service: Int,
     val link: String,
     val quantity: Int,
     val device_id: String
 )
-
-// عنصر طلب
-data class OrderItem(
-    val id: Long? = null,
-    val provider_order_id: String? = null,
-    val service_id: Int? = null,
-    val link: String? = null,
-    val quantity: Int? = null,
-    val status: String? = null,
-    val charge: Double? = null,
-    val remains: Int? = null,
-    val start_count: Int? = null,
-    val created_at: String? = null
+data class AddOrderResponse(
+    val provider_order_id: Long?
 )
 
-// الإيداع للمحفظة
+// حالة طلب
+data class StatusResponse(
+    val status: String? = null,
+    val remains: Int? = null,
+    val charge: Double? = null
+)
+
+// الرصيد
+data class BalanceDto(
+    val balance: Double,
+    val currency: String
+)
+
+// الطلبات
+data class OrderItem(
+    val id: Long?,
+    val provider_order_id: Long,
+    val service: Int,
+    val link: String,
+    val quantity: Int,
+    val status: String?,
+    val charge: Double?,
+    val remains: Int?,
+    val created_at: String?
+)
+
+// الإيداع + سجل المحفظة
 data class DepositBody(
     val device_id: String,
-    val amount: Double
+    val amount: Double,
+    val method: String? = null,
+    val note: String? = null
+)
+data class WalletTransaction(
+    val id: Long?,
+    val user_id: Long?,
+    val amount: Double,
+    val type: String,
+    val ref: String?,
+    val meta: Map<String, Any?>? = null,
+    val created_at: String?
 )
 
-// حركة محفظة
-data class WalletTransaction(
-    val id: Long? = null,
-    val user_id: String? = null,
-    val amount: Double? = null,
-    val type: String? = null,      // deposit | order | refund ...
-    val ref: String? = null,
-    val meta: Any? = null,
-    val created_at: String? = null
+// التسجيل
+data class RegisterBody(
+    val device_id: String,
+    val full_name: String? = null,
+    val username: String? = null
+)
+data class UserDto(
+    val device_id: String,
+    val full_name: String? = null,
+    val username: String? = null,
+    val balance: Double = 0.0
 )
 
 // المتصدرين
 data class LeaderboardEntry(
-    val user_id: String? = null,
-    val spent: Double? = null,
-    val username: String? = null
+    val user_id: Long,
+    val username: String?,
+    val spent: Double
 )

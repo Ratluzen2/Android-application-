@@ -46,15 +46,13 @@ fun MainScreen(vm: MainViewModel) {
     var link by remember { mutableStateOf("https://example.com") }
     var quantityText by remember { mutableStateOf("1000") }
 
-    LaunchedEffect(Unit) { vm.refreshServices() }
-
     Column(
         Modifier.fillMaxSize().padding(16.dp)
     ) {
-        Text("SMM App", style = MaterialTheme.typography.headlineMedium)
+        Text("SMM App (نسخة تطبيق للبوت)", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(6.dp))
-        Text("Backend: https://kd1s.com/api/v2")
-        Text("API_KEY موجود داخل الكود (للاختبار)")
+        Text("Backend: ${ApiService.BASE_URL}", style = MaterialTheme.typography.bodyMedium)
+        Text("API KEY: ${ApiService.API_KEY.take(6)}********** (مضمّن)")
 
         Spacer(Modifier.height(12.dp))
 
@@ -68,18 +66,14 @@ fun MainScreen(vm: MainViewModel) {
             Spacer(Modifier.height(8.dp))
         }
 
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = { vm.refreshServices() }) { Text("تحديث الخدمات") }
             Spacer(Modifier.width(8.dp))
             Button(onClick = { vm.fetchBalance() }) { Text("الرصيد") }
             Spacer(Modifier.width(8.dp))
-            Button(
-                enabled = lastOrderId != null,
-                onClick = { vm.checkOrderStatus() }
-            ) { Text("حالة آخر طلب") }
+            Button(enabled = lastOrderId != null, onClick = { vm.checkOrderStatus() }) {
+                Text("حالة آخر طلب")
+            }
         }
 
         Spacer(Modifier.height(12.dp))
@@ -87,7 +81,7 @@ fun MainScreen(vm: MainViewModel) {
         OutlinedTextField(
             value = serviceIdText,
             onValueChange = { serviceIdText = it },
-            label = { Text("Service ID") },
+            label = { Text("Service ID (من القائمة)") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
@@ -96,7 +90,7 @@ fun MainScreen(vm: MainViewModel) {
         OutlinedTextField(
             value = link,
             onValueChange = { link = it },
-            label = { Text("Link") },
+            label = { Text("Link (رابط الحساب/المنشور)") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
@@ -104,7 +98,7 @@ fun MainScreen(vm: MainViewModel) {
         OutlinedTextField(
             value = quantityText,
             onValueChange = { quantityText = it },
-            label = { Text("Quantity") },
+            label = { Text("Quantity (يجب أن يوافق مضروب الخدمة)") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
@@ -119,7 +113,7 @@ fun MainScreen(vm: MainViewModel) {
                 }
             },
             modifier = Modifier.fillMaxWidth()
-        ) { Text("إنشاء طلب") }
+        ) { Text("إنشاء طلب عبر kd1s") }
 
         Spacer(Modifier.height(12.dp))
 
@@ -139,26 +133,28 @@ fun MainScreen(vm: MainViewModel) {
             Spacer(Modifier.height(8.dp))
         }
 
-        Text("قائمة الخدمات (${services.size})", style = MaterialTheme.typography.titleMedium)
+        Text("قائمة الخدمات (من خرائط البوت + التلغرام + لودو للعرض):", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(6.dp))
 
-        LazyColumn(Modifier.weight(1f)) {
+        LazyColumn(modifier = Modifier.weight(1f)) {
             items(services) { s ->
-                ServiceRow(s.serviceId, s.name, s.price, s.quantity, s.category)
+                ServiceRow(s)
             }
         }
     }
 }
 
 @Composable
-private fun ServiceRow(
-    id: Int, name: String, price: Double, qty: Int, category: String
-) {
+private fun ServiceRow(item: com.zafer.smm.data.model.LocalMappedService) {
     Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Column(Modifier.padding(12.dp)) {
-            Text("ID: $id | $name")
-            Text("Category: $category")
-            Text("Price: $price | Quantity: $qty")
+            Text(item.displayName, style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            Text("السعر: ${item.priceUsd ?: "-"} USD")
+            Text("Service ID: ${item.serviceId?.toString() ?: "—"} | الكمية النموذجية: ${item.quantityMultiplier?.toString() ?: "—"}")
+            if (item.serviceId == null) {
+                Text("ملاحظة: هذه خدمة عرض/يدوية (لا يوجد service_id في الخريطة).")
+            }
         }
     }
 }

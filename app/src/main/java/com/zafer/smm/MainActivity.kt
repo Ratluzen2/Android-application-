@@ -11,14 +11,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.zafer.smm.ui.MainViewModel
 import com.zafer.smm.data.remote.ApiService
 
 class MainActivity : ComponentActivity() {
-
     private val vm: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -89,7 +86,6 @@ fun MainScreen(vm: MainViewModel) {
             onValueChange = { serviceIdText = it },
             label = { Text("Service ID") },
             singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(8.dp))
@@ -106,7 +102,6 @@ fun MainScreen(vm: MainViewModel) {
             onValueChange = { quantityText = it },
             label = { Text("Quantity") },
             singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(8.dp))
@@ -142,9 +137,7 @@ fun MainScreen(vm: MainViewModel) {
         Text("قائمة الخدمات (${services.size})", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(6.dp))
 
-        LazyColumn(
-            modifier = Modifier.weight(1f)
-        ) {
+        LazyColumn(Modifier.weight(1f)) {
             items(services) { s ->
                 ServiceRow(s.service, s.name, s.rate, s.min, s.max, s.category)
             }

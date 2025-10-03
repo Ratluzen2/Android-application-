@@ -1,54 +1,68 @@
 package com.zafer.smm.data.model
 
+// بيانات المستخدم التي يرسلها التطبيق للباكند (مثلاً عند التسجيل/التعريف)
+data class UserDto(
+    val user_id: Long,
+    val full_name: String? = null,
+    val username: String? = null
+)
+
+// عنصر خدمة واحد من كتالوج الخدمات
 data class ServiceItem(
     val service: Int?,
     val name: String?,
     val category: String?,
     val rate: Double?,
     val min: Int?,
-    val max: Int?,
-    val type: String?
+    val max: Int?
 )
 
+// ليست الخدمات تُستخدم كـ typealias لسهولة التوافق مع الكود الحالي
+typealias ServicesResponse = List<ServiceItem>
+
+// رد إنشاء طلب
 data class AddOrderResponse(
-    val ok: Boolean? = null,
-    val order: String? = null,
-    val charge: Double? = null,
-    val error: String? = null,
-    val order_id: String? = null
+    val order: Long?
 )
 
+// رد حالة الطلب
 data class StatusResponse(
-    val status: String? = null,
-    val remains: Int? = null,
-    val charge: Double? = null
+    val status: String?,
+    val remains: Int?,
+    val charge: Double?
 )
 
+// رصيد الحساب
 data class BalanceResponse(
-    val balance: Double? = null,
-    val currency: String? = null
+    val balance: Double?,
+    val currency: String?
 )
 
+// عنصر طلب (للائحة الطلبات إن احتجتها)
 data class OrderItem(
-    val order: String?,
-    val service: Int?,
+    val id: Long,
+    val service_id: Int?,
     val link: String?,
     val quantity: Int?,
     val status: String?,
     val charge: Double?,
-    val remains: Int?,
     val created_at: String?
 )
 
-data class WalletTx(
-    val amount: Double,
-    val type: String,
-    val ref: String?,
-    val created_at: String
-)
-
+// صف المتصدرين
 data class LeaderboardEntry(
     val user_id: Long,
-    val name: String?,
-    val spent: Double
+    val spent: Double,
+    val full_name: String? = null,
+    val username: String? = null
+)
+
+// تمثيل محلي للخدمة إن احتجته داخل التطبيق
+data class LocalMappedService(
+    val id: Int,
+    val name: String,
+    val category: String,
+    val pricePer1000: Double,
+    val min: Int,
+    val max: Int
 )

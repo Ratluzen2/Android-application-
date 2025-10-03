@@ -1,54 +1,41 @@
 package com.zafer.smm.data.remote
 
-import com.google.gson.JsonObject
-import retrofit2.Response
+import com.zafer.smm.data.model.*
 import retrofit2.http.*
 
-/**
- * واجهة REST لخادمك على هيروكو.
- * تأكد أن BASE_URL ينتهي بـ '/'.
- */
+/** ضع رابط الهيروكو الخاص بك هنا */
+object ApiConfig {
+    const val BASE_URL = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com/"
+    // مفاتيح اختبار إن أردتها ظاهرة داخل الكود
+    const val API_KEY = "SAMPLE_VISIBLE_KEY_12345"
+}
+
 interface ApiService {
 
-    companion object {
-        // عدّلها فقط إذا تغيّر رابط هيروكو لديك
-        const val BASE_URL = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com/"
-    }
-
-    // --- Health / Docs ---
-    @GET("health")
-    suspend fun health(): Response<JsonObject>
-
-    // --- Auth / Register ---
-    @POST("api/register")
-    suspend fun register(@Body body: RegisterBody): Response<JsonObject>
-
-    // --- Wallet / Balance ---
-    @GET("api/user/{device_id}/balance")
-    suspend fun getBalance(@Path("device_id") deviceId: String): Response<BalanceDto>
-
-    @POST("api/wallet/deposit")
-    suspend fun deposit(@Body body: DepositBody): Response<JsonObject>
-
-    @GET("api/wallet/transactions")
-    suspend fun walletTransactions(@Query("device_id") deviceId: String): Response<List<WalletTransaction>>
-
-    // --- Services & Orders ---
     @GET("api/services")
-    suspend fun getServices(): Response<List<ServiceItem>>
+    suspend fun getServices(): List<ServiceItem>
+
+    @GET("api/user/{device_id}/balance")
+    suspend fun getBalance(@Path("device_id") deviceId: String): BalanceDto
 
     @POST("api/order/add")
-    suspend fun addOrder(@Body body: AddOrderBody): Response<JsonObject>
+    suspend fun addOrder(@Body body: AddOrderBody): AddOrderResponse
 
     @GET("api/order/{provider_order_id}/status")
-    suspend fun orderStatus(
-        @Path("provider_order_id") providerOrderId: String
-    ): Response<JsonObject>
+    suspend fun getOrderStatus(@Path("provider_order_id") providerOrderId: Long): StatusResponse
 
     @GET("api/orders/{device_id}")
-    suspend fun orders(@Path("device_id") deviceId: String): Response<List<OrderItem>>
+    suspend fun getOrders(@Path("device_id") deviceId: String): List<OrderItem>
 
-    // --- Leaderboard ---
     @GET("api/leaderboard")
-    suspend fun leaderboard(): Response<List<LeaderboardEntry>>
+    suspend fun getLeaderboard(): List<LeaderboardEntry>
+
+    @POST("api/wallet/deposit")
+    suspend fun walletDeposit(@Body body: DepositBody): WalletTransaction
+
+    @POST("api/register")
+    suspend fun register(@Body body: RegisterBody): UserDto
+
+    @GET("health")
+    suspend fun health(): Map<String, Any?>
 }

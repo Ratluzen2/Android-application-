@@ -1,16 +1,26 @@
 package com.zafer.smm.ui
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.zafer.smm.data.Prefs
 import com.zafer.smm.data.SmmRepository
 import com.zafer.smm.data.model.*
+import com.zafer.smm.util.PricingUtils
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class MainViewModel : ViewModel() {
+data class UiService(
+    val raw: ServiceItem,
+    val finalPrice: Double,
+    val finalQty: Int,
+    val label: String
+)
 
+class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = SmmRepository()
+    val deviceId = Prefs.deviceId(app)
 
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading
@@ -18,104 +28,65 @@ class MainViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
-    private val _services = MutableStateFlow<List<ServiceItem>>(emptyList())
-    val services: StateFlow<List<ServiceItem>> = _services
+    private val _profile = MutableStateFlow(UserProfileDto(device_id = deviceId))
+    val profile: StateFlow<UserProfileDto> = _profile
 
     private val _balance = MutableStateFlow<BalanceDto?>(null)
     val balance: StateFlow<BalanceDto?> = _balance
 
+    private val _services = MutableStateFlow<List<UiService>>(emptyList())
+    val services: StateFlow<List<UiService>> = _services
+
+    private val _categories = MutableStateFlow<List<String>>(emptyList())
+    val categories: StateFlow<List<String>> = _categories
+    private val _selectedCat = MutableStateFlow<String?>(null)
+    val selectedCat: StateFlow<String?> = _selectedCat
+
     private val _orders = MutableStateFlow<List<OrderItem>>(emptyList())
     val orders: StateFlow<List<OrderItem>> = _orders
 
-    private val _leaderboard = MutableStateFlow<List<LeaderboardEntry>>(emptyList())
-    val leaderboard: StateFlow<List<LeaderboardEntry>> = _leaderboard
+    private val _leader = MutableStateFlow<List<LeaderboardEntry>>(emptyList())
+    val leader: StateFlow<List<LeaderboardEntry>> = _leader
 
-    private val _lastOrderId = MutableStateFlow<Long?>(null)
-    val lastOrderId: StateFlow<Long?> = _lastOrderId
+    init { initialLoad() }
 
-    private val _lastStatus = MutableStateFlow<StatusResponse?>(null)
-    val lastStatus: StateFlow<StatusResponse?> = _lastStatus
-
-    fun register(deviceId: String, fullName: String? = null, username: String? = null) {
-        viewModelScope.launch {
-            try {
-                _loading.value = true
-                repo.registerIfNeeded(deviceId, fullName, username)
-            } catch (t: Throwable) {
-                _error.value = t.message
-            } finally {
-                _loading.value = false
-            }
-        }
-    }
-
-    fun refreshServices() {
-        viewModelScope.launch {
-            runWithLoading {
-                _services.value = repo.getServices()
-            }
-        }
-    }
-
-    fun getUserBalance(deviceId: String) {
-        viewModelScope.launch {
-            runWithLoading {
-                _balance.value = repo.getUserBalance(deviceId)
-            }
-        }
-    }
-
-    fun placeOrder(deviceId: String, serviceId: Int, link: String, quantity: Int) {
-        viewModelScope.launch {
-            runWithLoading {
-                val resp = repo.placeOrder(deviceId, serviceId, link, quantity)
-                _lastOrderId.value = resp.provider_order_id
-            }
-        }
-    }
-
-    fun getOrderStatus(providerOrderId: Long) {
-        viewModelScope.launch {
-            runWithLoading {
-                _lastStatus.value = repo.getOrderStatus(providerOrderId)
-            }
-        }
-    }
-
-    fun loadOrders(deviceId: String) {
-        viewModelScope.launch {
-            runWithLoading {
-                _orders.value = repo.getOrders(deviceId)
-            }
-        }
-    }
-
-    fun loadLeaderboard() {
-        viewModelScope.launch {
-            runWithLoading {
-                _leaderboard.value = repo.getLeaderboard()
-            }
-        }
-    }
-
-    fun walletDeposit(deviceId: String, amount: Double, method: String? = null, note: String? = null) {
-        viewModelScope.launch {
-            runWithLoading {
-                repo.walletDeposit(deviceId, amount, method, note)
-                _balance.value = repo.getUserBalance(deviceId)
-            }
-        }
-    }
-
-    private suspend fun runWithLoading(block: suspend () -> Unit) {
+    fun initialLoad() = viewModelScope.launch {
         try {
-            _error.value = null
             _loading.value = true
-            block()
-        } catch (t: Throwable) {
-            _error.value = t.message
-        } finally {
-            _loading.value = false
-        }
+            val prof = repo.registerIfNeeded(deviceId)
+            _profile.value = prof
+            val services = repo.getServices()
+            val priceOv = repo.getPriceOverrides()
+            val qtyOv = repo.getQuantityOverrides()
+            val isMod = prof.role == Role.moderator || prof.role == Role.owner
+            val ui = services.map { s ->
+                val fp = PricingUtils.finalPrice(s, priceOv, isMod)
+                val fq = PricingUtils.finalQuantity(s, qtyOv)
+                UiService(s, fp, fq, PricingUtils.label(s, fp, fq))
+            }.sortedBy { it.raw.category.orEmpty() + it.label }
+            _services.value = ui
+            _categories.value = ui.map { it.raw.category ?: "Other" }.distinct()
+            _selectedCat.value = _categories.value.firstOrNull()
+            _balance.value = repo.getUserBalance(deviceId)
+            _leader.value = repo.getLeaderboard()
+        } catch (e: Exception) { _error.value = e.message }
+        finally { _loading.value = false }
+    }
+
+    fun setCategory(c: String) { _selectedCat.value = c }
+
+    fun placeOrder(s: UiService, link: String, q: Int) = viewModelScope.launch {
+        try {
+            _loading.value = true
+            repo.addOrder(deviceId, s.raw.service, link, q)
+            _orders.value = repo.getOrders(deviceId)
+            _balance.value = repo.getUserBalance(deviceId)
+            _error.value = null
+        } catch (e: Exception) { _error.value = e.message }
+        finally { _loading.value = false }
+    }
+
+    fun refreshBalance() = viewModelScope.launch {
+        try { _balance.value = repo.getUserBalance(deviceId) } catch (e: Exception) { _error.value = e.message }
     }
 }

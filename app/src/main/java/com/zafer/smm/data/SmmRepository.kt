@@ -1,59 +1,195 @@
 package com.zafer.smm.data
 
+import com.zafer.smm.data.model.*
 import com.zafer.smm.data.remote.ApiService
-import com.zafer.smm.model.AddOrderResponse
-import com.zafer.smm.model.BalanceResponse
-import com.zafer.smm.model.ServiceItem
-import com.zafer.smm.model.StatusResponse
+import com.zafer.smm.data.remote.ApiRaw
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-class SmmRepository {
+class SmmRepository(
+    private val api: ApiRaw = ApiService.api
+) {
+    // ============== 1) خرائط الخدمات من كود البوت (service_api_mapping) ==============
+    // نفس الأسماء والمفاتيح ومضاعفات الكمية كما هي من البوت.  5
+    private val serviceApiMapping: Map<String, Pair<Int, Int>> = mapOf(
+        "متابعين تيكتوك 1k" to (13912 to 1000),
+        "متابعين تيكتوك 2k" to (13912 to 2000),
+        "متابعين تيكتوك 3k" to (13912 to 3000),
+        "متابعين تيكتوك 4k" to (13912 to 4000),
 
-    private val api = ApiService.create()
-    private val apiKey = ApiService.API_KEY
+        "مشاهدات تيكتوك 1k"  to (9447 to 1000),
+        "مشاهدات تيكتوك 10k" to (9543 to 10000),
+        "مشاهدات تيكتوك 20k" to (9543 to 20000),
+        "مشاهدات تيكتوك 30k" to (9543 to 30000),
+        "مشاهدات تيكتوك 50k" to (9543 to 50000),
 
-    // جزء من القوائم مأخوذ من service_api_mapping + services_dict في كودك
-    // TikTok Followers 1k..4k + Views 1k..50k + Instagram Followers 1k..2k
-    // الأسعار الأساسية مأخوذة كما في ملفك (مثال 1k TikTok followers = 3.50$ إلخ)
-    // citations: service ids + quantities + prices
-    // services_dict pricing: 1k/2k/3k/4k TikTok followers, views, etc.
-    fun getServices(): List<ServiceItem> = listOf(
-        // Followers TikTok (service_id = 13912, quantities 1k..4k)
-        ServiceItem(serviceId = 13912, name = "متابعين تيكتوك 1k", quantity = 1000, price = 3.50, category = "smm"),
-        ServiceItem(serviceId = 13912, name = "متابعين تيكتوك 2k", quantity = 2000, price = 7.00, category = "smm"),
-        ServiceItem(serviceId = 13912, name = "متابعين تيكتوك 3k", quantity = 3000, price = 10.50, category = "smm"),
-        ServiceItem(serviceId = 13912, name = "متابعين تيكتوك 4k", quantity = 4000, price = 14.00, category = "smm"),
+        "متابعين انستغرام 1k" to (13788 to 1000),
+        "متابعين انستغرام 2k" to (13788 to 2000),
+        "متابعين انستغرام 3k" to (13788 to 3000),
+        "متابعين انستغرام 4k" to (13788 to 4000),
 
-        // Views TikTok (service_id 9447 for 1k, 9543 for 10k..50k)
-        ServiceItem(serviceId = 9447, name = "مشاهدات تيكتوك 1k", quantity = 1000, price = 0.10, category = "smm"),
-        ServiceItem(serviceId = 9543, name = "مشاهدات تيكتوك 10k", quantity = 10000, price = 0.80, category = "smm"),
-        ServiceItem(serviceId = 9543, name = "مشاهدات تيكتوك 20k", quantity = 20000, price = 1.60, category = "smm"),
-        ServiceItem(serviceId = 9543, name = "مشاهدات تيكتوك 30k", quantity = 30000, price = 2.40, category = "smm"),
-        ServiceItem(serviceId = 9543, name = "مشاهدات تيكتوك 50k", quantity = 50000, price = 3.20, category = "smm"),
+        "لايكات تيكتوك 1k" to (12320 to 1000),
+        "لايكات تيكتوك 2k" to (12320 to 2000),
+        "لايكات تيكتوك 3k" to (12320 to 3000),
+        "لايكات تيكتوك 4k" to (12320 to 4000),
 
-        // Followers Instagram (service_id 13788)
-        ServiceItem(serviceId = 13788, name = "متابعين انستغرام 1k", quantity = 1000, price = 3.00, category = "smm"),
-        ServiceItem(serviceId = 13788, name = "متابعين انستغرام 2k", quantity = 2000, price = 6.00, category = "smm")
+        "لايكات انستغرام 1k" to (7973 to 1000),
+        "لايكات انستغرام 2k" to (7973 to 2000),
+        "لايكات انستغرام 3k" to (7973 to 3000),
+        "لايكات انستغرام 4k" to (7973 to 4000),
+
+        "مشاهدات انستغرام 10k" to (13531 to 10000),
+        "مشاهدات انستغرام 20k" to (13531 to 20000),
+        "مشاهدات انستغرام 30k" to (13531 to 30000),
+        "مشاهدات انستغرام 50k" to (13531 to 50000),
+
+        "مشاهدات بث تيكتوك 1k" to (13259 to 1000),
+        "مشاهدات بث تيكتوك 2k" to (13259 to 2000),
+        "مشاهدات بث تيكتوك 3k" to (13259 to 3000),
+        "مشاهدات بث تيكتوك 4k" to (13259 to 4000),
+
+        "مشاهدات بث انستغرام 1k" to (12595 to 1000),
+        "مشاهدات بث انستغرام 2k" to (12595 to 2000),
+        "مشاهدات بث انستغرام 3k" to (12595 to 3000),
+        "مشاهدات بث انستغرام 4k" to (12595 to 4000),
+
+        "رفع سكور بثك1k" to (13125 to 1000),
+        "رفع سكور بثك2k" to (13125 to 2000),
+        "رفع سكور بثك3k" to (13125 to 3000),
+        "رفع سكور بثك10k" to (13125 to 10000),
+
+        // Telegram عبر API (موجودة في البوت)  6
+        "أعضاء قنوات تلي 1k" to (14021 to 1000),
+        "أعضاء قنوات تلي 2k" to (14021 to 2000),
+        "أعضاء قنوات تلي 3k" to (14021 to 3000),
+        "أعضاء قنوات تلي 4k" to (14021 to 4000),
+
+        "أعضاء كروبات تلي 1k" to (14022 to 1000),
+        "أعضاء كروبات تلي 2k" to (14022 to 2000),
+        "أعضاء كروبات تلي 3k" to (14022 to 3000),
+        "أعضاء كروبات تلي 4k" to (14022 to 4000)
     )
 
-    suspend fun placeOrder(serviceId: Int, link: String, quantity: Int): AddOrderResponse {
-        return api.placeOrder(
-            key = apiKey,
-            service = serviceId,
-            link = link,
-            quantity = quantity
-        )
+    // ============== 2) الأسعار الأساسية (services_dict) ==============
+    // كما هي من البوت. 7
+    private val servicesDict: Map<String, Double> = mapOf(
+        "متابعين تيكتوك 1k" to 3.50,
+        "متابعين تيكتوك 2k" to 7.0,
+        "متابعين تيكتوك 3k" to 10.50,
+        "متابعين تيكتوك 4k" to 14.0,
+        "مشاهدات تيكتوك 1k" to 0.10,
+        "مشاهدات تيكتوك 10k" to 0.80,
+        "مشاهدات تيكتوك 20k" to 1.60,
+        "مشاهدات تيكتوك 30k" to 2.40,
+        "مشاهدات تيكتوك 50k" to 3.20,
+        "متابعين انستغرام 1k" to 3.0,
+        "متابعين انستغرام 2k" to 6.0,
+        "متابعين انستغرام 3k" to 9.0,
+        "متابعين انستغرام 4k" to 12.0,
+        "لايكات تيكتوك 1k" to 1.0,
+        "لايكات تيكتوك 2k" to 2.0,
+        "لايكات تيكتوك 3k" to 3.0,
+        "لايكات تيكتوك 4k" to 4.0,
+        "لايكات انستغرام 1k" to 1.0,
+        "لايكات انستغرام 2k" to 2.0,
+        "لايكات انستغرام 3k" to 3.0,
+        "لايكات انستغرام 4k" to 4.0,
+        "مشاهدات انستغرام 10k" to 0.80,
+        "مشاهدات انستغرام 20k" to 1.60,
+        "مشاهدات انستغرام 30k" to 2.40,
+        "مشاهدات انستغرام 50k" to 3.20,
+        "مشاهدات بث تيكتوك 1k" to 2.0,
+        "مشاهدات بث تيكتوك 2k" to 4.0,
+        "مشاهدات بث تيكتوك 3k" to 6.0,
+        "مشاهدات بث تيكتوك 4k" to 8.0,
+        "مشاهدات بث انستغرام 1k" to 2.0,
+        "مشاهدات بث انستغرام 2k" to 4.0,
+        "مشاهدات بث انستغرام 3k" to 6.0,
+        "مشاهدات بث انستغرام 4k" to 8.0,
+        "رفع سكور بثك1k" to 2.0,
+        "رفع سكور بثك2k" to 4.0,
+        "رفع سكور بثك3k" to 6.0,
+        "رفع سكور بثك10k" to 20.0
+    )
+
+    // ============== 3) Telegram/Ludo/PUBG/iTunes من كودك ==============
+    // Telegram أسعار (عرضية فقط؛ الطلب يتم عبر IDs أعلاه).  8
+    private val telegramPrices = mapOf(
+        "اعضاء قنوات تلي 1k" to 3.0,
+        "اعضاء قنوات تلي 2k" to 6.0,
+        "اعضاء قنوات تلي 3k" to 9.0,
+        "اعضاء قنوات تلي 4k" to 12.0,
+        "اعضاء قنوات تلي 5k" to 15.0,
+        "اعضاء كروبات تلي 1k" to 3.0,
+        "اعضاء كروبات تلي 2k" to 6.0,
+        "اعضاء كروبات تلي 3k" to 9.0,
+        "اعضاء كروبات تلي 4k" to 12.0,
+        "اعضاء كروبات تلي 5k" to 15.0
+    )
+
+    // Ludo (عرض فقط؛ لا يوجد service_id في البوت)  9
+    private val ludoPrices = mapOf(
+        "لودو 810 الماسة" to 3.0,
+        "لودو 2280 الماسة" to 7.0,
+        "لودو 5080 الماسة" to 13.0,
+        "لودو 12750 الماسة" to 28.0,
+        "لودو 66680 ذهب" to 3.0,
+        "لودو 219500 ذهب" to 7.0,
+        "لودو 1443000 ذهب" to 13.0,
+        "لودو 3627000 ذهب" to 28.0
+    )
+
+    // ملاحظة: PUBG و iTunes مذكوران في البوت أيضاً (عرض أسعار/طلبات يدوية).
+
+    // يبني كتالوج موحّد للعرض في التطبيق
+    suspend fun buildLocalCatalog(): List<LocalMappedService> = withContext(Dispatchers.Default) {
+        val list = mutableListOf<LocalMappedService>()
+
+        // من services_dict + mapping (خدمات تُنفَّذ عبر kd1s)
+        servicesDict.forEach { (name, price) ->
+            val map = serviceApiMapping[name]
+            list += LocalMappedService(
+                displayName = name,
+                serviceId = map?.first,
+                quantityMultiplier = map?.second,
+                priceUsd = price
+            )
+        }
+
+        // Telegram إضافي (لو فيه 5k مثلاً بلا id في mapping نعرضه كعنصر عرض فقط)
+        telegramPrices.forEach { (name, price) ->
+            val map = serviceApiMapping[name] // قد يكون null لبعض 5k
+            list += LocalMappedService(
+                displayName = name,
+                serviceId = map?.first,
+                quantityMultiplier = map?.second,
+                priceUsd = price
+            )
+        }
+
+        // Ludo (عرض فقط)
+        ludoPrices.forEach { (name, price) ->
+            list += LocalMappedService(
+                displayName = name,
+                serviceId = null, // يدوية
+                quantityMultiplier = null,
+                priceUsd = price
+            )
+        }
+
+        list
     }
 
-    suspend fun orderStatus(orderId: Long): StatusResponse {
-        return api.orderStatus(
-            key = apiKey,
-            orderId = orderId
-        )
-    }
+    // استدعاءات kd1s الفعلية:
+    suspend fun fetchServicesFromApi(): List<ServiceItem> =
+        withContext(Dispatchers.IO) { api.services(ApiService.API_KEY) }
 
-    suspend fun balance(): BalanceResponse {
-        return api.balance(
-            key = apiKey
-        )
-    }
+    suspend fun placeOrder(serviceId: Int, link: String, quantity: Int): AddOrderResponse =
+        withContext(Dispatchers.IO) { api.add(ApiService.API_KEY, service = serviceId, link = link, quantity = quantity) }
+
+    suspend fun getOrderStatus(orderId: Long): StatusResponse =
+        withContext(Dispatchers.IO) { api.status(ApiService.API_KEY, order = orderId) }
+
+    suspend fun getBalance(): BalanceResponse =
+        withContext(Dispatchers.IO) { api.balance(ApiService.API_KEY) }
 }

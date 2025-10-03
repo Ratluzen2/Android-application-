@@ -1,6 +1,6 @@
 package com.zafer.smm.data.model
 
-// عناصر الخدمات (مطابقة لواجهة الهيروكو)
+/* —— الكتالوج والخدمات —— */
 data class ServiceItem(
     val service: Int,
     val name: String,
@@ -10,76 +10,70 @@ data class ServiceItem(
     val category: String?
 )
 
-// إضافة طلب
+/* —— الطلبات —— */
 data class AddOrderBody(
-    val service: Int,
+    val device_id: String,
+    val service_id: Int,
     val link: String,
-    val quantity: Int,
-    val device_id: String
+    val quantity: Int
 )
 data class AddOrderResponse(
-    val provider_order_id: Long?
+    val provider_order_id: Long? = null,
+    val status: String? = null
 )
-
-// حالة طلب
 data class StatusResponse(
     val status: String? = null,
     val remains: Int? = null,
     val charge: Double? = null
 )
-
-// الرصيد
-data class BalanceDto(
-    val balance: Double,
-    val currency: String
-)
-
-// الطلبات
 data class OrderItem(
-    val id: Long?,
-    val provider_order_id: Long,
-    val service: Int,
+    val id: Long,
+    val service_id: Int,
     val link: String,
     val quantity: Int,
-    val status: String?,
-    val charge: Double?,
-    val remains: Int?,
-    val created_at: String?
+    val status: String? = null,
+    val charge: Double? = null,
+    val created_at: String? = null,
+    val provider_order_id: Long? = null,
+    val category: String? = null,
+    val price: Double? = null
 )
 
-// الإيداع + سجل المحفظة
-data class DepositBody(
-    val device_id: String,
-    val amount: Double,
-    val method: String? = null,
-    val note: String? = null
-)
+/* —— الرصيد والمحفظة —— */
+data class BalanceDto(val balance: Double, val currency: String)
 data class WalletTransaction(
-    val id: Long?,
-    val user_id: Long?,
+    val id: Long,
     val amount: Double,
     val type: String,
-    val ref: String?,
-    val meta: Map<String, Any?>? = null,
     val created_at: String?
 )
+data class DepositBody(val device_id: String, val amount: Double)
 
-// التسجيل
-data class RegisterBody(
-    val device_id: String,
-    val full_name: String? = null,
-    val username: String? = null
-)
-data class UserDto(
+/* —— المستخدم/الدور —— */
+enum class Role { owner, moderator, user }
+data class UserProfileDto(
     val device_id: String,
     val full_name: String? = null,
     val username: String? = null,
-    val balance: Double = 0.0
+    val role: Role = Role.user,
+    val balance: Double = 0.0,
+    val total_spent: Double = 0.0,
+    val referral_code: String? = null
 )
 
-// المتصدرين
-data class LeaderboardEntry(
-    val user_id: Long,
-    val username: String?,
-    val spent: Double
+/* —— Overrides للتسعير/الكمية —— */
+data class PriceOverride(val service_name: String, val price: Double)
+data class QuantityOverride(val service_name: String, val quantity_multiplier: Double)
+
+/* —— إحالات ومتصدّرين —— */
+data class ReferralStats(
+    val total: Int,
+    val paid: Int,
+    val pending: Int,
+    val earnings: Double,
+    val last_invitees: List<String> = emptyList()
 )
+data class LeaderboardEntry(val user_id: Long? = null, val spent: Double)
+
+/* —— تسجيل —— */
+data class RegisterBody(val device_id: String, val full_name: String? = null, val username: String? = null)

@@ -1,79 +1,44 @@
 package com.zafer.smm.data.model
 
-// استجابات kd1s القياسية
+// شكل خدمات kd1s (للإظهار/التكامل)
 data class ServiceItem(
-    val service: Int? = null,
-    val name: String? = null,
-    val rate: Double? = null, // السعر لكل 1000 غالبًا
-    val min: Int? = null,
-    val max: Int? = null,
-    val category: String? = null
+    val service: Int?,
+    val name: String?,
+    val rate: Double?,
+    val min: Int?,
+    val max: Int?,
+    val category: String?
 )
 
-data class AddOrderResponse(
-    val order: Long? = null,
-    val error: String? = null
-)
+// استدعاءات kd1s
+data class AddOrderResponse(val order: Long? = null, val error: String? = null)
+data class StatusResponse(val status: String? = null, val remains: String? = null, val charge: Double? = null, val error: String? = null)
+data class BalanceResponse(val balance: Double? = null, val currency: String? = null, val error: String? = null)
 
-data class StatusResponse(
-    val status: String? = null,
-    val remains: String? = null,
-    val charge: Double? = null,
-    val error: String? = null
-)
-
-data class BalanceResponse(
-    val balance: Double? = null,
-    val currency: String? = null,
-    val error: String? = null
-)
-
-// كتالوج موحّد لعرض (اسم/ID/مضاعف/سعر) من منطق البوت
+// كتالوج محلي مطابق للبوت
 data class LocalMappedService(
     val displayName: String,
-    val serviceId: Int?,          // null = خدمة يدوية/عرض فقط
-    val quantityMultiplier: Int?, // مثل 1000 / 10000 ...
+    val serviceId: Int?,           // null = خدمة عرض/يدوية
+    val quantityMultiplier: Int?,  // 1000/10000...
     val priceUsd: Double?
 )
 
-// ============ كيانات Room ============
-import androidx.room.Entity
-import androidx.room.PrimaryKey
-
-@Entity(tableName = "users")
-data class UserProfileEntity(
-    @PrimaryKey val deviceId: String,
-    val balance: Double = 0.0,
-    val isOwner: Boolean = false
-)
-
-@Entity(tableName = "orders")
-data class OrderEntity(
-    @PrimaryKey(autoGenerate = true) val localId: Long = 0,
-    val deviceId: String,
-    val remoteOrderId: Long? = null,
-    val serviceId: Int? = null,
-    val name: String,
+// عنصر طلب مخزّن محليًا
+data class OrderItem(
+    val orderId: Long?,        // من kd1s
+    val deviceId: String,      // هوية الجهاز
+    val serviceId: Int?,
+    val serviceName: String,
     val link: String,
     val quantity: Int,
-    val priceUsd: Double,
-    val status: String = "Pending",
-    val ts: Long = System.currentTimeMillis()
+    val price: Double,         // التكلفة المحسوبة وقت الطلب
+    val status: String?,       // آخر حالة معروفة
+    val charge: Double?,       // آخر تكلفة من kd1s (قد تختلف عن price المحلي)
+    val remains: Int?,         // آخر “remains”
+    val createdAt: Long        // timestamp
 )
 
-@Entity(tableName = "wallet")
-data class WalletTransactionEntity(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+data class LeaderboardEntry(
     val deviceId: String,
-    val amount: Double,         // + للإيداع / - للخصم
-    val type: String,           // "topup" / "order" / "gift" ...
-    val note: String? = null,
-    val ts: Long = System.currentTimeMillis()
-)
-
-@Entity(tableName = "leaders")
-data class LeaderboardEntryEntity(
-    @PrimaryKey val deviceId: String,
-    val totalSpent: Double = 0.0,
-    val nameHint: String? = null
+    val totalSpent: Double
 )

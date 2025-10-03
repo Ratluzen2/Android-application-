@@ -1,43 +1,38 @@
-package com.zafer.smm.data.remote
+package com.zafer.smm.data.model
 
 import com.google.gson.annotations.SerializedName
 
-// عنصر خدمة واحد داخل المصفوفة
-data class ServiceDto(
-    @SerializedName("service") val service: Long,
-    @SerializedName("name") val name: String,
-    @SerializedName("rate") val rate: Double? = null,
-    @SerializedName("min") val min: Int? = null,
-    @SerializedName("max") val max: Int? = null,
-    @SerializedName("category") val category: String? = null,
-    @SerializedName("type") val type: String? = null,
-    @SerializedName("desc") val desc: String? = null
-)
-
-// غلاف للاستجابة الجديدة { "services": [ ... ] }
+// ردّ الخدمات: { "services": [ ... ] }
 data class ServicesResponse(
-    @SerializedName("services") val services: List<ServiceDto> = emptyList()
+    @SerializedName("services") val services: List<ServiceItem>
 )
 
-// باقي النماذج
-data class AddOrderResponse(
-    @SerializedName("order") val order: Long? = null,       // بعض المزودين
-    @SerializedName("order_id") val orderId: Long? = null,  // مزودون آخرون
-    @SerializedName("error") val error: String? = null
+data class ServiceItem(
+    @SerializedName("service") val service: Long,
+    @SerializedName("name")    val name: String,
+    @SerializedName("type")    val type: String? = null,
+    @SerializedName("category")val category: String? = null,
+    @SerializedName("rate")    val rate: Double? = null,
+    @SerializedName("min")     val min: Long? = null,
+    @SerializedName("max")     val max: Long? = null,
+    @SerializedName("dripfeed")val dripfeed: Boolean? = null,
+    @SerializedName("refill")  val refill: Boolean? = null,
+    @SerializedName("cancel")  val cancel: Boolean? = null,
+    @SerializedName("desc")    val desc: String? = null
 )
 
-data class OrderStatusResponse(
-    @SerializedName("status") val status: String? = null,
-    @SerializedName("charge") val charge: Double? = null,
-    @SerializedName("start_count") val startCount: Int? = null,
-    @SerializedName("remains") val remains: Int? = null
+data class OrderResponse(
+    @SerializedName("order") val orderId: Long?
+)
+
+data class StatusResponse(
+    @SerializedName("status")     val status: String? = null,
+    @SerializedName("charge")     val charge: Double? = null,
+    @SerializedName("start_count")val startCount: Long? = null,
+    @SerializedName("remains")    val remains: Long? = null
 )
 
 data class BalanceResponse(
-    @SerializedName("balance") val balance: String? = null,
+    @SerializedName("balance")  val balance: String? = null,
     @SerializedName("currency") val currency: String? = null
-)
-
-data class ApiError(
-    @SerializedName("error") val error: String
 )

@@ -1,26 +1,27 @@
-package com.zafer.smm.data.model
+package com.zafer.smm.model
 
-// عنصر خدمة واحد كما ترجعه أغلب SMM APIs (كل الحقول اختيارية لتفادي الأعطال)
 data class ServiceItem(
-    val service: Int? = null,
-    val name: String? = null,
-    val rate: Double? = null,
-    val min: Int? = null,
-    val max: Int? = null,
-    val category: String? = null
+    val serviceId: Int,
+    val name: String,
+    val quantity: Int,
+    val price: Double,
+    val category: String
 )
 
-data class OrderResponse(
-    val order: Long? = null
+data class AddOrderResponse(
+    val order: Long? = null,
+    val error: String? = null
 )
 
 data class StatusResponse(
     val status: String? = null,
     val charge: Double? = null,
-    val remains: Int? = null
+    val remains: Int? = null,
+    val error: String? = null
 )
 
 data class BalanceResponse(
-    val balance: Double? = null,
-    val currency: String? = null
+    val balance: String? = null,
+    val currency: String? = null,
+    val error: String? = null
 )

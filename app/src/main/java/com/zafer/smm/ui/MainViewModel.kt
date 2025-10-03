@@ -3,47 +3,36 @@ package com.zafer.smm.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zafer.smm.data.SmmRepository
-import com.zafer.smm.data.remote.ServiceItem
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import com.zafer.smm.data.remote.ServiceDto
 import kotlinx.coroutines.launch
-
-data class UiState(
-    val loading: Boolean = false,
-    val services: List<ServiceItem> = emptyList(),
-    val message: String? = null
-)
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 class MainViewModel(
-    private val repo: SmmRepository = SmmRepository()
+    private val repo: SmmRepository
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow(UiState())
-    val state: StateFlow<UiState> = _state
+    var services by mutableStateOf<List<ServiceDto>>(emptyList())
+        private set
 
-    fun loadServices(key: String) {
-        _state.value = _state.value.copy(loading = true, message = null)
-        viewModelScope.launch {
-            val list = repo.fetchServices(key)
-            _state.value = UiState(
-                loading = false,
-                services = list,
-                message = if (list.isEmpty()) "لم يتم العثور على خدمات/ تأكد من الـ API Key" else null
-            )
-        }
-    }
+    var loading by mutableStateOf(false)
+        private set
 
-    fun order(key: String, serviceId: Long, link: String, qty: Int, onDone: (String) -> Unit) {
+    var error by mutableStateOf<String?>(null)
+        private set
+
+    fun loadServices() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(loading = true)
-            val result = repo.placeOrder(key, serviceId, link, qty)
-            _state.value = _state.value.copy(loading = false)
-            onDone(
-                result.fold(
-                    onSuccess = { "تم إنشاء الطلب #$it" },
-                    onFailure = { "فشل الطلب: ${it.message}" }
-                )
-            )
+            loading = true
+            error = null
+            try {
+                services = repo.getServices()
+            } catch (t: Throwable) {
+                error = t.message ?: "Failed to load services"
+            } finally {
+                loading = false
+            }
         }
     }
 }

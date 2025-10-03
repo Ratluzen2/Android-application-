@@ -3,57 +3,83 @@ package com.zafer.smm.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.zafer.smm.data.SmmRepository
-import com.zafer.smm.data.remote.ServiceDto
+import com.zafer.smm.data.model.ServiceItem
+import com.zafer.smm.data.model.StatusResponse
+import com.zafer.smm.data.model.BalanceResponse
+import com.zafer.smm.data.remote.ApiService
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 
-class MainViewModel(
-    private val repo: SmmRepository
-) : ViewModel() {
+class MainViewModel : ViewModel() {
 
-    var services by mutableStateOf<List<ServiceDto>>(emptyList())
-        private set
+    private val repo = SmmRepository(ApiService.create())
 
-    var loading by mutableStateOf(false)
-        private set
+    private val _loading = MutableStateFlow(false)
+    val loading: StateFlow<Boolean> = _loading
 
-    var error by mutableStateOf<String?>(null)
-        private set
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error
 
-    var placing by mutableStateOf(false)
-        private set
+    private val _services = MutableStateFlow<List<ServiceItem>>(emptyList())
+    val services: StateFlow<List<ServiceItem>> = _services
 
-    var orderMessage by mutableStateOf<String?>(null)
-        private set
+    private val _lastOrderId = MutableStateFlow<Long?>(null)
+    val lastOrderId: StateFlow<Long?> = _lastOrderId
 
-    fun loadServices() {
-        viewModelScope.launch {
-            loading = true
-            error = null
-            try {
-                services = repo.getServices()
-            } catch (t: Throwable) {
-                error = t.message ?: "Failed to load services"
-            } finally {
-                loading = false
-            }
+    private val _lastStatus = MutableStateFlow<StatusResponse?>(null)
+    val lastStatus: StateFlow<StatusResponse?> = _lastStatus
+
+    private val _balance = MutableStateFlow<BalanceResponse?>(null)
+    val balance: StateFlow<BalanceResponse?> = _balance
+
+    init {
+        refreshServices()
+    }
+
+    fun refreshServices() {
+        _loading.value = true
+        _error.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            val res = repo.getServices()
+            _loading.value = false
+            res.onSuccess { list -> _services.value = list }
+                .onFailure { e -> _error.value = e.message ?: "Unknown error" }
         }
     }
 
-    fun placeOrder(serviceId: Long, link: String, qty: Int) {
-        viewModelScope.launch {
-            placing = true
-            orderMessage = null
-            try {
-                val id = repo.placeOrder(serviceId, link, qty)
-                orderMessage = "تم إنشاء الطلب بنجاح (#$id)"
-            } catch (t: Throwable) {
-                orderMessage = "فشل إنشاء الطلب: ${t.message}"
-            } finally {
-                placing = false
-            }
+    fun placeOrder(serviceId: Int, link: String, quantity: Int) {
+        _loading.value = true
+        _error.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            val res = repo.placeOrder(serviceId, link, quantity)
+            _loading.value = false
+            res.onSuccess { id -> _lastOrderId.value = id }
+                .onFailure { e -> _error.value = e.message ?: "Unknown error" }
+        }
+    }
+
+    fun checkOrderStatus() {
+        val id = _lastOrderId.value ?: return
+        _loading.value = true
+        _error.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            val res = repo.orderStatus(id)
+            _loading.value = false
+            res.onSuccess { st -> _lastStatus.value = st }
+                .onFailure { e -> _error.value = e.message ?: "Unknown error" }
+        }
+    }
+
+    fun fetchBalance() {
+        _loading.value = true
+        _error.value = null
+        viewModelScope.launch(Dispatchers.IO) {
+            val res = repo.balance()
+            _loading.value = false
+            res.onSuccess { b -> _balance.value = b }
+                .onFailure { e -> _error.value = e.message ?: "Unknown error" }
         }
     }
 }

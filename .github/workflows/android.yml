@@ -1,42 +1,45 @@
 name: Android CI
+
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
+  push:
+    paths:
+      - 'app/**'
+      - 'build.gradle'
+      - 'settings.gradle'
+      - '.github/workflows/android.yml'
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
+      # يثبت Android SDK ويقبل الرخص
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # يثبت منصة أندرويد 34 وأدوات البناء المطلوبة
+      - name: Install SDK packages
+        run: |
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+
+      # يشغّل Gradle بدون الحاجة لملف ./gradlew
+      - name: Build Debug APK with Gradle 8.7
+        uses: gradle/gradle-build-action@v3
         with:
-          api-level: 34
-          build-tools: 34.0.0
+          gradle-version: 8.7
+          arguments: assembleDebug
 
-      - run: yes | sdkmanager --licenses
-      - run: sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
-
-      # تنزيل Gradle مؤقتًا إذا ما عندك gradle wrapper بالمشروع
-      - name: Download Gradle (fallback)
-        run: |
-          if [ ! -f ./gradlew ]; then
-            curl -sLo gradle-bin.zip https://services.gradle.org/distributions/gradle-8.7-bin.zip
-            mkdir -p $HOME/gradle && unzip -q gradle-bin.zip -d $HOME/gradle
-            echo "$HOME/gradle/gradle-8.7/bin" >> $GITHUB_PATH
-          fi
-
-      - name: Build Debug APK
-        run: |
-          if [ -f ./gradlew ]; then ./gradlew assembleDebug; else gradle assembleDebug; fi
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: app/build/outputs/apk/debug/*.apk

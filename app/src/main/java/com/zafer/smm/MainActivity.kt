@@ -11,11 +11,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.zafer.smm.ui.MainViewModel
 import com.zafer.smm.data.remote.ApiService
+import com.zafer.smm.ui.MainViewModel
 
 class MainActivity : ComponentActivity() {
+
     private val vm: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,17 +44,17 @@ fun MainScreen(vm: MainViewModel) {
 
     var serviceIdText by remember { mutableStateOf("") }
     var link by remember { mutableStateOf("https://example.com") }
-    var quantityText by remember { mutableStateOf("100") }
+    var quantityText by remember { mutableStateOf("1000") }
+
+    LaunchedEffect(Unit) { vm.refreshServices() }
 
     Column(
-        Modifier
-            .fillMaxSize()
-            .padding(16.dp)
+        Modifier.fillMaxSize().padding(16.dp)
     ) {
         Text("SMM App", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(6.dp))
-        Text("Backend: ${ApiService.BASE_URL}", style = MaterialTheme.typography.bodyMedium)
-        Text("API KEY موجود داخل الكود (للاختبار)")
+        Text("Backend: https://kd1s.com/api/v2")
+        Text("API_KEY موجود داخل الكود (للاختبار)")
 
         Spacer(Modifier.height(12.dp))
 
@@ -86,6 +89,7 @@ fun MainScreen(vm: MainViewModel) {
             onValueChange = { serviceIdText = it },
             label = { Text("Service ID") },
             singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(8.dp))
@@ -102,6 +106,7 @@ fun MainScreen(vm: MainViewModel) {
             onValueChange = { quantityText = it },
             label = { Text("Quantity") },
             singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(8.dp))
@@ -119,7 +124,7 @@ fun MainScreen(vm: MainViewModel) {
         Spacer(Modifier.height(12.dp))
 
         if (balance != null) {
-            Text("الرصيد: ${balance?.balance} ${balance?.currency}")
+            Text("الرصيد: ${balance?.balance ?: "-"} ${balance?.currency ?: ""}")
             Spacer(Modifier.height(8.dp))
         }
 
@@ -139,7 +144,7 @@ fun MainScreen(vm: MainViewModel) {
 
         LazyColumn(Modifier.weight(1f)) {
             items(services) { s ->
-                ServiceRow(s.service, s.name, s.rate, s.min, s.max, s.category)
+                ServiceRow(s.serviceId, s.name, s.price, s.quantity, s.category)
             }
         }
     }
@@ -147,17 +152,13 @@ fun MainScreen(vm: MainViewModel) {
 
 @Composable
 private fun ServiceRow(
-    id: Int?, name: String?, rate: Double?, min: Int?, max: Int?, category: String?
+    id: Int, name: String, price: Double, qty: Int, category: String
 ) {
-    Card(
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-    ) {
+    Card(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Column(Modifier.padding(12.dp)) {
-            Text("ID: ${id ?: "-"}  |  ${name ?: "-"}")
-            Text("Category: ${category ?: "-"}")
-            Text("Rate: ${rate ?: "-"}  |  Min: ${min ?: "-"}  |  Max: ${max ?: "-"}")
+            Text("ID: $id | $name")
+            Text("Category: $category")
+            Text("Price: $price | Quantity: $qty")
         }
     }
 }

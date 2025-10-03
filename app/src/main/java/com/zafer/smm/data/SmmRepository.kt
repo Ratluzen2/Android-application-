@@ -2,6 +2,7 @@ package com.zafer.smm.data
 
 import com.zafer.smm.data.model.*
 import com.zafer.smm.data.remote.Network
+import com.zafer.smm.data.remote.UserDto
 
 class SmmRepository {
     private val api = Network.api
@@ -15,13 +16,17 @@ class SmmRepository {
     suspend fun placeOrder(deviceId: String, serviceId: Int, link: String, quantity: Int): AddOrderResponse =
         api.placeOrder(deviceId, serviceId, link, quantity)
 
-    suspend fun getUserBalance(deviceId: String): BalanceResponse = api.balance(deviceId)
+    suspend fun getUserBalance(deviceId: String): BalanceResponse =
+        api.balance(deviceId)
 
-    suspend fun getOrderStatus(providerOrderId: Long): StatusResponse = api.orderStatus(providerOrderId)
+    suspend fun getOrderStatus(providerOrderId: Long): StatusResponse =
+        api.orderStatus(providerOrderId)
 
-    suspend fun getOrders(deviceId: String): List<OrderItem> = api.orders(deviceId)
+    suspend fun getOrders(deviceId: String): List<OrderItem> =
+        api.orders(deviceId)
 
-    suspend fun getLeaderboard(): List<LeaderboardEntry> = api.leaderboard()
+    suspend fun getLeaderboard(): List<LeaderboardEntry> =
+        api.leaderboard()
 
     suspend fun walletDeposit(deviceId: String, amount: Double, note: String? = null): Boolean =
         (api.walletDeposit(deviceId, amount, note)["ok"] == true)

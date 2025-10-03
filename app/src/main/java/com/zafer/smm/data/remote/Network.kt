@@ -9,21 +9,21 @@ import java.util.concurrent.TimeUnit
 object Network {
 
     private val logging = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = HttpLoggingInterceptor.Level.BASIC
     }
 
-    private val okHttp = OkHttpClient.Builder()
+    private val http: OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(logging)
         .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    private val retrofit: Retrofit = Retrofit.Builder()
-        .baseUrl(ApiService.BASE_URL)
-        .addConverterFactory(GsonConverterFactory.create())
-        .client(okHttp)
-        .build()
-
-    val api: ApiService = retrofit.create(ApiService::class.java)
+    val api: ApiService by lazy {
+        Retrofit.Builder()
+            .baseUrl(ApiConfig.BASE_URL) // لا تغيّرها
+            .client(http)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(ApiService::class.java)
+    }
 }

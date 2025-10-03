@@ -8,16 +8,13 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 interface ApiRaw {
-    // بعض لوحات SMM (ومنها kd1s) تُرجع قائمة JSON مباشرةً للخدمات
-    @FormUrlEncoded
-    @POST("api/v2")
+    @FormUrlEncoded @POST("api/v2")
     suspend fun services(
         @Field("key") key: String,
         @Field("action") action: String = "services"
     ): List<ServiceItem>
 
-    @FormUrlEncoded
-    @POST("api/v2")
+    @FormUrlEncoded @POST("api/v2")
     suspend fun add(
         @Field("key") key: String,
         @Field("action") action: String = "add",
@@ -26,16 +23,14 @@ interface ApiRaw {
         @Field("quantity") quantity: Int
     ): AddOrderResponse
 
-    @FormUrlEncoded
-    @POST("api/v2")
+    @FormUrlEncoded @POST("api/v2")
     suspend fun status(
         @Field("key") key: String,
         @Field("action") action: String = "status",
         @Field("order") order: Long
     ): StatusResponse
 
-    @FormUrlEncoded
-    @POST("api/v2")
+    @FormUrlEncoded @POST("api/v2")
     suspend fun balance(
         @Field("key") key: String,
         @Field("action") action: String = "balance"
@@ -43,11 +38,9 @@ interface ApiRaw {
 }
 
 object ApiService {
-    // مأخوذة من كود البوت كما هي:
-    // API_URL=https://kd1s.com/api/v2  => baseUrl = https://kd1s.com/
-    // API_KEY=25a9ceb07be0d8b2ba88e70dcbe92e06
+    // مفاتيح مضمّنة كما طلبت
     const val BASE_URL = "https://kd1s.com/"
-    const val API_KEY = "25a9ceb07be0d8b2ba88e70dcbe92e06"
+    const val API_KEY  = "25a9ceb07be0d8b2ba88e70dcbe92e06"
 
     val api: ApiRaw by lazy {
         val log = HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY }

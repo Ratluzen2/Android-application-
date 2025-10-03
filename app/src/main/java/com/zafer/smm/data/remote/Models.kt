@@ -2,39 +2,42 @@ package com.zafer.smm.data.remote
 
 import com.google.gson.annotations.SerializedName
 
-/** عنصر خدمة واحد ضمن قائمة الخدمات */
-data class ServiceItem(
-    val service: Long,                 // رقم الخدمة
-    val name: String,                  // اسم الخدمة
-    val category: String? = null,      // تصنيف (اختياري)
-    val type: String? = null,          // نوع الخدمة (Default/Package/..)
-    val rate: String? = null,          // السعر لكل 1000 (أحيانًا String من المزود)
-    val min: Int? = null,              // أقل كمية
-    val max: Int? = null,              // أعلى كمية
-    val dripfeed: Boolean? = null,
-    val refill: Boolean? = null,
-    val cancel: Boolean? = null
+// عنصر خدمة واحد داخل المصفوفة
+data class ServiceDto(
+    @SerializedName("service") val service: Long,
+    @SerializedName("name") val name: String,
+    @SerializedName("rate") val rate: Double? = null,
+    @SerializedName("min") val min: Int? = null,
+    @SerializedName("max") val max: Int? = null,
+    @SerializedName("category") val category: String? = null,
+    @SerializedName("type") val type: String? = null,
+    @SerializedName("desc") val desc: String? = null
 )
 
-/** بعض المزودين يعيدون الخدمات داخل مفتاح "services" */
-data class ServicesEnvelope(
-    val services: List<ServiceItem>? = null,
-    val error: String? = null
+// غلاف للاستجابة الجديدة { "services": [ ... ] }
+data class ServicesResponse(
+    @SerializedName("services") val services: List<ServiceDto> = emptyList()
 )
 
-/** نتيجة إنشاء طلب */
-data class PlaceOrderResponse(
-    val order: Long? = null,
-    val error: String? = null
+// باقي النماذج
+data class AddOrderResponse(
+    @SerializedName("order") val order: Long? = null,       // بعض المزودين
+    @SerializedName("order_id") val orderId: Long? = null,  // مزودون آخرون
+    @SerializedName("error") val error: String? = null
 )
 
-/** نتيجة حالة طلب */
 data class OrderStatusResponse(
-    val status: String? = null,          // Pending/In progress/Completed/Partial/Cancelled
-    val charge: String? = null,          // قد تأتي نصًا
-    @SerializedName("start_count")
-    val startCount: Int? = null,
-    val remains: Int? = null,
-    val currency: String? = null,
-    val error: String? = null
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("charge") val charge: Double? = null,
+    @SerializedName("start_count") val startCount: Int? = null,
+    @SerializedName("remains") val remains: Int? = null
+)
+
+data class BalanceResponse(
+    @SerializedName("balance") val balance: String? = null,
+    @SerializedName("currency") val currency: String? = null
+)
+
+data class ApiError(
+    @SerializedName("error") val error: String
 )

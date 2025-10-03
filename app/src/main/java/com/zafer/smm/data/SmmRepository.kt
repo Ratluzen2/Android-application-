@@ -1,33 +1,55 @@
 package com.zafer.smm.data
 
-import com.zafer.smm.data.model.*
-import com.zafer.smm.data.remote.Network
-import com.zafer.smm.data.remote.UserDto
+import com.google.gson.JsonObject
+import com.zafer.smm.data.remote.*
 
-class SmmRepository {
-    private val api = Network.api
+class SmmRepository(
+    private val api: ApiService = Network.api
+) {
 
-    suspend fun register(deviceId: String, username: String? = null): UserDto =
-        api.register(com.zafer.smm.data.remote.RegisterBody(device_id = deviceId, username = username))
+    private fun <T> unwrap(resp: retrofit2.Response<T>): T {
+        if (resp.isSuccessful) {
+            val body = resp.body()
+            if (body != null) return body
+        }
+        val err = resp.errorBody()?.string() ?: "Unknown error"
+        throw RuntimeException(err)
+    }
 
-    suspend fun getServices(force: Boolean = false): List<ServiceItem> =
-        api.getServices(force).services ?: emptyList()
+    // Health (اختياري)
+    suspend fun healthOk(): Boolean {
+        return try { unwrap(api.health()); true } catch (_: Exception) { false }
+    }
 
-    suspend fun placeOrder(deviceId: String, serviceId: Int, link: String, quantity: Int): AddOrderResponse =
-        api.placeOrder(deviceId, serviceId, link, quantity)
+    suspend fun register(deviceId: String, username: String? = null, fullName: String? = null): JsonObject {
+        return unwrap(api.register(RegisterBody(device_id = deviceId, username = username, full_name = fullName)))
+    }
 
-    suspend fun getUserBalance(deviceId: String): BalanceResponse =
-        api.balance(deviceId)
+    suspend fun getServices(): List<ServiceItem> = unwrap(api.getServices())
 
-    suspend fun getOrderStatus(providerOrderId: Long): StatusResponse =
-        api.orderStatus(providerOrderId)
+    suspend fun getBalance(deviceId: String): BalanceDto = unwrap(api.getBalance(deviceId))
 
-    suspend fun getOrders(deviceId: String): List<OrderItem> =
-        api.orders(deviceId)
+    suspend fun placeOrder(serviceId: Int, link: String, quantity: Int, deviceId: String): JsonObject {
+        val body = AddOrderBody(
+            service_id = serviceId,
+            link = link,
+            quantity = quantity,
+            device_id = deviceId
+        )
+        return unwrap(api.addOrder(body))
+    }
 
-    suspend fun getLeaderboard(): List<LeaderboardEntry> =
-        api.leaderboard()
+    suspend fun orderStatus(providerOrderId: String): JsonObject =
+        unwrap(api.orderStatus(providerOrderId))
 
-    suspend fun walletDeposit(deviceId: String, amount: Double, note: String? = null): Boolean =
-        (api.walletDeposit(deviceId, amount, note)["ok"] == true)
+    suspend fun getOrders(deviceId: String): List<OrderItem> = unwrap(api.orders(deviceId))
+
+    suspend fun deposit(deviceId: String, amount: Double): JsonObject =
+        unwrap(api.deposit(DepositBody(device_id = deviceId, amount = amount)))
+
+    suspend fun walletTransactions(deviceId: String): List<WalletTransaction> =
+        unwrap(api.walletTransactions(deviceId))
+
+    suspend fun leaderboard(): List<LeaderboardEntry> =
+        unwrap(api.leaderboard())
 }

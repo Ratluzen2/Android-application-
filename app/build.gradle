@@ -13,10 +13,10 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0"
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
-        // ثابتات تُبنَى داخل BuildConfig إن احتجتها
-        buildConfigField "String", "BASE_URL", "\"https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com/\""
+        vectorDrawables {
+            useSupportLibrary true
+        }
     }
 
     buildTypes {
@@ -25,24 +25,25 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
-            minifyEnabled false
+            // اختياري
         }
     }
 
     buildFeatures {
         compose true
-        buildConfig true
     }
+
     composeOptions {
         kotlinCompilerExtensionVersion '1.5.14'
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
     }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = '17'
     }
 
     packaging {
@@ -53,33 +54,27 @@ android {
 }
 
 dependencies {
-    // BOM لإصدارات Compose
-    implementation platform('androidx.compose:compose-bom:2024.06.00')
+    // Compose BOM
+    implementation platform("androidx.compose:compose-bom:2024.09.00")
 
-    // AndroidX أساسية
-    implementation 'androidx.core:core-ktx:1.13.1'
-    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.3'
-    implementation 'androidx.activity:activity-compose:1.9.0'
+    // أساسيات أندرويد
+    implementation "androidx.core:core-ktx:1.13.1"
+    implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.8.4"
+    implementation "androidx.activity:activity-compose:1.9.2"
 
     // Compose UI
-    implementation 'androidx.compose.ui:ui'
-    implementation 'androidx.compose.foundation:foundation'            // مهم لـ KeyboardOptions
-    implementation 'androidx.compose.ui:ui-tooling-preview'
-    implementation 'androidx.compose.material3:material3'
+    implementation "androidx.compose.ui:ui"
+    implementation "androidx.compose.ui:ui-graphics"
+    implementation "androidx.compose.foundation:foundation"
+    implementation "androidx.compose.ui:ui-tooling-preview"
 
-    // شبكة (Retrofit/OkHttp/Gson)
-    implementation 'com.squareup.retrofit2:retrofit:2.11.0'
-    implementation 'com.squareup.retrofit2:converter-gson:2.11.0'
-    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
-    implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
-    implementation 'com.google.code.gson:gson:2.10.1'
+    // Material 3 (Compose)
+    implementation "androidx.compose.material3:material3"
 
-    // اختبارات
-    testImplementation 'junit:junit:4.13.2'
-    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
-    androidTestImplementation platform('androidx.compose:compose-bom:2024.06.00')
-    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
-    debugImplementation 'androidx.compose.ui:ui-tooling'
-    debugImplementation 'androidx.compose.ui:ui-test-manifest'
+    // ✅ مهم: Material Components (للثيم XML Theme.Material3.*)
+    implementation "com.google.android.material:material:1.12.0"
+
+    // أدوات ديبج
+    debugImplementation "androidx.compose.ui:ui-tooling"
+    debugImplementation "androidx.compose.ui:test-manifest"
 }

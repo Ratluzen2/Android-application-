@@ -83,7 +83,7 @@ data class TopupRequest(
 )
 
 // -------------------------
-// كاتالوج الخدمات (مطابق للصور/الأسماء/الكميات/الأسعار)
+// كاتالوج الخدمات (قابلة للتعديل لاحقًا)
 // -------------------------
 object Catalog {
 
@@ -380,7 +380,7 @@ fun AppRoot() {
                 is Screen.ORDER_CREATE -> OrderCreateScreen(
                     repo = repo, userId = user.id, item = s.item,
                     onDone = {
-                        if (it) Toast.makeText(LocalContext.current,"تم إرسال الطلب وخصم الرصيد",Toast.LENGTH_SHORT).show()
+                        if (it) Toast.makeText(ctx,"تم إرسال الطلب وخصم الرصيد",Toast.LENGTH_SHORT).show()
                         screen = Screen.MY_ORDERS
                     },
                     onBack = { screen = Screen.SERVICE_LIST(s.item.category) }
@@ -399,7 +399,7 @@ fun AppRoot() {
                     repo = repo, userId = user.id,
                     onBack = { screen = Screen.TOPUP_METHODS },
                     onSubmitted = {
-                        Toast.makeText(LocalContext.current,"تم استلام طلبك، سوف يتم شحن حسابك قريبًا.",Toast.LENGTH_LONG).show()
+                        Toast.makeText(ctx,"تم استلام طلبك، سوف يتم شحن حسابك قريبًا.",Toast.LENGTH_LONG).show()
                         screen = Screen.BALANCE
                     }
                 )
@@ -415,7 +415,7 @@ fun AppRoot() {
                     onCancel = { screen = Screen.HOME },
                     onOk = { pass ->
                         if (pass.trim() == "2000") screen = Screen.ADMIN_PANEL
-                        else Toast.makeText(LocalContext.current,"كلمة مرور خاطئة",Toast.LENGTH_SHORT).show()
+                        else Toast.makeText(ctx,"كلمة مرور خاطئة",Toast.LENGTH_SHORT).show()
                     }
                 )
                 Screen.ADMIN_PANEL -> AdminPanelScreen(
@@ -600,6 +600,7 @@ fun AsiacellCardScreen(
     onBack: () -> Unit,
     onSubmitted: () -> Unit
 ) {
+    val ctx = LocalContext.current
     var code by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -632,6 +633,7 @@ fun AsiacellCardScreen(
                 note = null
             )
             repo.saveTopups(list)
+            Toast.makeText(ctx,"تم استلام طلبك، سوف يتم شحن حسابك قريبًا.",Toast.LENGTH_LONG).show()
             onSubmitted()
         }
     }
@@ -693,7 +695,6 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
     val orders = remember { mutableStateListOf<Order>() }
 
     fun refreshAll() {
-        // ملاحظة: هذه الدالة غير Composable ولا تستدعي أي Composable
         topups.clear(); topups.addAll(repo.loadTopups().sortedByDescending { it.submittedAt })
         orders.clear(); orders.addAll(repo.loadOrders().sortedByDescending { it.createdAt })
     }
@@ -813,7 +814,7 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
                                 if (idx>=0) {
                                     val cur = list[idx]; list[idx] = cur.copy(status = OrderStatus.REJECTED)
                                     repo.saveOrders(list); repo.credit(cur.userId, cur.price); refreshAll()
-                                    Toast.makeText(LocalContext.current,"تم الرفض واسترجاع $${cur.price}",Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(ctx,"تم الرفض واسترجاع $${cur.price}",Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }

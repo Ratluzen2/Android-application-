@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll   // ✅ الإضافة المطلوبة
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -963,7 +964,12 @@ fun OwnerDashboard(vm: AppViewModel) {
     var newQty by remember { mutableStateOf("") }
     var modId by remember { mutableStateOf("") }
 
-    Column(Modifier.fillMaxSize().padding(12.dp).verticalScroll(rememberScrollState())) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(12.dp)
+            .verticalScroll(rememberScrollState())   // ← كان يسبب الخطأ بدون import
+    ) {
         Text("لوحة تحكم المالك", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
 

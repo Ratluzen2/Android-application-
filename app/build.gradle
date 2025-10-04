@@ -1,9 +1,7 @@
-# app/build.gradle  (Groovy)
-
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
-    // id 'kotlin-kapt' // فعّلها فقط إذا كنت تستخدم Room لاحقًا
+    // id 'kotlin-kapt' // فعّلها فقط إذا استخدمت Room لاحقًا
 }
 
 android {
@@ -33,7 +31,6 @@ android {
         compose true
     }
     composeOptions {
-        // متوافق مع Compose BOM أدناه
         kotlinCompilerExtensionVersion '1.5.14'
     }
     kotlinOptions {
@@ -47,7 +44,7 @@ android {
 }
 
 dependencies {
-    // استخدم BOM حتى لا نكتب أرقام نسخ لكل مكتبة Compose
+    // BOM للـ Compose
     implementation platform('androidx.compose:compose-bom:2024.06.00')
     androidTestImplementation platform('androidx.compose:compose-bom:2024.06.00')
 
@@ -63,7 +60,7 @@ dependencies {
 
     // أدوات تطوير
     debugImplementation 'androidx.compose.ui:ui-tooling'
-    debugImplementation 'androidx.compose.ui:ui-test-manifest'   // ← هذا الصحيح
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'   // الصحيح
 
     // اختبارات
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
@@ -74,7 +71,7 @@ dependencies {
     // Material (عناصر View عادية إذا احتجتها)
     implementation 'com.google.android.material:material:1.12.0'
 
-    // شبكة (لو بتستدعي باكند هيروكو)
+    // شبكة (إن كنت تستدعي باكند هيروكو)
     implementation 'com.squareup.retrofit2:retrofit:2.11.0'
     implementation 'com.squareup.retrofit2:converter-moshi:2.11.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'

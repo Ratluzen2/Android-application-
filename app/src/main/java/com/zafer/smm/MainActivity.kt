@@ -136,7 +136,7 @@ class AppViewModel : ViewModel() {
     val servicesTikIgViewsLikesScore = linkedMapOf(
         "متابعين تيكتوك 1k" to 3.50,
         "متابعين تيكتوك 2k" to 7.0,
-               "متابعين تيكتوك 3k" to 10.50,
+        "متابعين تيكتوك 3k" to 10.50,
         "متابعين تيكتوك 4k" to 14.0,
         "مشاهدات تيكتوك 1k" to 0.10,
         "مشاهدات تيكتوك 10k" to 0.80,
@@ -334,7 +334,7 @@ private fun cleanedTitleWithoutQty(name: String): String {
         "\\s*\\d+k\\b",
         "\\s*\\d+\\s*شدة",
         "\\s*\\d+\\s*ايتونز",
-        "\\س*\\d+\\s*دولار\\s*(?:اثير|اسيا|كورك)",
+        "\\s*\\d+\\s*دولار\\s*(?:اثير|اسيا|كورك)",
         "\\s*\\d+\\s*(?:الماسة|ذهب)",
         "بثك\\s*\\d+\\s*k\\b",
     )
@@ -437,7 +437,6 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                         )
                     },
                     actions = {
-                        // لا نعرض أيقونة للمالك هنا (كل شيء عبر الحركة السرّية)
                         if (isOwner) {
                             Icon(imageVector = Icons.Filled.LockOpen, contentDescription = null, modifier = Modifier.padding(end = 12.dp))
                         }
@@ -677,11 +676,11 @@ fun UserServicesScreen(viewModel: AppViewModel) {
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var showPriceEditor by remember { mutableStateOf<String?>(null) }
 
+    // ✅ إصلاح crash: لا نستخدم rememberSaveable مع SnapshotStateMap
+    val qtyMap = remember { mutableStateMapOf<String, Int>() }
+
     // حالة حوار الشراء
     var buyInfo by remember { mutableStateOf<BuyInfo?>(null) }
-
-    // حفظ كميات لكل خدمة
-    val qtyMap = rememberSaveable { mutableStateMapOf<String, Int>() }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Text("الخدمات", fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -736,7 +735,7 @@ fun UserServicesScreen(viewModel: AppViewModel) {
                         onDec = { qtyMap[svc] = max(step, selectedQty - step) },
                         onInc = { qtyMap[svc] = selectedQty + step },
                         onBuy = {
-                            buyInfo = BuyInfo(svc, selectedQty, currentPrice) // <-- نفتح الحوار عبر الحالة
+                            buyInfo = BuyInfo(svc, selectedQty, currentPrice)
                         },
                         onEditPrice = { showPriceEditor = svc }
                     )
@@ -789,7 +788,7 @@ fun UserServicesScreen(viewModel: AppViewModel) {
                     TextButton(onClick = {
                         viewModel.addOrder(
                             userId = viewModel.currentUserId,
-                            category = categories.firstOrNull { info.service.contains("تيكتوك") || info.service.contains("انستغرام") } ?: "smm",
+                            category = "smm",
                             serviceName = info.service,
                             qty = info.qty,
                             price = info.price,

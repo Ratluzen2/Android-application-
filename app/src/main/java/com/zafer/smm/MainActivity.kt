@@ -5,55 +5,29 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
-
-/*==================== تخزين/استرجاع حالة دخول المالك ====================*/
-object OwnerSession {
-    private const val PREFS = "app_prefs"
-    private const val KEY_OWNER = "owner_logged_in"
-
-    fun isOwner(ctx: Context): Boolean =
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getBoolean(KEY_OWNER, false)
-
-    fun setOwner(ctx: Context, value: Boolean) {
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .edit()
-            .putBoolean(KEY_OWNER, value)
-            .apply()
-    }
-}
-
-/*==================== تنقل الشاشات ====================*/
-private sealed class Screen {
-    data object Welcome : Screen()
-    data object Services : Screen()
-    data object AdminLogin : Screen()
-    data object AdminPanel : Screen()
-}
+import com.zafer.smm.data.local.Catalog
+import com.zafer.smm.data.local.ServiceCategory
+import com.zafer.smm.data.local.ServiceEntry
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // نتأكد من حفظ حالة دخول المالك
+        val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         setContent {
             MaterialTheme(colorScheme = lightColorScheme()) {
-                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    AppRoot()
+                Surface(Modifier.fillMaxSize()) {
+                    AppRoot(prefs)
                 }
             }
         }
@@ -61,361 +35,318 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun AppRoot() {
-    val ctx = LocalContext.current
-    val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
+private fun AppRoot(prefs: android.content.SharedPreferences) {
+    var isOwner by remember {
+        mutableStateOf(prefs.getBoolean("is_owner", false))
+    }
+    var screen by remember { mutableStateOf(if (isOwner) Screen.OwnerPanel else Screen.Home) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    // قراءة حالة المالك المحفوظة لتحديد الشاشة عند فتح التطبيق
-    var isOwner by remember { mutableStateOf(OwnerSession.isOwner(ctx)) }
-    var current by remember { mutableStateOf<Screen>(if (isOwner) Screen.AdminPanel else Screen.Welcome) }
-
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { inner ->
-        Box(Modifier.fillMaxSize().padding(inner)) {
-            when (current) {
-                Screen.Welcome -> WelcomeScreen(
-                    onOpenServices = { current = Screen.Services },
-                    onOpenOrders = { soon(scope, snackbar) },
-                    onOpenWallet = { soon(scope, snackbar) },
-                    onOpenReferral = { soon(scope, snackbar) },
-                    onOpenLeaderboard = { soon(scope, snackbar) },
-                    onOwnerClick = { current = Screen.AdminLogin }
+    Scaffold(
+        topBar = {
+            SmallTopAppBar(
+                title = { Text("خدمات راتلوزن", fontWeight = FontWeight.SemiBold) },
+                actions = {
+                    // زر دخول المالك — أعلى اليمين وبحجم أصغر
+                    if (!isOwner && screen == Screen.Home) {
+                        TextButton(onClick = { screen = Screen.OwnerLogin }) {
+                            Text("دخول المالك")
+                        }
+                    } else if (isOwner && screen != Screen.OwnerPanel) {
+                        TextButton(onClick = { screen = Screen.OwnerPanel }) {
+                            Text("لوحة المالك")
+                        }
+                    }
+                }
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { inner ->
+        Box(Modifier.padding(inner)) {
+            when (screen) {
+                Screen.Home -> HomeScreen(
+                    onServices = { screen = Screen.Services },
+                    onOrders = { showSnack(snackbarHostState, "قريباً: طلباتي") },
+                    onWallet = { showSnack(snackbarHostState, "قريباً: رصيدي") },
+                    onReferral = { showSnack(snackbarHostState, "قريباً: الإحالة") },
+                    onLeaders = { showSnack(snackbarHostState, "قريباً: المتصدرين") }
                 )
 
                 Screen.Services -> ServicesScreen(
-                    onBack = { current = Screen.Welcome },
-                    onCategoryClick = { soon(scope, snackbar) }
+                    onBack = { screen = Screen.Home },
+                    onPickCategory = { cat -> screen = Screen.Category(cat) }
                 )
 
-                Screen.AdminLogin -> AdminLoginScreen(
-                    onBack = { current = Screen.Welcome },
-                    onLoginOk = {
-                        OwnerSession.setOwner(ctx, true)
+                is Screen.Category -> CategoryScreen(
+                    category = screen.category,
+                    onBack = { screen = Screen.Services },
+                    onOrderClick = { entry ->
+                        // هنا يمكن لاحقاً استدعاء الباكند لإرسال الطلب فعلياً
+                        showSnack(snackbarHostState, "تم إرسال طلب: ${entry.name} (${entry.priceUSD}$)")
+                    }
+                )
+
+                Screen.OwnerLogin -> OwnerLoginScreen(
+                    onCancel = { screen = Screen.Home },
+                    onSuccess = {
+                        prefs.edit().putBoolean("is_owner", true).apply()
                         isOwner = true
-                        current = Screen.AdminPanel
-                    },
-                    onLoginFail = { msg -> showSnack(scope, snackbar, msg) }
+                        screen = Screen.OwnerPanel
+                    }
                 )
 
-                Screen.AdminPanel -> AdminPanelScreen(
-                    onLogout = {
-                        OwnerSession.setOwner(ctx, false)
-                        isOwner = false
-                        current = Screen.Welcome
+                Screen.OwnerPanel -> OwnerPanelScreen(
+                    onBackToHome = {
+                        // خروج من اللوحة فقط (نبقي حالة المالك محفوظة كما هي)
+                        screen = Screen.Home
                     },
-                    onItemClick = { soon(scope, snackbar) }
+                    onLogoutOwner = {
+                        prefs.edit().putBoolean("is_owner", false).apply()
+                        isOwner = false
+                        screen = Screen.Home
+                    },
+                    onStubClick = { label ->
+                        showSnack(snackbarHostState, "قريباً: $label")
+                    }
                 )
             }
         }
     }
 }
 
-/*==================== شاشة الترحيب ====================*/
+private sealed interface Screen {
+    data object Home : Screen
+    data object Services : Screen
+    data class Category(val category: ServiceCategory) : Screen
+    data object OwnerLogin : Screen
+    data object OwnerPanel : Screen
+}
+
 @Composable
-private fun WelcomeScreen(
-    onOpenServices: () -> Unit,
-    onOpenOrders: () -> Unit,
-    onOpenWallet: () -> Unit,
-    onOpenReferral: () -> Unit,
-    onOpenLeaderboard: () -> Unit,
-    onOwnerClick: () -> Unit
+private fun HomeScreen(
+    onServices: () -> Unit,
+    onOrders: () -> Unit,
+    onWallet: () -> Unit,
+    onReferral: () -> Unit,
+    onLeaders: () -> Unit
 ) {
     Column(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(18.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // زر دخول المالك صغير أعلى اليمين
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedButton(
-                onClick = onOwnerClick,
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                modifier = Modifier.height(34.dp)
-            ) {
-                Text("🔒 دخول المالك", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-            }
-        }
-
-        Spacer(Modifier.height(6.dp))
-
         Text(
-            text = "أهلاً وسهلاً بكم في تطبيق خدمات راتلوزن",
-            style = MaterialTheme.typography.headlineSmall.copy(
-                fontWeight = FontWeight.Bold,
-                fontSize = 22.sp
-            ),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
+            "أهلاً وسهلاً بكم في تطبيق خدمات راتلوزن",
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center
         )
+        Spacer(Modifier.height(12.dp))
 
-        Spacer(Modifier.height(18.dp))
-
-        val tiles = listOf(
-            HomeTile("الخدمات", "🛍️") { onOpenServices() },
-            HomeTile("طلباتي", "📦") { onOpenOrders() },
-            HomeTile("رصيدي", "💳") { onOpenWallet() },
-            HomeTile("الإحالة", "👥") { onOpenReferral() },
-            HomeTile("المتصدرين 🎉", "🏆") { onOpenLeaderboard() }
-        )
-
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(tiles) { tile ->
-                TileCard(title = tile.title, emoji = tile.emoji, onClick = tile.onClick)
-            }
-        }
+        // أزرار رئيسية مرتبة وبسيطة
+        MainButton("الخدمات", onServices)
+        MainButton("طلباتي", onOrders)
+        MainButton("رصيدي", onWallet)
+        MainButton("الإحالة", onReferral)
+        MainButton("المتصدرين 🎉", onLeaders)
     }
 }
-
-private data class HomeTile(
-    val title: String,
-    val emoji: String,
-    val onClick: () -> Unit
-)
 
 @Composable
-private fun TileCard(
-    title: String,
-    emoji: String,
-    onClick: () -> Unit
-) {
-    ElevatedCard(
+private fun MainButton(title: String, onClick: () -> Unit) {
+    Button(
         onClick = onClick,
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = Modifier
             .fillMaxWidth()
-            .height(120.dp)
+            .padding(vertical = 6.dp)
+            .height(52.dp),
+        shape = MaterialTheme.shapes.medium
     ) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(14.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(emoji, fontSize = 28.sp)
-            Spacer(Modifier.height(10.dp))
-            Text(
-                title,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                textAlign = TextAlign.Center
-            )
-        }
+        Text(title, style = MaterialTheme.typography.titleMedium)
     }
 }
-
-/*==================== شاشة الأقسام داخل "الخدمات" (بدون ملصقات) ====================*/
-private data class ServiceCategory(val id: String, val title: String)
 
 @Composable
 private fun ServicesScreen(
     onBack: () -> Unit,
-    onCategoryClick: (ServiceCategory) -> Unit
+    onPickCategory: (ServiceCategory) -> Unit
 ) {
-    val categories = remember {
-        listOf(
-            ServiceCategory("followers", "قسم المتابعين"),
-            ServiceCategory("likes", "قسم الايكات"),
-            ServiceCategory("views", "قسم المشاهدات"),
-            ServiceCategory("live_views", "قسم مشاهدات البث المباشر"),
-            ServiceCategory("pubg", "قسم شحن شدات ببجي"),
-            ServiceCategory("tiktok_score", "قسم رفع سكور تيكتوك"),
-            ServiceCategory("itunes", "قسم شراء رصيد ايتونز"),
-            ServiceCategory("telegram", "قسم خدمات التليجرام"),
-            ServiceCategory("ludo", "قسم خدمات الودو"),
-            ServiceCategory("mobile_topup", "قسم شراء رصيد الهاتف")
-        )
-    }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("الأقسام", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+        val cats = listOf(
+            ServiceCategory.Followers,
+            ServiceCategory.Likes,
+            ServiceCategory.Views,
+            ServiceCategory.LiveViews,
+            ServiceCategory.TikTokScore,
+            ServiceCategory.PUBG,
+            ServiceCategory.ITunes,
+            ServiceCategory.Telegram,
+            ServiceCategory.Ludo,
+            ServiceCategory.Mobile
+        )
+
+        cats.forEach { cat ->
+            OutlinedButton(
+                onClick = { onPickCategory(cat) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 5.dp)
+                    .height(50.dp)
+            ) {
+                Text(cat.title)
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+            Text("رجوع")
+        }
+    }
+}
+
+@Composable
+private fun CategoryScreen(
+    category: ServiceCategory,
+    onBack: () -> Unit,
+    onOrderClick: (ServiceEntry) -> Unit
+) {
+    val items = remember(category) {
+        (Catalog[category] ?: emptyList()).sortedBy { it.priceUSD }
+    }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text(category.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
+
+        if (items.isEmpty()) {
+            Text("لا توجد خدمات في هذا القسم حالياً.")
+        } else {
+            LazyColumn(Modifier.weight(1f)) {
+                items(items) { entry ->
+                    ServiceRow(entry, onOrderClick)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+            Text("رجوع")
+        }
+    }
+}
+
+@Composable
+private fun ServiceRow(entry: ServiceEntry, onOrderClick: (ServiceEntry) -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
     ) {
         Row(
-            Modifier.fillMaxWidth(),
+            Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TextButton(onClick = onBack) { Text("◀ رجوع") }
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "الأقسام",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-            )
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 150.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(categories) { cat ->
-                ElevatedCard(
-                    onClick = { onCategoryClick(cat) },
-                    elevation = CardDefaults.elevatedCardElevation(3.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(90.dp)
-                            .padding(horizontal = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            cat.title,
-                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
+            Column(Modifier.weight(1f)) {
+                Text(entry.name, style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(4.dp))
+                Text("${entry.priceUSD} $", style = MaterialTheme.typography.bodyMedium)
+            }
+            Button(onClick = { onOrderClick(entry) }) {
+                Text("طلب الخدمة")
             }
         }
     }
 }
 
-/*==================== شاشة دخول المالك ====================*/
 @Composable
-private fun AdminLoginScreen(
-    onBack: () -> Unit,
-    onLoginOk: () -> Unit,
-    onLoginFail: (String) -> Unit
+private fun OwnerLoginScreen(
+    onCancel: () -> Unit,
+    onSuccess: () -> Unit
 ) {
-    var password by remember { mutableStateOf("") }
+    var pass by remember { mutableStateOf("") }
+    val correct = "2000"
 
     Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier.fillMaxSize().padding(18.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-            TextButton(onClick = onBack) { Text("◀ رجوع") }
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            "تسجيل دخول المالك",
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-        )
-        Spacer(Modifier.height(8.dp))
-        Text("من فضلك أدخل كلمة المرور الخاصة بالمالك", style = MaterialTheme.typography.bodyLarge)
+        Text("تسجيل دخول المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
+            value = pass,
+            onValueChange = { pass = it },
             label = { Text("كلمة المرور") },
-            singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
-        Spacer(Modifier.height(12.dp))
-        Button(
-            onClick = {
-                if (password == "2000") onLoginOk() else onLoginFail("كلمة المرور غير صحيحة")
-            },
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.large,
-            contentPadding = PaddingValues(vertical = 12.dp)
-        ) {
-            Text("دخول", fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            OutlinedButton(onClick = onCancel) { Text("إلغاء") }
+            Button(onClick = {
+                if (pass == correct) onSuccess()
+                else pass = ""
+            }) { Text("دخول") }
         }
     }
 }
 
-/*==================== لوحة تحكم المالك ====================*/
 @Composable
-private fun AdminPanelScreen(
-    onLogout: () -> Unit,
-    onItemClick: (String) -> Unit
+private fun OwnerPanelScreen(
+    onBackToHome: () -> Unit,
+    onLogoutOwner: () -> Unit,
+    onStubClick: (String) -> Unit
 ) {
-    val items = listOf(
-        "تعديل الأسعار والكميات",
-        "الطلبات المعلّقة (الخدمات)",
-        "الكارتات المعلّقة",
-        "طلبات شدّات ببجي",
-        "طلبات شحن الايتونز",
-        "طلبات الأرصدة المعلّقة",
-        "طلبات لودو المعلّقة",
-        "خصم الرصيد",
-        "إضافة رصيد",
-        "فحص حالة طلب API",
-        "فحص رصيد API",
-        "رصيد المستخدمين",
-        "عدد المستخدمين",
-        "إدارة المشرفين",
-        "إلغاء حظر المستخدم",
-        "حظر المستخدم",
-        "إعلان التطبيق",
-        "أكواد خدمات API",
-        "نظام الإحالة",
-        "شرح الخصومات",
-        "المتصدرين"
-    )
-
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            // هذا الزر يعمل كـ "تسجيل خروج من لوحة المالك"
-            TextButton(onClick = onLogout) { Text("◀ خروج من لوحة المالك") }
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "لوحة تحكم المالك",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-            )
-        }
-
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Text("لوحة تحكم المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(10.dp))
 
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 180.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.fillMaxSize()
-        ) {
-            items(items) { title ->
-                ElevatedCard(
-                    onClick = { onItemClick(title) },
-                    elevation = CardDefaults.elevatedCardElevation(2.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        val adminButtons = listOf(
+            "تعديل الأسعار والكميات",
+            "الطلبات المعلّقة (الخدمات)",
+            "الكارتات المعلّقة",
+            "طلبات شدات ببجي",
+            "طلبات شحن الايتونز",
+            "طلبات الأرصدة المعلّقة",
+            "طلبات لودو المعلّقة",
+            "خصم الرصيد",
+            "إضافة رصيد",
+            "فحص حالة طلب API",
+            "فحص رصيد API",
+            "رصيد المستخدمين",
+            "عدد المستخدمين",
+            "إدارة المشرفين",
+            "إلغاء حظر المستخدم",
+            "حظر المستخدم",
+            "إعلان التطبيق",
+            "أكواد خدمات API",
+            "نظام الإحالة",
+            "شرح الخصومات",
+            "المتصدرين"
+        )
+
+        LazyColumn(Modifier.weight(1f)) {
+            items(adminButtons) { title ->
+                OutlinedButton(
+                    onClick = { onStubClick(title) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 5.dp)
+                        .height(48.dp)
                 ) {
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(78.dp)
-                            .padding(horizontal = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            title,
-                            textAlign = TextAlign.Center,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-                        )
-                    }
+                    Text(title)
                 }
             }
         }
+
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            OutlinedButton(onClick = onBackToHome) { Text("الواجهة الرئيسية") }
+            Button(onClick = onLogoutOwner) { Text("تسجيل خروج المالك") }
+        }
     }
 }
 
-/*==================== أدوات Snackbar ====================*/
-private fun showSnack(scope: CoroutineScope, host: SnackbarHostState, msg: String) {
-    scope.launch { host.showSnackbar(message = msg, withDismissAction = true) }
-}
-
-private fun soon(scope: CoroutineScope, host: SnackbarHostState) {
-    scope.launch { host.showSnackbar("سيتوفر قريبًا") }
+private suspend fun showSnack(host: SnackbarHostState, msg: String) {
+    host.showSnackbar(message = msg, withDismissAction = true)
 }

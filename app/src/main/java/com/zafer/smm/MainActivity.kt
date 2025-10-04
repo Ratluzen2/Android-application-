@@ -21,11 +21,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -35,24 +35,16 @@ import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
-import kotlin.math.max
-import kotlin.system.measureTimeMillis
 
 // -------------------------
 // نماذج البيانات
 // -------------------------
-
-data class User(
-    val id: String,
-    val createdAt: Long,
-    var balance: Double
-)
-
+data class User(val id: String, val createdAt: Long, var balance: Double)
 enum class OrderStatus { PENDING, IN_PROGRESS, DONE, REJECTED }
 data class ServiceItem(
     val id: Int,
     val category: String,
-    val label: String,
+    val display: String,   // نص الزر كاملًا كما في البوت (الاسم+الكمية+السعر)
     val quantity: Int,
     val price: Double
 )
@@ -60,7 +52,7 @@ data class Order(
     val id: String,
     val userId: String,
     val serviceId: Int,
-    val serviceLabel: String,
+    val serviceDisplay: String,
     val quantity: Int,
     val price: Double,
     val input: String,
@@ -80,131 +72,132 @@ data class TopupRequest(
 )
 
 // -------------------------
-// كاتالوج الخدمات (مطابق للصور)
+// كاتالوج الخدمات (مطابق للصور حرفيًا)
 // -------------------------
 object Catalog {
 
+    // ترتيب الأقسام كما بالبوت
     val sections: LinkedHashMap<String, String> = linkedMapOf(
-        "tiktok_followers" to "متابعين تيك توك",
+        "tiktok_followers" to "متابعين تيكتوك",
         "instagram_followers" to "متابعين انستغرام",
-        "tiktok_likes" to "لايكات تيك توك",
+        "tiktok_likes" to "لايكات تيكتوك",
         "instagram_likes" to "لايكات انستغرام",
-        "tiktok_views" to "مشاهدات تيك توك",
+        "tiktok_views" to "مشاهدات تيكتوك",
         "instagram_views" to "مشاهدات انستغرام",
-        "tiktok_live" to "مشاهدات بث تيك توك",
+        "tiktok_live" to "مشاهدات بث تيكتوك",
         "instagram_live" to "مشاهدات بث انستغرام",
         "telegram_members_channels" to "اعضاء قنوات تيلي",
         "telegram_members_groups" to "اعضاء كروبات تيلي",
         "ludo" to "خدمات لودو",
         "pubg" to "شحن شدات ببجي",
-        "itunes" to "شراء رصيد آيتونز",
-        "bank_score" to "رفع سكور بنك تيك توك",
-        "balance_buy" to "شراء رصيد شبكات (اثير/اسيا/كورك)"
+        "itunes" to "شراء رصيد ايتونز",
+        "bank_score" to "رفع سكور بنك تيكتوك",
+        "balance_buy" to "شراء رصيد (أثير/اسيا/كورك)"
     )
 
     val items: List<ServiceItem> = buildList {
 
-        // متابعين تيك توك
-        add(ServiceItem(1001,"tiktok_followers","متابعين تيكتوك (1000)",1000,3.5))
-        add(ServiceItem(1002,"tiktok_followers","متابعين تيكتوك (2000)",2000,7.0))
-        add(ServiceItem(1003,"tiktok_followers","متابعين تيكتوك (3000)",3000,10.5))
-        add(ServiceItem(1004,"tiktok_followers","متابعين تيكتوك (4000)",4000,14.0))
+        // متابعين تيكتوك
+        add(ServiceItem(1001,"tiktok_followers","متابعين تيكتوك (1000) - $3.5",1000,3.5))
+        add(ServiceItem(1002,"tiktok_followers","متابعين تيكتوك (2000) - $7.0",2000,7.0))
+        add(ServiceItem(1003,"tiktok_followers","متابعين تيكتوك (3000) - $10.5",3000,10.5))
+        add(ServiceItem(1004,"tiktok_followers","متابعين تيكتوك (4000) - $14.0",4000,14.0))
 
         // متابعين انستغرام
-        add(ServiceItem(1101,"instagram_followers","متابعين انستغرام (1000)",1000,3.0))
-        add(ServiceItem(1102,"instagram_followers","متابعين انستغرام (2000)",2000,6.0))
-        add(ServiceItem(1103,"instagram_followers","متابعين انستغرام (3000)",3000,9.0))
-        add(ServiceItem(1104,"instagram_followers","متابعين انستغرام (4000)",4000,12.0))
+        add(ServiceItem(1101,"instagram_followers","متابعين انستغرام (1000) - $3.0",1000,3.0))
+        add(ServiceItem(1102,"instagram_followers","متابعين انستغرام (2000) - $6.0",2000,6.0))
+        add(ServiceItem(1103,"instagram_followers","متابعين انستغرام (3000) - $9.0",3000,9.0))
+        add(ServiceItem(1104,"instagram_followers","متابعين انستغرام (4000) - $12.0",4000,12.0))
 
-        // لايكات تيك توك
-        add(ServiceItem(1201,"tiktok_likes","لايكات تيك توك (1000)",1000,1.0))
-        add(ServiceItem(1202,"tiktok_likes","لايكات تيك توك (2000)",2000,2.0))
-        add(ServiceItem(1203,"tiktok_likes","لايكات تيك توك (3000)",3000,3.0))
-        add(ServiceItem(1204,"tiktok_likes","لايكات تيك توك (4000)",4000,4.0))
+        // لايكات تيكتوك
+        add(ServiceItem(1201,"tiktok_likes","لايكات تيكتوك (1000) - $1.0",1000,1.0))
+        add(ServiceItem(1202,"tiktok_likes","لايكات تيكتوك (2000) - $2.0",2000,2.0))
+        add(ServiceItem(1203,"tiktok_likes","لايكات تيكتوك (3000) - $3.0",3000,3.0))
+        add(ServiceItem(1204,"tiktok_likes","لايكات تيكتوك (4000) - $4.0",4000,4.0))
 
         // لايكات انستغرام
-        add(ServiceItem(1301,"instagram_likes","لايكات انستغرام (1000)",1000,1.0))
-        add(ServiceItem(1302,"instagram_likes","لايكات انستغرام (2000)",2000,2.0))
-        add(ServiceItem(1303,"instagram_likes","لايكات انستغرام (3000)",3000,3.0))
-        add(ServiceItem(1304,"instagram_likes","لايكات انستغرام (4000)",4000,4.0))
+        add(ServiceItem(1301,"instagram_likes","لايكات انستغرام (1000) - $1.0",1000,1.0))
+        add(ServiceItem(1302,"instagram_likes","لايكات انستغرام (2000) - $2.0",2000,2.0))
+        add(ServiceItem(1303,"instagram_likes","لايكات انستغرام (3000) - $3.0",3000,3.0))
+        add(ServiceItem(1304,"instagram_likes","لايكات انستغرام (4000) - $4.0",4000,4.0))
 
-        // مشاهدات تيك توك
-        add(ServiceItem(1401,"tiktok_views","مشاهدات تيك توك (1000)",1000,0.1))
-        add(ServiceItem(1402,"tiktok_views","مشاهدات تيك توك (10000)",10000,0.8))
-        add(ServiceItem(1403,"tiktok_views","مشاهدات تيك توك (20000)",20000,1.6))
-        add(ServiceItem(1404,"tiktok_views","مشاهدات تيك توك (30000)",30000,2.4))
-        add(ServiceItem(1405,"tiktok_views","مشاهدات تيك توك (50000)",50000,3.2))
+        // مشاهدات تيكتوك
+        add(ServiceItem(1401,"tiktok_views","مشاهدات تيكتوك (1000) - $0.1",1000,0.1))
+        add(ServiceItem(1402,"tiktok_views","مشاهدات تيكتوك (10000) - $0.8",10000,0.8))
+        add(ServiceItem(1403,"tiktok_views","مشاهدات تيكتوك (20000) - $1.6",20000,1.6))
+        add(ServiceItem(1404,"tiktok_views","مشاهدات تيكتوك (30000) - $2.4",30000,2.4))
+        add(ServiceItem(1405,"tiktok_views","مشاهدات تيكتوك (50000) - $3.2",50000,3.2))
 
         // مشاهدات انستغرام
-        add(ServiceItem(1501,"instagram_views","مشاهدات انستغرام (10000)",10000,0.8))
-        add(ServiceItem(1502,"instagram_views","مشاهدات انستغرام (20000)",20000,1.6))
-        add(ServiceItem(1503,"instagram_views","مشاهدات انستغرام (30000)",30000,2.4))
-        add(ServiceItem(1504,"instagram_views","مشاهدات انستغرام (50000)",50000,3.2))
+        add(ServiceItem(1501,"instagram_views","مشاهدات انستغرام (10000) - $0.8",10000,0.8))
+        add(ServiceItem(1502,"instagram_views","مشاهدات انستغرام (20000) - $1.6",20000,1.6))
+        add(ServiceItem(1503,"instagram_views","مشاهدات انستغرام (30000) - $2.4",30000,2.4))
+        add(ServiceItem(1504,"instagram_views","مشاهدات انستغرام (50000) - $3.2",50000,3.2))
 
-        // مشاهدات بث تيك توك
-        add(ServiceItem(1601,"tiktok_live","مشاهدات بث تيكتوك (1000)",1000,2.0))
-        add(ServiceItem(1602,"tiktok_live","مشاهدات بث تيكتوك (2000)",2000,4.0))
-        add(ServiceItem(1603,"tiktok_live","مشاهدات بث تيكتوك (3000)",3000,6.0))
-        add(ServiceItem(1604,"tiktok_live","مشاهدات بث تيكتوك (4000)",4000,8.0))
+        // مشاهدات بث تيكتوك
+        add(ServiceItem(1601,"tiktok_live","مشاهدات بث تيكتوك (1000) - $2.0",1000,2.0))
+        add(ServiceItem(1602,"tiktok_live","مشاهدات بث تيكتوك (2000) - $4.0",2000,4.0))
+        add(ServiceItem(1603,"tiktok_live","مشاهدات بث تيكتوك (3000) - $6.0",3000,6.0))
+        add(ServiceItem(1604,"tiktok_live","مشاهدات بث تيكتوك (4000) - $8.0",4000,8.0))
 
         // مشاهدات بث انستغرام
-        add(ServiceItem(1701,"instagram_live","مشاهدات بث انستغرام (1000)",1000,2.0))
-        add(ServiceItem(1702,"instagram_live","مشاهدات بث انستغرام (2000)",2000,4.0))
-        add(ServiceItem(1703,"instagram_live","مشاهدات بث انستغرام (3000)",3000,6.0))
-        add(ServiceItem(1704,"instagram_live","مشاهدات بث انستغرام (4000)",4000,8.0))
+        add(ServiceItem(1701,"instagram_live","مشاهدات بث انستغرام (1000) - $2.0",1000,2.0))
+        add(ServiceItem(1702,"instagram_live","مشاهدات بث انستغرام (2000) - $4.0",2000,4.0))
+        add(ServiceItem(1703,"instagram_live","مشاهدات بث انستغرام (3000) - $6.0",3000,6.0))
+        add(ServiceItem(1704,"instagram_live","مشاهدات بث انستغرام (4000) - $8.0",4000,8.0))
 
         // اعضاء قنوات تيلي
-        add(ServiceItem(1801,"telegram_members_channels","اعضاء قنوات تيلي 1k",1000,3.0))
-        add(ServiceItem(1802,"telegram_members_channels","اعضاء قنوات تيلي 2k",2000,6.0))
-        add(ServiceItem(1803,"telegram_members_channels","اعضاء قنوات تيلي 3k",3000,9.0))
-        add(ServiceItem(1804,"telegram_members_channels","اعضاء قنوات تيلي 4k",4000,12.0))
-        add(ServiceItem(1805,"telegram_members_channels","اعضاء قنوات تيلي 5k",5000,15.0))
+        add(ServiceItem(1801,"telegram_members_channels","اعضاء قنوات تيلي 1k - 3.0$",1000,3.0))
+        add(ServiceItem(1802,"telegram_members_channels","اعضاء قنوات تيلي 2k - 6.0$",2000,6.0))
+        add(ServiceItem(1803,"telegram_members_channels","اعضاء قنوات تيلي 3k - 9.0$",3000,9.0))
+        add(ServiceItem(1804,"telegram_members_channels","اعضاء قنوات تيلي 4k - 12.0$",4000,12.0))
+        add(ServiceItem(1805,"telegram_members_channels","اعضاء قنوات تيلي 5k - 15.0$",5000,15.0))
 
         // اعضاء كروبات تيلي
-        add(ServiceItem(1901,"telegram_members_groups","اعضاء كروبات تيلي 1k",1000,3.0))
-        add(ServiceItem(1902,"telegram_members_groups","اعضاء كروبات تيلي 2k",2000,6.0))
-        add(ServiceItem(1903,"telegram_members_groups","اعضاء كروبات تيلي 3k",3000,9.0))
-        add(ServiceItem(1904,"telegram_members_groups","اعضاء كروبات تيلي 4k",4000,12.0))
-        add(ServiceItem(1905,"telegram_members_groups","اعضاء كروبات تيلي 5k",5000,15.0))
+        add(ServiceItem(1901,"telegram_members_groups","اعضاء كروبات تيلي 1k - 3.0$",1000,3.0))
+        add(ServiceItem(1902,"telegram_members_groups","اعضاء كروبات تيلي 2k - 6.0$",2000,6.0))
+        add(ServiceItem(1903,"telegram_members_groups","اعضاء كروبات تيلي 3k - 9.0$",3000,9.0))
+        add(ServiceItem(1904,"telegram_members_groups","اعضاء كروبات تيلي 4k - 12.0$",4000,12.0))
+        add(ServiceItem(1905,"telegram_members_groups","اعضاء كروبات تيلي 5k - 15.0$",5000,15.0))
 
-        // لودو (ألماس وذهب)
-        add(ServiceItem(2001,"ludo","لودو 810 الماسة",810,4.0))
-        add(ServiceItem(2002,"ludo","لودو 2280 الماسة",2280,8.9))
-        add(ServiceItem(2003,"ludo","لودو 5080 الماسة",5080,17.5))
-        add(ServiceItem(2004,"ludo","لودو 12750 الماسة",12750,42.7))
-        add(ServiceItem(2005,"ludo","لودو ذهب 66680",66680,4.0))
-        add(ServiceItem(2006,"ludo","لودو ذهب 219500",219500,8.9))
-        add(ServiceItem(2007,"ludo","لودو ذهب 1443000",1443000,17.5))
-        add(ServiceItem(2008,"ludo","لودو ذهب 3627000",3627000,42.7))
+        // لودو ألماس وذهب
+        add(ServiceItem(2001,"ludo","لودو 810 الماسة - $4.0",810,4.0))
+        add(ServiceItem(2002,"ludo","لودو 2280 الماسة - $8.9",2280,8.9))
+        add(ServiceItem(2003,"ludo","لودو 5080 الماسة - $17.5",5080,17.5))
+        add(ServiceItem(2004,"ludo","لودو 12750 الماسة - $42.7",12750,42.7))
+        add(ServiceItem(2005,"ludo","لودو ذهب 66680 - $4.0",66680,4.0))
+        add(ServiceItem(2006,"ludo","لودو ذهب 219500 - $8.9",219500,8.9))
+        add(ServiceItem(2007,"ludo","لودو ذهب 1443000 - $17.5",1443000,17.5))
+        add(ServiceItem(2008,"ludo","لودو ذهب 3627000 - $42.7",3627000,42.7))
 
         // ببجي
-        add(ServiceItem(2101,"pubg","ببجي 60 شدة",60,2.0))
-        add(ServiceItem(2102,"pubg","ببجي 120 شدة",120,4.0))
-        add(ServiceItem(2103,"pubg","ببجي 180 شدة",180,6.0))
-        add(ServiceItem(2104,"pubg","ببجي 240 شدة",240,8.0))
-        add(ServiceItem(2105,"pubg","ببجي 325 شدة",325,9.0))
-        add(ServiceItem(2106,"pubg","ببجي 660 شدة",660,15.0))
-        add(ServiceItem(2107,"pubg","ببجي 1800 شدة",1800,40.0))
+        add(ServiceItem(2101,"pubg","ببجي 60 شدة - $2.0",60,2.0))
+        add(ServiceItem(2102,"pubg","ببجي 120 شدة - $4.0",120,4.0))
+        add(ServiceItem(2103,"pubg","ببجي 180 شدة - $6.0",180,6.0))
+        add(ServiceItem(2104,"pubg","ببجي 240 شدة - $8.0",240,8.0))
+        add(ServiceItem(2105,"pubg","ببجي 325 شدة - $9.0",325,9.0))
+        add(ServiceItem(2106,"pubg","ببجي 660 شدة - $15.0",660,15.0))
+        add(ServiceItem(2107,"pubg","ببجي 1800 شدة - $40.0",1800,40.0))
 
-        // آيتونز
-        add(ServiceItem(2201,"itunes","شراء رصيد 5 آيتونز",5,9.0))
-        add(ServiceItem(2202,"itunes","شراء رصيد 10 آيتونز",10,18.0))
-        add(ServiceItem(2203,"itunes","شراء رصيد 15 آيتونز",15,27.0))
-        add(ServiceItem(2204,"itunes","شراء رصيد 20 آيتونز",20,36.0))
-        add(ServiceItem(2205,"itunes","شراء رصيد 25 آيتونز",25,45.0))
-        add(ServiceItem(2206,"itunes","شراء رصيد 30 آيتونز",30,54.0))
-        add(ServiceItem(2207,"itunes","شراء رصيد 35 آيتونز",35,63.0))
-        add(ServiceItem(2208,"itunes","شراء رصيد 40 آيتونز",40,72.0))
-        add(ServiceItem(2209,"itunes","شراء رصيد 45 آيتونز",45,81.0))
-        add(ServiceItem(2210,"itunes","شراء رصيد 50 آيتونز",50,90.0))
+        // آيتونز (السعر أولاً كما بالصورة)
+        add(ServiceItem(2201,"itunes","$9.0 - شراء رصيد 5 ايتونز",5,9.0))
+        add(ServiceItem(2202,"itunes","$18.0 - شراء رصيد 10 ايتونز",10,18.0))
+        add(ServiceItem(2203,"itunes","$27.0 - شراء رصيد 15 ايتونز",15,27.0))
+        add(ServiceItem(2204,"itunes","$36.0 - شراء رصيد 20 ايتونز",20,36.0))
+        add(ServiceItem(2205,"itunes","$45.0 - شراء رصيد 25 ايتونز",25,45.0))
+        add(ServiceItem(2206,"itunes","$54.0 - شراء رصيد 30 ايتونز",30,54.0))
+        add(ServiceItem(2207,"itunes","$63.0 - شراء رصيد 35 ايتونز",35,63.0))
+        add(ServiceItem(2208,"itunes","$72.0 - شراء رصيد 40 ايتونز",40,72.0))
+        add(ServiceItem(2209,"itunes","$81.0 - شراء رصيد 45 ايتونز",45,81.0))
+        add(ServiceItem(2210,"itunes","$90.0 - شراء رصيد 50 ايتونز",50,90.0))
 
-        // رفع سكور بنك تيك توك
-        add(ServiceItem(2301,"bank_score","رفع سكور بنك (1000)",1000,2.0))
-        add(ServiceItem(2302,"bank_score","رفع سكور بنك (2000)",2000,4.0))
-        add(ServiceItem(2303,"bank_score","رفع سكور بنك (3000)",3000,6.0))
-        add(ServiceItem(2304,"bank_score","رفع سكور بنك (10000)",10000,20.0))
+        // رفع سكور بنك تيكتوك
+        add(ServiceItem(2301,"bank_score","رفع سكور بنك (1000) - $2.0",1000,2.0))
+        add(ServiceItem(2302,"bank_score","رفع سكور بنك (2000) - $4.0",2000,4.0))
+        add(ServiceItem(2303,"bank_score","رفع سكور بنك (3000) - $6.0",3000,6.0))
+        add(ServiceItem(2304,"bank_score","رفع سكور بنك (10000) - $20.0",10000,20.0))
 
-        // شراء رصيد شبكات (اثير/اسيا/كورك)
+        // شراء رصيد الشبكات (أثير/اسيا/كورك) — السعر أولاً كما بالصورة
         add(ServiceItem(2401,"balance_buy","$3.5 - شراء رصيد 2 دولار أثير",2,3.5))
         add(ServiceItem(2402,"balance_buy","$7.0 - شراء رصيد 5 دولار أثير",5,7.0))
         add(ServiceItem(2403,"balance_buy","$13.0 - شراء رصيد 10 دولار أثير",10,13.0))
@@ -217,10 +210,10 @@ object Catalog {
         add(ServiceItem(2414,"balance_buy","$19.0 - شراء رصيد 15 دولار اسيا",15,19.0))
         add(ServiceItem(2415,"balance_buy","$52.0 - شراء رصيد 40 دولار اسيا",40,52.0))
 
-        add(ServiceItem(2421,"balance_buy","$3.5 - شراء رصيد 2 دولار كوكرك",2,3.5))
-        add(ServiceItem(2422,"balance_buy","$7.0 - شراء رصيد 5 دولار كوكرك",5,7.0))
-        add(ServiceItem(2423,"balance_buy","$13.0 - شراء رصيد 10 دولار كوكرك",10,13.0))
-        add(ServiceItem(2424,"balance_buy","$19.0 - شراء رصيد 15 دولار كوكرك",15,19.0))
+        add(ServiceItem(2421,"balance_buy","$3.5 - شراء رصيد 2 دولار كورك",2,3.5))
+        add(ServiceItem(2422,"balance_buy","$7.0 - شراء رصيد 5 دولار كورك",5,7.0))
+        add(ServiceItem(2423,"balance_buy","$13.0 - شراء رصيد 10 دولار كورك",10,13.0))
+        add(ServiceItem(2424,"balance_buy","$19.0 - شراء رصيد 15 دولار كورك",15,19.0))
     }
 
     fun byCategory(cat: String) = items.filter { it.category == cat }
@@ -231,68 +224,43 @@ object Catalog {
 // -------------------------
 class LocalRepo(private val ctx: Context) {
     private val prefs = ctx.getSharedPreferences("smm_local", Context.MODE_PRIVATE)
-
     private fun getString(key: String) = prefs.getString(key, null)
-    private fun putString(key: String, value: String?) =
-        prefs.edit().putString(key, value).apply()
+    private fun putString(key: String, value: String?) = prefs.edit().putString(key, value).apply()
 
-    // المستخدم المجهول
     fun getOrCreateUser(): User {
         val raw = getString("user")
         if (raw != null) return userFromJson(JSONObject(raw))
-        val u = User(
-            id = UUID.randomUUID().toString(),
-            createdAt = System.currentTimeMillis(),
-            balance = 0.0
-        )
+        val u = User(UUID.randomUUID().toString(), System.currentTimeMillis(), 0.0)
         saveUser(u); return u
     }
     fun saveUser(u: User) = putString("user", userToJson(u).toString())
 
-    // الطلبات
     fun loadOrders(): MutableList<Order> {
-        val raw = getString("orders") ?: "[]"
-        val arr = JSONArray(raw)
-        val list = mutableListOf<Order>()
-        for (i in 0 until arr.length()) list += orderFromJson(arr.getJSONObject(i))
-        return list
+        val arr = JSONArray(getString("orders") ?: "[]")
+        return MutableList(arr.length()) { i -> orderFromJson(arr.getJSONObject(i)) }
     }
     fun saveOrders(list: List<Order>) {
-        val arr = JSONArray()
-        list.forEach { arr.put(orderToJson(it)) }
-        putString("orders", arr.toString())
+        val arr = JSONArray(); list.forEach { arr.put(orderToJson(it)) }; putString("orders", arr.toString())
     }
 
-    // كروت/شحنات معلقة
     fun loadTopups(): MutableList<TopupRequest> {
-        val raw = getString("topups") ?: "[]"
-        val arr = JSONArray(raw)
-        val list = mutableListOf<TopupRequest>()
-        for (i in 0 until arr.length()) list += topupFromJson(arr.getJSONObject(i))
-        return list
+        val arr = JSONArray(getString("topups") ?: "[]")
+        return MutableList(arr.length()) { i -> topupFromJson(arr.getJSONObject(i)) }
     }
     fun saveTopups(list: List<TopupRequest>) {
-        val arr = JSONArray()
-        list.forEach { arr.put(topupToJson(it)) }
-        putString("topups", arr.toString())
+        val arr = JSONArray(); list.forEach { arr.put(topupToJson(it)) }; putString("topups", arr.toString())
     }
 
-    // عمليات الرصيد
-    fun credit(userId: String, amount: Double): User {
+    fun credit(userId: String, amount: Double) : User {
         val u = getOrCreateUser()
-        if (u.id == userId) {
-            u.balance = (u.balance + amount)
-            saveUser(u)
-        }
+        if (u.id == userId) { u.balance += amount; saveUser(u) }
         return u
     }
     fun debit(userId: String, amount: Double): Boolean {
         val u = getOrCreateUser()
         if (u.id != userId) return false
         if (u.balance + 1e-9 < amount) return false
-        u.balance -= amount
-        saveUser(u)
-        return true
+        u.balance -= amount; saveUser(u); return true
     }
 
     // JSON helpers
@@ -300,42 +268,33 @@ class LocalRepo(private val ctx: Context) {
         put("id", u.id); put("createdAt", u.createdAt); put("balance", u.balance)
     }
     private fun userFromJson(o: JSONObject) = User(
-        id = o.getString("id"),
-        createdAt = o.getLong("createdAt"),
-        balance = o.optDouble("balance", 0.0)
+        id = o.getString("id"), createdAt = o.getLong("createdAt"), balance = o.optDouble("balance",0.0)
     )
     private fun orderToJson(o: Order) = JSONObject().apply {
-        put("id", o.id); put("userId", o.userId); put("serviceId", o.serviceId)
-        put("serviceLabel", o.serviceLabel); put("quantity", o.quantity)
-        put("price", o.price); put("input", o.input)
-        put("status", o.status.name); put("createdAt", o.createdAt)
+        put("id",o.id); put("userId",o.userId); put("serviceId",o.serviceId)
+        put("serviceDisplay",o.serviceDisplay); put("quantity",o.quantity)
+        put("price",o.price); put("input",o.input)
+        put("status",o.status.name); put("createdAt",o.createdAt)
     }
     private fun orderFromJson(o: JSONObject) = Order(
-        id = o.getString("id"),
-        userId = o.getString("userId"),
-        serviceId = o.getInt("serviceId"),
-        serviceLabel = o.getString("serviceLabel"),
-        quantity = o.getInt("quantity"),
-        price = o.getDouble("price"),
-        input = o.optString("input",""),
-        status = OrderStatus.valueOf(o.getString("status")),
-        createdAt = o.getLong("createdAt")
+        id=o.getString("id"), userId=o.getString("userId"), serviceId=o.getInt("serviceId"),
+        serviceDisplay=o.getString("serviceDisplay"), quantity=o.getInt("quantity"),
+        price=o.getDouble("price"), input=o.optString("input",""),
+        status=OrderStatus.valueOf(o.getString("status")), createdAt=o.getLong("createdAt")
     )
     private fun topupToJson(t: TopupRequest) = JSONObject().apply {
-        put("id", t.id); put("userId", t.userId); put("method", t.method)
-        put("code", t.code); put("submittedAt", t.submittedAt)
-        put("status", t.status.name); put("approvedAmount", t.approvedAmount)
-        put("note", t.note)
+        put("id",t.id); put("userId",t.userId); put("method",t.method)
+        put("code",t.code); put("submittedAt",t.submittedAt)
+        put("status",t.status.name); put("approvedAmount",t.approvedAmount)
+        put("note",t.note)
     }
     private fun topupFromJson(o: JSONObject) = TopupRequest(
-        id = o.getString("id"),
-        userId = o.getString("userId"),
-        method = o.getString("method"),
-        code = if (o.isNull("code")) null else o.getString("code"),
-        submittedAt = o.getLong("submittedAt"),
-        status = TopupStatus.valueOf(o.getString("status")),
-        approvedAmount = if (o.isNull("approvedAmount")) null else o.getDouble("approvedAmount"),
-        note = if (o.isNull("note")) null else o.getString("note")
+        id=o.getString("id"), userId=o.getString("userId"), method=o.getString("method"),
+        code= if (o.isNull("code")) null else o.getString("code"),
+        submittedAt=o.getLong("submittedAt"),
+        status=TopupStatus.valueOf(o.getString("status")),
+        approvedAmount= if (o.isNull("approvedAmount")) null else o.getDouble("approvedAmount"),
+        note= if (o.isNull("note")) null else o.getString("note")
     )
 }
 
@@ -356,16 +315,13 @@ sealed class Screen {
 }
 
 // -------------------------
-// نشاط التطبيق
+// النشاط
 // -------------------------
 class MainActivity : ComponentActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(colorScheme = lightColorScheme()) {
-                AppRoot()
-            }
+            MaterialTheme(colorScheme = lightColorScheme()) { AppRoot() }
         }
     }
 }
@@ -375,27 +331,17 @@ fun AppRoot() {
     val ctx = LocalContext.current
     val repo = remember { LocalRepo(ctx) }
     val user by remember { mutableStateOf(repo.getOrCreateUser()) }
-
     var screen by remember { mutableStateOf<Screen>(Screen.HOME) }
 
-    // شريط علوي مع فتح لوحة المالك بالضغط المطوّل على العنوان
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    var long by remember { mutableStateOf(0L) }
                     Text(
-                        text = "خدمات راتلوزن",
+                        "خدمات راتلوزن",
                         modifier = Modifier
                             .fillMaxWidth()
-                            .combinedClickable(
-                                onClick = {},
-                                onLongClick = {
-                                    val now = System.currentTimeMillis()
-                                    if (now - long > 600) long = now
-                                    screen = Screen.ADMIN_LOGIN
-                                }
-                            ),
+                            .combinedClickable(onClick = {}, onLongClick = { screen = Screen.ADMIN_LOGIN }),
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                     )
@@ -419,9 +365,7 @@ fun AppRoot() {
                 is Screen.ORDER_CREATE -> OrderCreateScreen(
                     repo = repo, userId = user.id, item = s.item,
                     onDone = { ok ->
-                        if (ok) Toast.makeText(
-                            LocalContext.current, "تم إرسال الطلب وخصم الرصيد", Toast.LENGTH_SHORT
-                        ).show()
+                        if (ok) Toast.makeText(LocalContext.current,"تم إرسال الطلب وخصم الرصيد",Toast.LENGTH_SHORT).show()
                         screen = Screen.MY_ORDERS
                     },
                     onBack = { screen = Screen.SERVICE_LIST(s.item.category) }
@@ -440,11 +384,7 @@ fun AppRoot() {
                     repo = repo, userId = user.id,
                     onBack = { screen = Screen.TOPUP_METHODS },
                     onSubmitted = {
-                        Toast.makeText(
-                            LocalContext.current,
-                            "تم استلام طلبك، سوف يتم شحن حسابك قريبًا.",
-                            Toast.LENGTH_LONG
-                        ).show()
+                        Toast.makeText(LocalContext.current,"تم استلام طلبك، سوف يتم شحن حسابك قريبًا.",Toast.LENGTH_LONG).show()
                         screen = Screen.BALANCE
                     }
                 )
@@ -473,9 +413,8 @@ fun AppRoot() {
 }
 
 // -------------------------
-// واجهات
+// الواجهات
 // -------------------------
-
 @Composable
 fun HomeScreen(
     user: User,
@@ -485,22 +424,9 @@ fun HomeScreen(
 ) {
     val scroll = rememberScrollState()
     Column(
-        Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(scroll)
+        Modifier.fillMaxSize().padding(16.dp).verticalScroll(scroll)
     ) {
-        Text(
-            "مرحبًا بك",
-            style = MaterialTheme.typography.titleMedium,
-            textAlign = TextAlign.End,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(6.dp))
-        Card(
-            Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFF7F7F7))
-        ) {
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFF7F7F7))) {
             Column(Modifier.padding(14.dp)) {
                 Text("رصيدك الحالي:", fontWeight = FontWeight.Bold, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
                 Text("$${"%.2f".format(user.balance)}", fontSize = 22.sp, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
@@ -514,7 +440,6 @@ fun HomeScreen(
         Spacer(Modifier.height(14.dp))
         Text("الأقسام", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(Modifier.height(8.dp))
-
         Catalog.sections.forEach { (key, title) ->
             GreenItem(title) { onSection(key) }
             Spacer(Modifier.height(8.dp))
@@ -535,7 +460,7 @@ fun ServiceListScreen(
         Spacer(Modifier.height(10.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(Catalog.byCategory(cat)) { item ->
-                GreenItem("${item.label} - $${item.price}") { onPick(item) }
+                GreenItem(item.display) { onPick(item) }
             }
         }
     }
@@ -555,8 +480,8 @@ fun OrderCreateScreen(
         BackButton(onBack)
         Text("تأكيد الطلب", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text(item.label, fontWeight = FontWeight.Bold)
-        Text("الكمية: ${item.quantity} | السعر: $${item.price}")
+        Text(item.display, fontWeight = FontWeight.Bold)
+        Text("السعر: $${item.price} | الكمية: ${item.quantity}")
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(
             value = input, onValueChange = { input = it },
@@ -574,7 +499,7 @@ fun OrderCreateScreen(
                     id = UUID.randomUUID().toString(),
                     userId = userId,
                     serviceId = item.id,
-                    serviceLabel = item.label,
+                    serviceDisplay = item.display,
                     quantity = item.quantity,
                     price = item.price,
                     input = input.trim(),
@@ -583,13 +508,9 @@ fun OrderCreateScreen(
                 )
                 repo.saveOrders(orders)
                 onDone(true)
-                return@GreenButton
             }
         }
-        msg?.let {
-            Spacer(Modifier.height(8.dp))
-            Text(it, color = Color.Red)
-        }
+        msg?.let { Spacer(Modifier.height(8.dp)); Text(it, color = Color.Red) }
     }
 }
 
@@ -605,11 +526,7 @@ fun BalanceScreen(
         BackButton(onBack)
         Text("رصيدي", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text(
-            "رصيدك الحالي: $${"%.2f".format(user.balance)}",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
+        Text("رصيدك الحالي: $${"%.2f".format(user.balance)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
         GreenItem("الشحن / زيادة الرصيد") { onTopup() }
     }
@@ -645,10 +562,7 @@ fun SupportTopupScreen(method: String, onBack: () -> Unit) {
         BackButton(onBack)
         Text(method, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
-        Text(
-            "لإكمال طلبك تواصل مع الدعم الفني عبر الواتساب:\n$phone",
-            style = MaterialTheme.typography.bodyLarge
-        )
+        Text("لإكمال طلبك تواصل مع الدعم الفني عبر الواتساب:\n$phone")
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GreenButton("نسخ الرقم") {
@@ -709,31 +623,30 @@ fun AsiacellCardScreen(
 
 @Composable
 fun MyOrdersScreen(repo: LocalRepo, userId: String, onBack: () -> Unit) {
-    val orders = remember { mutableStateListOf<Order>().apply { addAll(repo.loadOrders().filter { it.userId==userId }.sortedByDescending { it.createdAt }) } }
+    val orders = remember { mutableStateListOf<Order>().apply {
+        addAll(repo.loadOrders().filter { it.userId==userId }.sortedByDescending { it.createdAt })
+    } }
     LaunchedEffect(Unit) {
-        // تحديث من التخزين عند العودة
-        orders.clear(); orders.addAll(repo.loadOrders().filter { it.userId==userId }.sortedByDescending { it.createdAt })
+        orders.clear()
+        orders.addAll(repo.loadOrders().filter { it.userId==userId }.sortedByDescending { it.createdAt })
     }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         BackButton(onBack)
         Text("طلباتي", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
-        if (orders.isEmpty()) {
-            Text("لا توجد طلبات بعد.")
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(orders) { o ->
-                    Card {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(o.serviceLabel, fontWeight = FontWeight.Bold)
-                            Text("السعر: $${o.price} | الحالة: ${when(o.status){
-                                OrderStatus.PENDING -> "قيد المراجعة"
-                                OrderStatus.IN_PROGRESS -> "قيد التنفيذ"
-                                OrderStatus.DONE -> "مكتمل"
-                                OrderStatus.REJECTED -> "مرفوض"
-                            }}")
-                            if (o.input.isNotBlank()) Text("البيانات: ${o.input}", fontSize = 12.sp, color = Color.Gray)
-                        }
+        if (orders.isEmpty()) Text("لا توجد طلبات بعد.")
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(orders) { o ->
+                Card {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(o.serviceDisplay, fontWeight = FontWeight.Bold)
+                        Text("السعر: $${o.price} | الحالة: ${when(o.status){
+                            OrderStatus.PENDING -> "قيد المراجعة"
+                            OrderStatus.IN_PROGRESS -> "قيد التنفيذ"
+                            OrderStatus.DONE -> "مكتمل"
+                            OrderStatus.REJECTED -> "مرفوض"
+                        }}")
+                        if (o.input.isNotBlank()) Text("البيانات: ${o.input}", fontSize = 12.sp, color = Color.Gray)
                     }
                 }
             }
@@ -762,10 +675,8 @@ fun AdminLoginScreen(onCancel: () -> Unit, onOk: (String) -> Unit) {
 @Composable
 fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
     val ctx = LocalContext.current
-    val user = remember { repo.getOrCreateUser() }
     val topups = remember { mutableStateListOf<TopupRequest>().apply { addAll(repo.loadTopups().sortedByDescending { it.submittedAt }) } }
     val orders = remember { mutableStateListOf<Order>().apply { addAll(repo.loadOrders().sortedByDescending { it.createdAt }) } }
-
     fun refreshAll() {
         topups.clear(); topups.addAll(repo.loadTopups().sortedByDescending { it.submittedAt })
         orders.clear(); orders.addAll(repo.loadOrders().sortedByDescending { it.createdAt })
@@ -774,8 +685,6 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         BackButton(onBack)
         Text("لوحة تحكم المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(6.dp))
-        Text("مستخدم واحد محلي: ${user.id.take(8)}…  | الرصيد الحالي: $${"%.2f".format(repo.getOrCreateUser().balance)}", fontSize = 12.sp, color = Color.Gray)
         Spacer(Modifier.height(12.dp))
 
         Text("الكروت/الشحنات المعلقة", fontWeight = FontWeight.Bold)
@@ -794,46 +703,46 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
                             t.code?.let { Text("الكارت: $it") }
                             Spacer(Modifier.height(6.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                var approveDialog by remember { mutableStateOf(false) }
-                                var amountTxt by remember { mutableStateOf("") }
-                                if (approveDialog) {
+                                var show by remember { mutableStateOf(false) }
+                                var amount by remember { mutableStateOf("") }
+                                if (show) {
                                     AlertDialog(
-                                        onDismissRequest = { approveDialog=false },
+                                        onDismissRequest = { show=false },
                                         confirmButton = {
                                             TextButton(onClick = {
-                                                val amount = amountTxt.toDoubleOrNull()
-                                                if (amount==null || amount<=0) {
+                                                val a = amount.toDoubleOrNull()
+                                                if (a==null || a<=0) {
                                                     Toast.makeText(ctx,"أدخل مبلغ صحيح",Toast.LENGTH_SHORT).show()
                                                 } else {
-                                                    // اعتماد وإضافة رصيد
                                                     val list = repo.loadTopups().toMutableList()
                                                     val idx = list.indexOfFirst { it.id==t.id }
                                                     if (idx>=0) {
                                                         val tt = list[idx]
                                                         tt.status = TopupStatus.APPROVED
-                                                        tt.approvedAmount = amount
+                                                        tt.approvedAmount = a
                                                         list[idx] = tt
                                                         repo.saveTopups(list)
-                                                        repo.credit(t.userId, amount)
-                                                        approveDialog=false
-                                                        refreshAll()
-                                                        Toast.makeText(ctx,"تم إضافة $$amount إلى رصيد المستخدم",Toast.LENGTH_LONG).show()
+                                                        repo.credit(t.userId, a)
+                                                        show=false; refreshAll()
+                                                        Toast.makeText(ctx,"تم إضافة $$a للمستخدم",Toast.LENGTH_LONG).show()
                                                     }
                                                 }
                                             }) { Text("اعتماد") }
                                         },
-                                        dismissButton = { TextButton(onClick = { approveDialog=false }) { Text("إلغاء") } },
+                                        dismissButton = { TextButton(onClick = { show=false }) { Text("إلغاء") } },
                                         title = { Text("اعتماد الكارت") },
                                         text = {
                                             Column {
                                                 Text("ضع مبلغ الشحن (بالدولار):")
-                                                OutlinedTextField(value = amountTxt, onValueChange = { amountTxt = it.filter { ch-> ch.isDigit() || ch=='.' } },
-                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                                                OutlinedTextField(
+                                                    value = amount, onValueChange = { amount = it.filter { ch-> ch.isDigit() || ch=='.' } },
+                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                                )
                                             }
                                         }
                                     )
                                 }
-                                GreenMini("اعتماد + رصيد") { approveDialog = true }
+                                GreenMini("اعتماد + رصيد") { show = true }
                                 GreenMini("رفض") {
                                     val list = repo.loadTopups().toMutableList()
                                     val idx = list.indexOfFirst { it.id==t.id }
@@ -853,40 +762,33 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
         Spacer(Modifier.height(18.dp))
         Text("الطلبات", fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        if (orders.isEmpty()) {
-            Text("لا توجد طلبات.")
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(orders) { o ->
-                    Card {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(o.serviceLabel, fontWeight = FontWeight.Bold)
-                            Text("User: ${o.userId.take(8)}…  | السعر: $${o.price}")
-                            if (o.input.isNotBlank()) Text("بيانات: ${o.input}", fontSize = 12.sp, color = Color.Gray)
-                            Text("الحالة: ${o.status}")
-                            Spacer(Modifier.height(6.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                GreenMini("بدء تنفيذ") {
-                                    val list = repo.loadOrders().toMutableList()
-                                    val idx = list.indexOfFirst { it.id==o.id }
-                                    if (idx>=0) { list[idx] = list[idx].copy(status = OrderStatus.IN_PROGRESS); repo.saveOrders(list); refreshAll() }
-                                }
-                                GreenMini("اكتمال") {
-                                    val list = repo.loadOrders().toMutableList()
-                                    val idx = list.indexOfFirst { it.id==o.id }
-                                    if (idx>=0) { list[idx] = list[idx].copy(status = OrderStatus.DONE); repo.saveOrders(list); refreshAll() }
-                                }
-                                GreenMini("رفض + استرجاع") {
-                                    val list = repo.loadOrders().toMutableList()
-                                    val idx = list.indexOfFirst { it.id==o.id }
-                                    if (idx>=0) {
-                                        val cur = list[idx]
-                                        list[idx] = cur.copy(status = OrderStatus.REJECTED)
-                                        repo.saveOrders(list)
-                                        repo.credit(cur.userId, cur.price)
-                                        refreshAll()
-                                        Toast.makeText(LocalContext.current,"تم الرفض واسترجاع $${cur.price}",Toast.LENGTH_SHORT).show()
-                                    }
+        if (orders.isEmpty()) Text("لا توجد طلبات.")
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(orders) { o ->
+                Card {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(o.serviceDisplay, fontWeight = FontWeight.Bold)
+                        Text("السعر: $${o.price} | الحالة: ${o.status}")
+                        if (o.input.isNotBlank()) Text("بيانات: ${o.input}", fontSize = 12.sp, color = Color.Gray)
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            GreenMini("بدء تنفيذ") {
+                                val list = repo.loadOrders().toMutableList()
+                                val idx = list.indexOfFirst { it.id==o.id }
+                                if (idx>=0) { list[idx] = list[idx].copy(status = OrderStatus.IN_PROGRESS); repo.saveOrders(list); refreshAll() }
+                            }
+                            GreenMini("اكتمال") {
+                                val list = repo.loadOrders().toMutableList()
+                                val idx = list.indexOfFirst { it.id==o.id }
+                                if (idx>=0) { list[idx] = list[idx].copy(status = OrderStatus.DONE); repo.saveOrders(list); refreshAll() }
+                            }
+                            GreenMini("رفض + استرجاع") {
+                                val list = repo.loadOrders().toMutableList()
+                                val idx = list.indexOfFirst { it.id==o.id }
+                                if (idx>=0) {
+                                    val cur = list[idx]; list[idx] = cur.copy(status = OrderStatus.REJECTED)
+                                    repo.saveOrders(list); repo.credit(cur.userId, cur.price); refreshAll()
+                                    Toast.makeText(LocalContext.current,"تم الرفض واسترجاع $${cur.price}",Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
@@ -900,28 +802,18 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
 // -------------------------
 // عناصر واجهة مشتركة
 // -------------------------
-
-@Composable
-fun BackButton(onBack: () -> Unit) {
-    TextButton(onClick = onBack) { Text("رجوع") }
-}
+@Composable fun BackButton(onBack: () -> Unit) { TextButton(onClick = onBack) { Text("رجوع") } }
 
 @Composable
 fun GreenButton(text: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(
-                Brush.horizontalGradient(
-                    listOf(Color(0xFF43A047), Color(0xFF2E7D32))
-                )
-            )
+            .background(Brush.horizontalGradient(listOf(Color(0xFF43A047), Color(0xFF2E7D32))))
             .clickable { onClick() }
             .padding(horizontal = 16.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
-    ) {
-        Text(text, color = Color.White, fontWeight = FontWeight.Bold)
-    }
+    ) { Text(text, color = Color.White, fontWeight = FontWeight.Bold) }
 }
 
 @Composable
@@ -942,22 +834,11 @@ fun GreenItem(text: String, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(
-                Brush.horizontalGradient(
-                    listOf(Color(0xFF66BB6A), Color(0xFF43A047))
-                )
-            )
+            .background(Brush.horizontalGradient(listOf(Color(0xFF66BB6A), Color(0xFF43A047))))
             .clickable { onClick() }
             .padding(vertical = 16.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = text,
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
-        )
+        Text(text, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     }
 }

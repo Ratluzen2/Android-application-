@@ -25,6 +25,7 @@ import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
@@ -54,13 +55,21 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.round
+import com.zafer.smm.BuildConfig
 
 /**
  * تطبيق SMM Mobile — كل الميزات ضمن ملف واحد.
  * بدون Navigation Compose — لا حاجة لأي تبعيات إضافية.
+ *
+ * ملاحظة أمنية: لوحة المالك مخفية افتراضياً (isOwner=false).
+ * لا تُعرض إلا بعد إدخال PIN صحيح في بيئة Debug فقط (زر 🔒).
+ * في Release لن يظهر زر الـPIN، فتظل اللوحة مخفية للمستخدمين العاديين.
  */
+
+// PIN للمالك — غيّره قبل الإصدار
+private const val OWNER_PIN = "123456"
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -119,8 +128,12 @@ class AppViewModel : ViewModel() {
 
     // --------- إعدادات عامة ---------
     val currentUserId = 1
-    private val _isOwner = MutableStateFlow(true)
+
+    // افتراضياً: وضع المالك غير مُفعّل (مخفي عن المستخدمين العاديين)
+    private val _isOwner = MutableStateFlow(false)
     val isOwner: StateFlow<Boolean> = _isOwner
+    fun enableOwner() { _isOwner.value = true }
+    fun disableOwner() { _isOwner.value = false }
 
     private val _moderators = MutableStateFlow<Set<Int>>(emptySet())
     val moderators: StateFlow<Set<Int>> = _moderators
@@ -252,8 +265,6 @@ class AppViewModel : ViewModel() {
     private val CARD_SPAM_WINDOW_MS = 120_000L
 
     // --------- عمليات ---------
-    fun toggleOwner() { _isOwner.value = !_isOwner.value }
-
     fun isModerator(userId: Int): Boolean = _moderators.value.contains(userId)
     fun addModerator(userId: Int) { _moderators.value = _moderators.value + userId }
     fun removeModerator(userId: Int) { _moderators.value = _moderators.value - userId }
@@ -344,7 +355,6 @@ private fun cleanedTitleWithoutQty(name: String): String {
 }
 
 private fun extractQtyFromName(name: String): Int {
-    // 10k -> 10000, 1k -> 1000, أو آخر رقم موجود كـ Fallback
     val kMatch = Regex("(\\d+)\\s*k\\b", RegexOption.IGNORE_CASE).find(name) ?:
     Regex("(\\d+)k\\b", RegexOption.IGNORE_CASE).find(name) ?:
     Regex("(\\d+)k", RegexOption.IGNORE_CASE).find(name)
@@ -377,7 +387,7 @@ private fun stepFor(serviceName: String): Int {
 }
 
 /* =========================
-   App Root + Drawer + BottomBar
+   App Root + Drawer + BottomBar + PIN
    ========================= */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -386,6 +396,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
     val isOwner by viewModel.isOwner.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    var showPinDialog by remember { mutableStateOf(false) }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -414,8 +425,14 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                     },
                     title = { Text("SMM App", fontWeight = FontWeight.SemiBold) },
                     actions = {
-                        TextButton(onClick = { viewModel.toggleOwner() }) {
-                            Text(if (isOwner) "مالك: تشغيل" else "مالك: إيقاف")
+                        // زر PIN يظهر في Debug فقط أو إذا كان المالك مفعّل
+                        if (BuildConfig.DEBUG || isOwner) {
+                            IconButton(onClick = { showPinDialog = true }) {
+                                Icon(
+                                    imageVector = if (isOwner) Icons.Filled.LockOpen else Icons.Filled.Lock,
+                                    contentDescription = "مالك PIN"
+                                )
+                            }
                         }
                     }
                 )
@@ -436,6 +453,64 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
             }
         }
     }
+
+    if (showPinDialog) {
+        OwnerPinDialog(
+            isOwner = isOwner,
+            onDismiss = { showPinDialog = false },
+            onEnable = { pin ->
+                if (pin == OWNER_PIN) viewModel.enableOwner()
+            },
+            onDisable = { viewModel.disableOwner() }
+        )
+    }
+}
+
+@Composable
+private fun OwnerPinDialog(
+    isOwner: Boolean,
+    onDismiss: () -> Unit,
+    onEnable: (String) -> Unit,
+    onDisable: () -> Unit
+) {
+    var pin by remember { mutableStateOf("") }
+    var err by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isOwner) "وضع المالك (مفعّل)" else "تفعيل وضع المالك") },
+        text = {
+            Column {
+                if (!isOwner) {
+                    OutlinedTextField(
+                        value = pin,
+                        onValueChange = { pin = it; err = null },
+                        label = { Text("أدخل PIN") }
+                    )
+                    err?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                } else {
+                    Text("يمكنك تعطيل وضع المالك من هنا.")
+                }
+            }
+        },
+        confirmButton = {
+            if (!isOwner) {
+                TextButton(onClick = {
+                    if (pin.isBlank()) {
+                        err = "أدخل PIN"; return@TextButton
+                    }
+                    onEnable(pin)
+                    onDismiss()
+                }) { Text("تفعيل") }
+            } else {
+                TextButton(onClick = {
+                    onDisable()
+                    onDismiss()
+                }) { Text("تعطيل") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } }
+    )
 }
 
 @Composable
@@ -583,7 +658,6 @@ private fun ServiceCardPreview(name: String, price: Double) {
    ========================= */
 @Composable
 fun UserServicesScreen(viewModel: AppViewModel) {
-    val moderators by viewModel.moderators.collectAsState()
     val qtyOverrides by viewModel.qtyOverrides.collectAsState()
     val priceOverrides by viewModel.priceOverrides.collectAsState()
 
@@ -591,7 +665,6 @@ fun UserServicesScreen(viewModel: AppViewModel) {
     val categories = listOf("TikTok/Instagram/Views/Likes/Score", "Telegram", "PUBG", "iTunes", "Mobile", "Ludo")
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var showPriceEditor by remember { mutableStateOf<String?>(null) }
-    var linkForBuy by remember { mutableStateOf("") }
 
     // حفظ كميات لكل خدمة
     val qtyMap = rememberSaveable { mutableStateMapOf<String, Int>() }
@@ -629,9 +702,7 @@ fun UserServicesScreen(viewModel: AppViewModel) {
             blocks.forEach { (groupName, data) ->
                 if (selectedCategory != null && selectedCategory != groupName) return@forEach
                 // عنوان القسم
-                item {
-                    Text(groupName, fontWeight = FontWeight.SemiBold)
-                }
+                item { Text(groupName, fontWeight = FontWeight.SemiBold) }
                 items(data.toList(), key = { it.first }) { (svc, base) ->
                     if (query.isNotBlank() && !svc.contains(query, ignoreCase = true)) return@items
 
@@ -651,7 +722,6 @@ fun UserServicesScreen(viewModel: AppViewModel) {
                         onDec = { qtyMap[svc] = max(step, selectedQty - step) },
                         onInc = { qtyMap[svc] = selectedQty + step },
                         onBuy = {
-                            linkForBuy = ""
                             showBuyDialog(
                                 service = svc,
                                 qty = selectedQty,

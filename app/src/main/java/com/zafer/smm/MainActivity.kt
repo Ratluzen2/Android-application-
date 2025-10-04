@@ -1,523 +1,476 @@
 package com.zafer.smm
 
-import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import java.util.UUID
 
-/* ====================================================================== */
-/*                ⬇️ كل البيانات (الأقسام + الخدمات) هنا ⬇️              */
-/* ====================================================================== */
+/*** Data – كتالوج الخدمات ***/
+data class Service(val id: Int, val title: String, val price: Double)
+data class Section(val key: String, val title: String, val services: List<Service>)
 
-data class LocalService(val id: Int, val name: String, val price: Double)
-data class LocalSection(val key: String, val title: String, val services: List<LocalService>)
-
-object LocalCatalog {
-    val sections: List<LocalSection> = listOf(
-        LocalSection(key = "followers", title = "قسم المتابعين", services = listOf(
-            LocalService(id = 1, name = "متابعين تيكتوك 100", price = 1.0),
-            LocalService(id = 2, name = "متابعين تيكتوك 200", price = 2.0),
-            LocalService(id = 3, name = "متابعين تيكتوك 300", price = 3.0),
-            LocalService(id = 4, name = "متابعين تيكتوك 400", price = 4.0),
-            LocalService(id = 5, name = "متابعين تيكتوك 500", price = 5.0),
-            LocalService(id = 6, name = "متابعين تيكتوك 1000", price = 9.0),
-            LocalService(id = 7, name = "متابعين تيكتوك 2000", price = 18.0),
-            LocalService(id = 8, name = "متابعين تيكتوك 3000", price = 27.0),
-            LocalService(id = 9, name = "متابعين تيكتوك 4000", price = 36.0),
-            LocalService(id = 10, name = "متابعين تيكتوك 5000", price = 45.0)
-        )),
-        LocalSection(key = "likes", title = "قسم الإعجابات", services = listOf(
-            LocalService(id = 1, name = "لايكات 1k", price = 2.5),
-            LocalService(id = 2, name = "لايكات 2k", price = 5.0),
-            LocalService(id = 3, name = "لايكات 3k", price = 7.5),
-            LocalService(id = 4, name = "لايكات 4k", price = 10.0),
-            LocalService(id = 5, name = "لايكات 5k", price = 12.5)
-        )),
-        LocalSection(key = "views", title = "قسم المشاهدات", services = listOf(
-            LocalService(id = 1, name = "مشاهدات تيكتوك 1k", price = 0.5),
-            LocalService(id = 2, name = "مشاهدات تيكتوك 2k", price = 1.0),
-            LocalService(id = 3, name = "مشاهدات تيكتوك 3k", price = 1.5),
-            LocalService(id = 4, name = "مشاهدات تيكتوك 4k", price = 2.0),
-            LocalService(id = 5, name = "مشاهدات تيكتوك 5k", price = 2.5),
-            LocalService(id = 6, name = "مشاهدات تيكتوك 10k", price = 4.5)
-        )),
-        LocalSection(key = "live_views", title = "قسم مشاهدات البث المباشر", services = listOf(
-            LocalService(id = 1, name = "مشاهدات بث مباشر 1k", price = 3.0),
-            LocalService(id = 2, name = "مشاهدات بث مباشر 2k", price = 6.0),
-            LocalService(id = 3, name = "مشاهدات بث مباشر 3k", price = 9.0),
-            LocalService(id = 4, name = "مشاهدات بث مباشر 4k", price = 12.0),
-            LocalService(id = 5, name = "مشاهدات بث مباشر 5k", price = 15.0)
-        )),
-        LocalSection(key = "pubg", title = "قسم شحن شدات ببجي", services = listOf(
-            LocalService(id = 1, name = "ببجي 60 UC", price = 1.2),
-            LocalService(id = 2, name = "ببجي 120 UC", price = 2.3),
-            LocalService(id = 3, name = "ببجي 180 UC", price = 3.5),
-            LocalService(id = 4, name = "ببجي 240 UC", price = 4.7),
-            LocalService(id = 5, name = "ببجي 325 UC", price = 6.0),
-            LocalService(id = 6, name = "ببجي 660 UC", price = 11.5),
-            LocalService(id = 7, name = "ببجي 1800 UC", price = 30.0)
-        )),
-        LocalSection(key = "itunes", title = "قسم شراء رصيد ايتونز", services = listOf(
-            LocalService(id = 1, name = "بطاقة iTunes $5", price = 4.9),
-            LocalService(id = 2, name = "بطاقة iTunes $10", price = 9.7),
-            LocalService(id = 3, name = "بطاقة iTunes $15", price = 14.4),
-            LocalService(id = 4, name = "بطاقة iTunes $20", price = 19.0),
-            LocalService(id = 5, name = "بطاقة iTunes $25", price = 23.7),
-            LocalService(id = 6, name = "بطاقة iTunes $50", price = 47.0)
-        )),
-        LocalSection(key = "telegram", title = "قسم خدمات التليجرام", services = listOf(
-            LocalService(id = 1, name = "أعضاء قناة 1k", price = 9.0),
-            LocalService(id = 2, name = "أعضاء قناة 2k", price = 17.5),
-            LocalService(id = 3, name = "أعضاء قناة 3k", price = 25.0),
-            LocalService(id = 4, name = "أعضاء كروب 1k", price = 10.0),
-            LocalService(id = 5, name = "أعضاء كروب 2k", price = 19.0)
-        )),
-        LocalSection(key = "ludo", title = "قسم خدمات اللودو", services = listOf(
-            LocalService(id = 1, name = "لودو 100 ألماسة", price = 0.9),
-            LocalService(id = 2, name = "لودو 200 ألماسة", price = 1.7),
-            LocalService(id = 3, name = "لودو 500 ألماسة", price = 4.1),
-            LocalService(id = 4, name = "لودو 1000 ألماسة", price = 8.0),
-            LocalService(id = 5, name = "لودو 2000 ألماسة", price = 15.5)
-        )),
-        LocalSection(key = "mobile_recharge", title = "قسم شراء رصيد الهاتف", services = listOf(
-            LocalService(id = 1, name = "شراء رصيد 2دولار اثير", price = 2.0),
-            LocalService(id = 2, name = "شراء رصيد 5دولار اثير", price = 5.0),
-            LocalService(id = 3, name = "شراء رصيد 10دولار اثير", price = 10.0),
-            LocalService(id = 4, name = "شراء رصيد 20دولار اثير", price = 20.0),
-            LocalService(id = 5, name = "شراء رصيد 40دولار اثير", price = 40.0),
-            LocalService(id = 6, name = "شراء رصيد 2دولار اسيا", price = 2.0),
-            LocalService(id = 7, name = "شراء رصيد 5دولار اسيا", price = 5.0),
-            LocalService(id = 8, name = "شراء رصيد 10دولار اسيا", price = 10.0),
-            LocalService(id = 9, name = "شراء رصيد 20دولار اسيا", price = 20.0),
-            LocalService(id = 10, name = "شراء رصيد 40دولار اسيا", price = 40.0),
-            LocalService(id = 11, name = "شراء رصيد 2دولار كورك", price = 2.0),
-            LocalService(id = 12, name = "شراء رصيد 5دولار كورك", price = 5.0),
-            LocalService(id = 13, name = "شراء رصيد 10دولار كورك", price = 10.0),
-            LocalService(id = 14, name = "شراء رصيد 20دولار كورك", price = 20.0),
-            LocalService(id = 15, name = "شراء رصيد 40دولار كورك", price = 40.0)
-        ))
+private val catalog: List<Section> = listOf(
+    Section(
+        key = "followers", title = "قسم المتابعين",
+        services = listOf(
+            Service(1, "متابعين تيكتوك 100", 1.0),
+            Service(2, "متابعين تيكتوك 200", 2.0),
+            Service(3, "متابعين تيكتوك 300", 3.0),
+            Service(4, "متابعين تيكتوك 400", 4.0),
+            Service(5, "متابعين تيكتوك 500", 5.0),
+            Service(6, "متابعين تيكتوك 1000", 9.0),
+            Service(7, "متابعين تيكتوك 2000", 18.0),
+            Service(8, "متابعين تيكتوك 3000", 27.0),
+            Service(9, "متابعين تيكتوك 4000", 36.0),
+            Service(10, "متابعين تيكتوك 5000", 45.0)
+        )
+    ),
+    Section(
+        key = "likes", title = "قسم الإعجابات",
+        services = listOf(
+            Service(1, "لايكات 1k", 2.5),
+            Service(2, "لايكات 2k", 5.0),
+            Service(3, "لايكات 3k", 7.5),
+            Service(4, "لايكات 4k", 10.0),
+            Service(5, "لايكات 5k", 12.5)
+        )
+    ),
+    Section(
+        key = "views", title = "قسم المشاهدات",
+        services = listOf(
+            Service(1, "مشاهدات تيكتوك 1k", 0.5),
+            Service(2, "مشاهدات تيكتوك 2k", 1.0),
+            Service(3, "مشاهدات تيكتوك 3k", 1.5),
+            Service(4, "مشاهدات تيكتوك 4k", 2.0),
+            Service(5, "مشاهدات تيكتوك 5k", 2.5),
+            Service(6, "مشاهدات تيكتوك 10k", 4.5)
+        )
+    ),
+    Section(
+        key = "live", title = "قسم مشاهدات البث المباشر",
+        services = listOf(
+            Service(1, "مشاهدات بث مباشر 1k", 3.0),
+            Service(2, "مشاهدات بث مباشر 2k", 6.0),
+            Service(3, "مشاهدات بث مباشر 3k", 9.0),
+            Service(4, "مشاهدات بث مباشر 4k", 12.0),
+            Service(5, "مشاهدات بث مباشر 5k", 15.0)
+        )
+    ),
+    Section(
+        key = "pubg", title = "قسم شحن شدات ببجي",
+        services = listOf(
+            Service(1, "ببجي 60 UC", 1.2),
+            Service(2, "ببجي 120 UC", 2.3),
+            Service(3, "ببجي 180 UC", 3.5),
+            Service(4, "ببجي 240 UC", 4.7),
+            Service(5, "ببجي 325 UC", 6.0),
+            Service(6, "ببجي 660 UC", 11.5),
+            Service(7, "ببجي 1800 UC", 30.0)
+        )
+    ),
+    Section(
+        key = "itunes", title = "قسم شراء رصيد ايتونز",
+        services = listOf(
+            Service(1, "بطاقة iTunes $5", 4.9),
+            Service(2, "بطاقة iTunes $10", 9.7),
+            Service(3, "بطاقة iTunes $15", 14.4),
+            Service(4, "بطاقة iTunes $20", 19.0),
+            Service(5, "بطاقة iTunes $25", 23.7),
+            Service(6, "بطاقة iTunes $50", 47.0)
+        )
+    ),
+    Section(
+        key = "telegram", title = "قسم خدمات التليجرام",
+        services = listOf(
+            Service(1, "أعضاء قناة 1k", 9.0),
+            Service(2, "أعضاء قناة 2k", 17.5),
+            Service(3, "أعضاء قناة 3k", 25.0),
+            Service(4, "أعضاء كروب 1k", 10.0),
+            Service(5, "أعضاء كروب 2k", 19.0)
+        )
+    ),
+    Section(
+        key = "ludo", title = "قسم خدمات اللودو",
+        services = listOf(
+            Service(1, "لودو 100 ألماسة", 0.9),
+            Service(2, "لودو 200 ألماسة", 1.7),
+            Service(3, "لودو 500 ألماسة", 4.1),
+            Service(4, "لودو 1000 ألماسة", 8.0),
+            Service(5, "لودو 2000 ألماسة", 15.5)
+        )
+    ),
+    Section(
+        key = "mobile", title = "قسم شراء رصيد الهاتف",
+        services = listOf(
+            Service(1, "شراء رصيد 2$ أثير", 2.0),
+            Service(2, "شراء رصيد 5$ أثير", 5.0),
+            Service(3, "شراء رصيد 10$ أثير", 10.0),
+            Service(4, "شراء رصيد 20$ أثير", 20.0),
+            Service(5, "شراء رصيد 40$ أثير", 40.0),
+            Service(6, "شراء رصيد 2$ آسيا", 2.0),
+            Service(7, "شراء رصيد 5$ آسيا", 5.0),
+            Service(8, "شراء رصيد 10$ آسيا", 10.0),
+            Service(9, "شراء رصيد 20$ آسيا", 20.0),
+            Service(10, "شراء رصيد 40$ آسيا", 40.0),
+            Service(11, "شراء رصيد 2$ كورك", 2.0),
+            Service(12, "شراء رصيد 5$ كورك", 5.0),
+            Service(13, "شراء رصيد 10$ كورك", 10.0),
+            Service(14, "شراء رصيد 20$ كورك", 20.0),
+            Service(15, "شراء رصيد 40$ كورك", 40.0)
+        )
     )
-}
+)
 
-/* ====================================================================== */
-/*                           الحالة و الشاشات                             */
-/* ====================================================================== */
+/*** تخزين حالة دخول المالك ***/
+private val ContextDataStore by preferencesDataStore(name = "owner_session")
+private val KEY_OWNER = booleanPreferencesKey("is_owner")
 
-class Prefs(ctx: Context) {
-    private val sp = ctx.getSharedPreferences("ratluzen_prefs", Context.MODE_PRIVATE)
-
-    fun isAdmin(): Boolean = sp.getBoolean("admin_logged_in", false)
-    fun setAdmin(logged: Boolean) { sp.edit().putBoolean("admin_logged_in", logged).apply() }
-
-    fun getDeviceId(): String {
-        val key = "device_id"
-        val saved = sp.getString(key, null)
-        if (saved != null) return saved
-        val newId = "dev-" + UUID.randomUUID().toString()
-        sp.edit().putString(key, newId).apply()
-        return newId
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent { SmmApp() }
     }
 }
 
-data class Order(val id: Int, val title: String, val price: Double)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SmmApp() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
-sealed class Screen {
-    object HOME : Screen()
-    object SERVICES : Screen()
-    data class SERVICE_LIST(val section: LocalSection) : Screen()
-    object ORDERS : Screen()
-    object BALANCE : Screen()
-    object REFERRAL : Screen()
-    object LEADERBOARD : Screen()
-    object ADMIN_LOGIN : Screen()
-    object ADMIN_DASHBOARD : Screen()
-}
+    // تحميل حالة المالك من DataStore
+    var isOwner by rememberSaveable { mutableStateOf(false) }
+    var current by rememberSaveable { mutableStateOf(Screen.HOME) }
 
-class MainActivity : ComponentActivity() {
-    private lateinit var prefs: Prefs
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        prefs = Prefs(this)
+    LaunchedEffect(Unit) {
+        val ds = context.ContextDataStore
+        val saved = ds.data.first()[KEY_OWNER] ?: false
+        isOwner = saved
+        if (isOwner) current = Screen.ADMIN_DASHBOARD
+    }
 
-        setContent {
-            MaterialTheme(colorScheme = lightColorScheme()) {
-                val snackbarHost = remember { SnackbarHostState() }
-                val scope = rememberCoroutineScope()
+    MaterialTheme {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(if (current == Screen.ADMIN_DASHBOARD) "لوحة تحكم المالك" else "خدمات راتلوزن") },
+                    actions = {
+                        // زر دخول المالك دائمًا ظاهر (صغير في الأعلى يمينًا)
+                        Text(
+                            text = if (isOwner) "خروج المالك" else "دخول المالك",
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .padding(end = 16.dp)
+                                .clickable {
+                                    if (isOwner) {
+                                        // خروج
+                                        scope.launch {
+                                            context.ContextDataStore.edit { it[KEY_OWNER] = false }
+                                            isOwner = false
+                                            current = Screen.HOME
+                                        }
+                                    } else {
+                                        current = Screen.ADMIN_LOGIN
+                                    }
+                                }
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            }
+        ) { inner ->
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+                    .background(MaterialTheme.colorScheme.background)
+            ) {
+                when (current) {
+                    Screen.HOME -> WelcomeScreen(
+                        onServices = { current = Screen.SERVICES },
+                        onOrders = { /* TODO */ },
+                        onBalance = { /* TODO */ },
+                        onReferral = { /* TODO */ },
+                        onLeaders = { /* TODO */ }
+                    )
 
-                fun showSnack(msg: String) {
-                    scope.launch { snackbarHost.showSnackbar(msg) }
-                }
+                    Screen.SERVICES -> ServicesScreen(
+                        sections = catalog,
+                        onBack = { current = Screen.HOME },
+                        onOpenSection = { current = Screen.ServiceList(it.key) }
+                    )
 
-                Surface(Modifier.fillMaxSize()) {
-                    Scaffold(snackbarHost = { SnackbarHost(snackbarHost) }) { padding ->
-                        Box(Modifier.fillMaxSize().padding(padding)) {
-                            MainApp(prefs = prefs, showSnack = ::showSnack)
+                    is Screen.ServiceList -> {
+                        val secKey = (current as Screen.ServiceList).key
+                        val section = catalog.firstOrNull { it.key == secKey }
+                        if (section == null) {
+                            Text(
+                                "القسم غير موجود",
+                                modifier = Modifier.align(Alignment.Center)
+                            )
+                        } else {
+                            ServiceList(
+                                section = section,
+                                onBack = { current = Screen.SERVICES },
+                                onOrder = { svc ->
+                                    // طلب الخدمة (محليًا فقط لحد الآن)
+                                    // يمكنك لاحقًا ربطه بواجهة API
+                                }
+                            )
                         }
                     }
+
+                    Screen.ADMIN_LOGIN -> OwnerLoginDialog(
+                        onCancel = { current = if (isOwner) Screen.ADMIN_DASHBOARD else Screen.HOME },
+                        onSubmit = { pass ->
+                            if (pass == "2000") {
+                                scope.launch {
+                                    context.ContextDataStore.edit { it[KEY_OWNER] = true }
+                                    isOwner = true
+                                    current = Screen.ADMIN_DASHBOARD
+                                }
+                            } else {
+                                current = Screen.HOME
+                            }
+                        }
+                    )
+
+                    Screen.ADMIN_DASHBOARD -> AdminDashboard(
+                        onBack = {
+                            // نرجع للواجهة الرئيسية لكن نبقي جلسة المالك محفوظة
+                            current = Screen.HOME
+                        }
+                    )
                 }
             }
         }
     }
 }
 
-@Composable
-fun MainApp(prefs: Prefs, showSnack: (String) -> Unit) {
-    var current by rememberSaveable {
-        mutableStateOf<Screen>(if (prefs.isAdmin()) Screen.ADMIN_DASHBOARD else Screen.HOME)
-    }
-    val isAdmin = remember { mutableStateOf(prefs.isAdmin()) }
-    val orders = remember { mutableStateListOf<Order>() }
-    val deviceId = remember { prefs.getDeviceId() }
-
-    when (val s = current) {
-        Screen.HOME -> HomeScreen(
-            onServices = { current = Screen.SERVICES },
-            onOrders = { current = Screen.ORDERS },
-            onBalance = { current = Screen.BALANCE },
-            onReferral = { current = Screen.REFERRAL },
-            onLeaderboard = { current = Screen.LEADERBOARD },
-            onAdminClick = { current = Screen.ADMIN_LOGIN },
-            showAdmin = !isAdmin.value
-        )
-
-        Screen.SERVICES -> ServicesScreen(
-            sections = LocalCatalog.sections,
-            onBack = { current = Screen.HOME },
-            onOpenSection = { sec -> current = Screen.SERVICE_LIST(sec) }
-        )
-
-        is Screen.SERVICE_LIST -> SectionScreen(
-            section = s.section,
-            onBack = { current = Screen.SERVICES },
-            onOrderClick = { service ->
-                val newId = (orders.maxOfOrNull { it.id } ?: 0) + 1
-                orders.add(Order(newId, service.name, service.price))
-                showSnack("تم إنشاء طلب: ${service.name} - ${service.price}$")
-            }
-        )
-
-        Screen.ORDERS -> OrdersScreen(
-            orders = orders,
-            onBack = { current = if (isAdmin.value) Screen.ADMIN_DASHBOARD else Screen.HOME }
-        )
-
-        Screen.BALANCE -> SimpleInfoScreen(
-            title = "رصيدي",
-            lines = listOf("المعرف: $deviceId", "هذه شاشة تجريبية لعرض الرصيد.", "يمكن ربطها بالخلفية لاحقًا."),
-            onBack = { current = Screen.HOME }
-        )
-
-        Screen.REFERRAL -> SimpleInfoScreen(
-            title = "نظام الإحالة",
-            lines = listOf("شارك رابط الدعوة لربح عمولة عند أول تمويل.", "تجريبية الآن — اربطها بالخلفية لاحقًا."),
-            onBack = { current = Screen.HOME }
-        )
-
-        Screen.LEADERBOARD -> SimpleInfoScreen(
-            title = "المتصدرون 🎉",
-            lines = listOf("أعلى المستخدمين إنفاقًا ستظهر هنا.", "تجريبية الآن — اربطها بالخلفية لاحقًا."),
-            onBack = { current = Screen.HOME }
-        )
-
-        Screen.ADMIN_LOGIN -> AdminLoginScreen(
-            onBack = { current = Screen.HOME },
-            onSuccess = {
-                prefs.setAdmin(true); isAdmin.value = true; current = Screen.ADMIN_DASHBOARD
-                showSnack("تم تسجيل دخول المالك")
-            },
-            showSnack = showSnack
-        )
-
-        Screen.ADMIN_DASHBOARD -> AdminDashboardScreen(
-            onBackToHome = {
-                prefs.setAdmin(false); isAdmin.value = false; current = Screen.HOME
-            },
-            onOpen = { key ->
-                // تنقل تجريبي — اربطه بشاشات فعلية لاحقًا
-                showSnack("فتح: $key (تجريبي)")
-            }
-        )
-    }
+/*** Screens ***/
+sealed class Screen {
+    data object HOME : Screen()
+    data object SERVICES : Screen()
+    data class ServiceList(val key: String) : Screen()
+    data object ADMIN_LOGIN : Screen()
+    data object ADMIN_DASHBOARD : Screen()
 }
 
-/* ============================== الشاشات ============================== */
-
 @Composable
-fun HomeScreen(
+fun WelcomeScreen(
     onServices: () -> Unit,
     onOrders: () -> Unit,
     onBalance: () -> Unit,
     onReferral: () -> Unit,
-    onLeaderboard: () -> Unit,
-    onAdminClick: () -> Unit,
-    showAdmin: Boolean
+    onLeaders: () -> Unit
 ) {
-    Box(Modifier.fillMaxSize()) {
-        if (showAdmin) {
-            OutlinedButton(
-                onClick = onAdminClick,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(12.dp)
-                    .height(36.dp)
-            ) { Text("دخول المالك") }
-        }
-
-        Column(
-            Modifier.fillMaxSize().padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                "أهلًا وسهلًا بكم في تطبيق خدمات راتلوزن",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "أهلًا وسهلًا بكم في تطبيق خدمات راتلوزن",
+            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+            modifier = Modifier.padding(vertical = 8.dp)
+        )
+        Spacer(Modifier.height(16.dp))
+        // الأزرار الرئيسية
+        VerticalButtons(
+            items = listOf(
+                "الخدمات" to onServices,
+                "طلباتي" to onOrders,
+                "رصيدي" to onBalance,
+                "الإحالة" to onReferral,
+                "المتصدرين 🎉" to onLeaders,
             )
-            Spacer(Modifier.height(16.dp))
-
-            Column(
-                Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-            ) {
-                MainButton("الخدمات", onServices)
-                MainButton("طلباتي", onOrders)
-                MainButton("رصيدي", onBalance)
-                MainButton("الإحالة", onReferral)
-                MainButton("المتصدرين 🎉", onLeaderboard)
-            }
-        }
+        )
     }
-}
-
-@Composable
-fun MainButton(text: String, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).height(54.dp)
-    ) { Text(text) }
 }
 
 @Composable
 fun ServicesScreen(
-    sections: List<LocalSection>,
+    sections: List<Section>,
     onBack: () -> Unit,
-    onOpenSection: (LocalSection) -> Unit
+    onOpenSection: (Section) -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Text("الخدمات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            items(sections) { sec ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenSection(sec) },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(sec.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text("اضغط لعرض ${sec.services.size} خدمة", fontSize = 13.sp)
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
+    }
+}
+
+@Composable
+fun ServiceList(
+    section: Section,
+    onBack: () -> Unit,
+    onOrder: (Service) -> Unit
 ) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Text(section.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.weight(1f)
         ) {
-            Text("الأقسام", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            OutlinedButton(onClick = onBack) { Text("رجوع") }
-        }
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.fillMaxSize()) {
-            items(sections) { sec ->
-                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+            items(section.services) { svc ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
                     Row(
-                        Modifier.fillMaxWidth().padding(12.dp),
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column {
-                            Text(sec.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Text("${sec.services.size} خدمة")
+                        Column(Modifier.weight(1f)) {
+                            Text(svc.title, fontWeight = FontWeight.Medium)
+                            Text("${svc.price} $", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                         }
-                        Button(onClick = { onOpenSection(sec) }) { Text("فتح") }
+                        Button(onClick = { onOrder(svc) }) { Text("طلب الخدمة") }
                     }
                 }
             }
         }
+        Spacer(Modifier.height(10.dp))
+        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
     }
 }
 
 @Composable
-fun SectionScreen(
-    section: LocalSection,
-    onBack: () -> Unit,
-    onOrderClick: (LocalService) -> Unit
-) {
+fun AdminDashboard(onBack: () -> Unit) {
+    val entries = listOf(
+        "تعديل الأسعار والكميات",
+        "الطلبات المعلقة (الخدمات)",
+        "الكارتات المعلقة",
+        "طلبات شدات ببجي",
+        "طلبات شحن الايتونز",
+        "طلبات الأرصدة المعلقة",
+        "طلبات لودو المعلقة",
+        "خصم الرصيد",
+        "إضافة رصيد",
+        "فحص حالة طلب API",
+        "فحص رصيد API",
+        "رصيد المستخدمين",
+        "عدد المستخدمين",
+        "إدارة المشرفين",
+        "إلغاء حظر المستخدم",
+        "حظر المستخدم",
+        "إعلان التطبيق",
+        "أكواد خدمات API",
+        "نظام الإحالة",
+        "شرح الخصومات",
+        "المتصدرين"
+    )
+
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(section.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            OutlinedButton(onClick = onBack) { Text("رجوع") }
-        }
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.fillMaxSize()) {
-            items(section.services) { svc ->
-                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                        Text(svc.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(4.dp))
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("السعر: ${svc.price} $")
-                            Button(onClick = { onOrderClick(svc) }) { Text("طلب الخدمة") }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun OrdersScreen(orders: List<Order>, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("طلباتي", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            OutlinedButton(onClick = onBack) { Text("رجوع") }
-        }
-        Spacer(Modifier.height(8.dp))
-
-        if (orders.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا توجد طلبات بعد") }
-        } else {
-            LazyColumn(Modifier.fillMaxSize()) {
-                items(orders) { o ->
-                    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                            Text(o.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Spacer(Modifier.height(4.dp))
-                            Text("السعر: ${o.price} $")
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun SimpleInfoScreen(title: String, lines: List<String>, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            OutlinedButton(onClick = onBack) { Text("رجوع") }
-        }
-        Spacer(Modifier.height(8.dp))
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                lines.forEachIndexed { i, line ->
-                    Text(line)
-                    if (i != lines.lastIndex) Divider(Modifier.padding(vertical = 6.dp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun AdminLoginScreen(
-    onBack: () -> Unit,
-    onSuccess: () -> Unit,
-    showSnack: (String) -> Unit
-) {
-    var pass by rememberSaveable { mutableStateOf("") }
-
-    Column(
-        Modifier.fillMaxSize().padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text("تسجيل دخول المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(16.dp))
-
-        // بدون KeyboardOptions لتفادي أي أخطاء/عدم توافق
-        OutlinedTextField(
-            value = pass,
-            onValueChange = { pass = it },
-            label = { Text("كلمة المرور") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-
+        Text("لوحة تحكم المالك", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            OutlinedButton(onClick = onBack) { Text("رجوع") }
-            Button(onClick = {
-                if (pass == "2000") onSuccess()
-                else showSnack("كلمة المرور غير صحيحة")
-            }) { Text("دخول") }
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.weight(1f)
+        ) {
+            items(entries) { title ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) { Text(title, modifier = Modifier.padding(14.dp), fontSize = 16.sp) }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
+    }
+}
+
+@Composable
+fun VerticalButtons(items: List<Pair<String, () -> Unit>>) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+        items.forEach { (label, onClick) ->
+            Button(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(label) }
         }
     }
 }
 
 @Composable
-fun AdminDashboardScreen(
-    onBackToHome: () -> Unit,
-    onOpen: (String) -> Unit
-) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("لوحة تحكم المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            OutlinedButton(onClick = onBackToHome) { Text("خروج المالك") }
-        }
-        Spacer(Modifier.height(12.dp))
-
-        val buttons = listOf(
-            "prices" to "تعديل الأسعار والكميات",
-            "pending_orders" to "الطلبات المعلقة (الخدمات)",
-            "pending_cards" to "الكارتات المعلقة",
-            "pubg" to "طلبات شدات ببجي",
-            "itunes" to "طلبات شحن الايتونز",
-            "mobile_recharge" to "طلبات الأرصدة المعلقة",
-            "ludo" to "طلبات لودو المعلقة",
-            "balance_minus" to "خصم الرصيد",
-            "balance_plus" to "إضافة رصيد",
-            "api_status" to "فحص حالة طلب API",
-            "api_balance" to "فحص رصيد API",
-            "users_balance" to "رصيد المستخدمين",
-            "users_count" to "عدد المستخدمين",
-            "moderators" to "إدارة المشرفين",
-            "unblock" to "إلغاء حظر المستخدم",
-            "block" to "حظر المستخدم",
-            "broadcast" to "إعلان التطبيق",
-            "api_codes" to "أكواد خدمات API",
-            "referrals" to "نظام الإحالة",
-            "discounts" to "شرح الخصومات",
-            "leaderboard" to "المتصدرين"
-        )
-
-        LazyColumn(Modifier.fillMaxSize()) {
-            items(buttons) { (key, label) ->
-                Button(
-                    onClick = { onOpen(key) },
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).height(52.dp)
-                ) { Text(label) }
+fun OwnerLoginDialog(onCancel: () -> Unit, onSubmit: (String) -> Unit) {
+    var pass by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("دخول المالك") },
+        text = {
+            Column {
+                Text("أدخل كلمة المرور الخاصة بالمالك")
+                androidx.compose.material3.OutlinedTextField(
+                    value = pass,
+                    onValueChange = { pass = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    singleLine = true,
+                    placeholder = { Text("****") }
+                )
             }
-        }
-    }
+        },
+        confirmButton = { TextButton(onClick = { onSubmit(pass) }) { Text("دخول") } },
+        dismissButton = { TextButton(onClick = onCancel) { Text("إلغاء") } }
+    )
 }

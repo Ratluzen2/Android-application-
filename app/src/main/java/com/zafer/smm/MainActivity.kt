@@ -2,7 +2,6 @@ package com.zafer.smm
 
 import android.content.Context
 import android.os.Bundle
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -15,10 +14,10 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 /* ====================================================================== */
 /*                ⬇️ كل البيانات (الأقسام + الخدمات) هنا ⬇️              */
@@ -120,8 +119,18 @@ object LocalCatalog {
 
 class Prefs(ctx: Context) {
     private val sp = ctx.getSharedPreferences("ratluzen_prefs", Context.MODE_PRIVATE)
+
     fun isAdmin(): Boolean = sp.getBoolean("admin_logged_in", false)
     fun setAdmin(logged: Boolean) { sp.edit().putBoolean("admin_logged_in", logged).apply() }
+
+    fun getDeviceId(): String {
+        val key = "device_id"
+        val saved = sp.getString(key, null)
+        if (saved != null) return saved
+        val newId = "dev-" + UUID.randomUUID().toString()
+        sp.edit().putString(key, newId).apply()
+        return newId
+    }
 }
 
 data class Order(val id: Int, val title: String, val price: Double)
@@ -143,94 +152,105 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+
         setContent {
             MaterialTheme(colorScheme = lightColorScheme()) {
-                Surface(Modifier.fillMaxSize()) { MainApp(prefs) }
+                val snackbarHost = remember { SnackbarHostState() }
+                val scope = rememberCoroutineScope()
+
+                fun showSnack(msg: String) {
+                    scope.launch { snackbarHost.showSnackbar(msg) }
+                }
+
+                Surface(Modifier.fillMaxSize()) {
+                    Scaffold(snackbarHost = { SnackbarHost(snackbarHost) }) { padding ->
+                        Box(Modifier.fillMaxSize().padding(padding)) {
+                            MainApp(prefs = prefs, showSnack = ::showSnack)
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-fun MainApp(prefs: Prefs) {
-    val context = LocalContext.current
-    val deviceId = remember {
-        Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
-    }
-    val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-
+fun MainApp(prefs: Prefs, showSnack: (String) -> Unit) {
     var current by rememberSaveable {
         mutableStateOf<Screen>(if (prefs.isAdmin()) Screen.ADMIN_DASHBOARD else Screen.HOME)
     }
     val isAdmin = remember { mutableStateOf(prefs.isAdmin()) }
     val orders = remember { mutableStateListOf<Order>() }
+    val deviceId = remember { prefs.getDeviceId() }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-            when (val s = current) {
-                Screen.HOME -> HomeScreen(
-                    onServices = { current = Screen.SERVICES },
-                    onOrders = { current = Screen.ORDERS },
-                    onBalance = { current = Screen.BALANCE },
-                    onReferral = { current = Screen.REFERRAL },
-                    onLeaderboard = { current = Screen.LEADERBOARD },
-                    onAdminClick = { current = Screen.ADMIN_LOGIN },
-                    showAdmin = !isAdmin.value
-                )
+    when (val s = current) {
+        Screen.HOME -> HomeScreen(
+            onServices = { current = Screen.SERVICES },
+            onOrders = { current = Screen.ORDERS },
+            onBalance = { current = Screen.BALANCE },
+            onReferral = { current = Screen.REFERRAL },
+            onLeaderboard = { current = Screen.LEADERBOARD },
+            onAdminClick = { current = Screen.ADMIN_LOGIN },
+            showAdmin = !isAdmin.value
+        )
 
-                Screen.SERVICES -> ServicesScreen(
-                    sections = LocalCatalog.sections,
-                    onBack = { current = Screen.HOME },
-                    onOpenSection = { sec -> current = Screen.SERVICE_LIST(sec) }
-                )
+        Screen.SERVICES -> ServicesScreen(
+            sections = LocalCatalog.sections,
+            onBack = { current = Screen.HOME },
+            onOpenSection = { sec -> current = Screen.SERVICE_LIST(sec) }
+        )
 
-                is Screen.SERVICE_LIST -> SectionScreen(
-                    section = s.section,
-                    onBack = { current = Screen.SERVICES },
-                    onOrderClick = { service ->
-                        val newId = (orders.maxOfOrNull { it.id } ?: 0) + 1
-                        orders.add(Order(newId, service.name, service.price))
-                        scope.launch { snackbar.showSnackbar("تم إنشاء طلب: ${service.name} - ${service.price}$") }
-                    }
-                )
-
-                Screen.ORDERS -> OrdersScreen(
-                    orders = orders,
-                    onBack = { current = if (isAdmin.value) Screen.ADMIN_DASHBOARD else Screen.HOME }
-                )
-
-                Screen.BALANCE -> SimpleInfoScreen(
-                    title = "رصيدي",
-                    lines = listOf("المعرف: $deviceId", "هذه شاشة تجريبية لعرض الرصيد.", "يمكن ربطها بالخلفية لاحقًا."),
-                    onBack = { current = Screen.HOME }
-                )
-
-                Screen.REFERRAL -> SimpleInfoScreen(
-                    title = "نظام الإحالة",
-                    lines = listOf("شارك رابط الدعوة لربح عمولة عند أول تمويل.", "تجريبية الآن — اربطها بالخلفية لاحقًا."),
-                    onBack = { current = Screen.HOME }
-                )
-
-                Screen.LEADERBOARD -> SimpleInfoScreen(
-                    title = "المتصدرون 🎉",
-                    lines = listOf("أعلى المستخدمين إنفاقًا ستظهر هنا.", "تجريبية الآن — اربطها بالخلفية لاحقًا."),
-                    onBack = { current = Screen.HOME }
-                )
-
-                Screen.ADMIN_LOGIN -> AdminLoginScreen(
-                    onBack = { current = Screen.HOME },
-                    onSuccess = {
-                        prefs.setAdmin(true); isAdmin.value = true; current = Screen.ADMIN_DASHBOARD
-                    }
-                )
-
-                Screen.ADMIN_DASHBOARD -> AdminDashboardScreen(
-                    onBackToHome = { prefs.setAdmin(false); isAdmin.value = false; current = Screen.HOME },
-                    onOpen = { /* تنقل تجريبي مؤقت */ }
-                )
+        is Screen.SERVICE_LIST -> SectionScreen(
+            section = s.section,
+            onBack = { current = Screen.SERVICES },
+            onOrderClick = { service ->
+                val newId = (orders.maxOfOrNull { it.id } ?: 0) + 1
+                orders.add(Order(newId, service.name, service.price))
+                showSnack("تم إنشاء طلب: ${service.name} - ${service.price}$")
             }
-        }
+        )
+
+        Screen.ORDERS -> OrdersScreen(
+            orders = orders,
+            onBack = { current = if (isAdmin.value) Screen.ADMIN_DASHBOARD else Screen.HOME }
+        )
+
+        Screen.BALANCE -> SimpleInfoScreen(
+            title = "رصيدي",
+            lines = listOf("المعرف: $deviceId", "هذه شاشة تجريبية لعرض الرصيد.", "يمكن ربطها بالخلفية لاحقًا."),
+            onBack = { current = Screen.HOME }
+        )
+
+        Screen.REFERRAL -> SimpleInfoScreen(
+            title = "نظام الإحالة",
+            lines = listOf("شارك رابط الدعوة لربح عمولة عند أول تمويل.", "تجريبية الآن — اربطها بالخلفية لاحقًا."),
+            onBack = { current = Screen.HOME }
+        )
+
+        Screen.LEADERBOARD -> SimpleInfoScreen(
+            title = "المتصدرون 🎉",
+            lines = listOf("أعلى المستخدمين إنفاقًا ستظهر هنا.", "تجريبية الآن — اربطها بالخلفية لاحقًا."),
+            onBack = { current = Screen.HOME }
+        )
+
+        Screen.ADMIN_LOGIN -> AdminLoginScreen(
+            onBack = { current = Screen.HOME },
+            onSuccess = {
+                prefs.setAdmin(true); isAdmin.value = true; current = Screen.ADMIN_DASHBOARD
+                showSnack("تم تسجيل دخول المالك")
+            },
+            showSnack = showSnack
+        )
+
+        Screen.ADMIN_DASHBOARD -> AdminDashboardScreen(
+            onBackToHome = {
+                prefs.setAdmin(false); isAdmin.value = false; current = Screen.HOME
+            },
+            onOpen = { key ->
+                // تنقل تجريبي — اربطه بشاشات فعلية لاحقًا
+                showSnack("فتح: $key (تجريبي)")
+            }
+        )
     }
 }
 
@@ -283,7 +303,7 @@ fun HomeScreen(
 
 @Composable
 fun MainButton(text: String, onClick: () -> Unit) {
-    ElevatedButton(
+    Button(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).height(54.dp)
     ) { Text(text) }
@@ -307,10 +327,7 @@ fun ServicesScreen(
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.fillMaxSize()) {
             items(sections) { sec ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                     Row(
                         Modifier.fillMaxWidth().padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -346,10 +363,7 @@ fun SectionScreen(
         Spacer(Modifier.height(8.dp))
         LazyColumn(Modifier.fillMaxSize()) {
             items(section.services) { svc ->
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
+                Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                     Column(Modifier.fillMaxWidth().padding(12.dp)) {
                         Text(svc.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.height(4.dp))
@@ -386,10 +400,7 @@ fun OrdersScreen(orders: List<Order>, onBack: () -> Unit) {
         } else {
             LazyColumn(Modifier.fillMaxSize()) {
                 items(orders) { o ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
+                    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                         Column(Modifier.fillMaxWidth().padding(12.dp)) {
                             Text(o.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             Spacer(Modifier.height(4.dp))
@@ -414,14 +425,11 @@ fun SimpleInfoScreen(title: String, lines: List<String>, onBack: () -> Unit) {
             OutlinedButton(onClick = onBack) { Text("رجوع") }
         }
         Spacer(Modifier.height(8.dp))
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
+        Card(Modifier.fillMaxWidth()) {
             Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                lines.forEach {
-                    Text(it)
-                    Divider(Modifier.padding(vertical = 6.dp))
+                lines.forEachIndexed { i, line ->
+                    Text(line)
+                    if (i != lines.lastIndex) Divider(Modifier.padding(vertical = 6.dp))
                 }
             }
         }
@@ -429,36 +437,36 @@ fun SimpleInfoScreen(title: String, lines: List<String>, onBack: () -> Unit) {
 }
 
 @Composable
-fun AdminLoginScreen(onBack: () -> Unit, onSuccess: () -> Unit) {
+fun AdminLoginScreen(
+    onBack: () -> Unit,
+    onSuccess: () -> Unit,
+    showSnack: (String) -> Unit
+) {
     var pass by rememberSaveable { mutableStateOf("") }
-    val snackbar = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text("تسجيل دخول المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(16.dp))
+    Column(
+        Modifier.fillMaxSize().padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("تسجيل دخول المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(16.dp))
 
-            // بدون KeyboardOptions لتفادي الخطأ
-            OutlinedTextField(
-                value = pass,
-                onValueChange = { pass = it },
-                label = { Text("كلمة المرور") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
+        // بدون KeyboardOptions لتفادي أي أخطاء/عدم توافق
+        OutlinedTextField(
+            value = pass,
+            onValueChange = { pass = it },
+            label = { Text("كلمة المرور") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
 
-            Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                OutlinedButton(onClick = onBack) { Text("رجوع") }
-                Button(onClick = {
-                    if (pass == "2000") onSuccess()
-                    else scope.launch { snackbar.showSnackbar("كلمة المرور غير صحيحة") }
-                }) { Text("دخول") }
-            }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            OutlinedButton(onClick = onBack) { Text("رجوع") }
+            Button(onClick = {
+                if (pass == "2000") onSuccess()
+                else showSnack("كلمة المرور غير صحيحة")
+            }) { Text("دخول") }
         }
     }
 }
@@ -505,7 +513,7 @@ fun AdminDashboardScreen(
 
         LazyColumn(Modifier.fillMaxSize()) {
             items(buttons) { (key, label) ->
-                ElevatedButton(
+                Button(
                     onClick = { onOpen(key) },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).height(52.dp)
                 ) { Text(label) }

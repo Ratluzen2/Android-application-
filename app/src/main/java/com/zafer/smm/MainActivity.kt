@@ -8,24 +8,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.*
+import androidx.compose.material3.TopAppBarDefaults.topAppBarColors
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -35,7 +26,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/*** Data – كتالوج الخدمات ***/
+/*** البيانات — كتالوج الخدمات ***/
 data class Service(val id: Int, val title: String, val price: Double)
 data class Section(val key: String, val title: String, val services: List<Service>)
 
@@ -151,30 +142,39 @@ private val catalog: List<Section> = listOf(
     )
 )
 
-/*** تخزين حالة دخول المالك ***/
-private val ContextDataStore by preferencesDataStore(name = "owner_session")
+/*** DataStore: جلسة المالك ***/
 private val KEY_OWNER = booleanPreferencesKey("is_owner")
+private val android.content.Context.ownerDataStore by preferencesDataStore(name = "owner_session")
 
+/*** النشاط ***/
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { SmmApp() }
+        setContent { SmmRoot() }
     }
+}
+
+/*** التنقّل ***/
+sealed class Screen {
+    data object HOME : Screen()
+    data object SERVICES : Screen()
+    data class ServiceList(val key: String) : Screen()
+    data object ADMIN_LOGIN : Screen()
+    data object ADMIN_DASHBOARD : Screen()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SmmApp() {
+fun SmmRoot() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // تحميل حالة المالك من DataStore
-    var isOwner by rememberSaveable { mutableStateOf(false) }
-    var current by rememberSaveable { mutableStateOf(Screen.HOME) }
+    var isOwner by remember { mutableStateOf(false) }
+    // لا نستخدم rememberSaveable هنا لتفادي تعقيد Saver للـ sealed class
+    var current by remember { mutableStateOf<Screen>(Screen.HOME) }
 
     LaunchedEffect(Unit) {
-        val ds = context.ContextDataStore
-        val saved = ds.data.first()[KEY_OWNER] ?: false
+        val saved = context.ownerDataStore.data.first()[KEY_OWNER] ?: false
         isOwner = saved
         if (isOwner) current = Screen.ADMIN_DASHBOARD
     }
@@ -183,9 +183,12 @@ fun SmmApp() {
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(if (current == Screen.ADMIN_DASHBOARD) "لوحة تحكم المالك" else "خدمات راتلوزن") },
+                    title = {
+                        Text(
+                            if (current == Screen.ADMIN_DASHBOARD) "لوحة تحكم المالك" else "خدمات راتلوزن"
+                        )
+                    },
                     actions = {
-                        // زر دخول المالك دائمًا ظاهر (صغير في الأعلى يمينًا)
                         Text(
                             text = if (isOwner) "خروج المالك" else "دخول المالك",
                             color = MaterialTheme.colorScheme.primary,
@@ -193,9 +196,8 @@ fun SmmApp() {
                                 .padding(end = 16.dp)
                                 .clickable {
                                     if (isOwner) {
-                                        // خروج
                                         scope.launch {
-                                            context.ContextDataStore.edit { it[KEY_OWNER] = false }
+                                            context.ownerDataStore.edit { it[KEY_OWNER] = false }
                                             isOwner = false
                                             current = Screen.HOME
                                         }
@@ -205,9 +207,7 @@ fun SmmApp() {
                                 }
                         )
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
+                    colors = topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
                 )
             }
         ) { inner ->
@@ -217,13 +217,13 @@ fun SmmApp() {
                     .padding(inner)
                     .background(MaterialTheme.colorScheme.background)
             ) {
-                when (current) {
+                when (val scr = current) {
                     Screen.HOME -> WelcomeScreen(
                         onServices = { current = Screen.SERVICES },
-                        onOrders = { /* TODO */ },
-                        onBalance = { /* TODO */ },
-                        onReferral = { /* TODO */ },
-                        onLeaders = { /* TODO */ }
+                        onOrders = { /* لاحقًا */ },
+                        onBalance = { /* لاحقًا */ },
+                        onReferral = { /* لاحقًا */ },
+                        onLeaders = { /* لاحقًا */ }
                     )
 
                     Screen.SERVICES -> ServicesScreen(
@@ -233,21 +233,14 @@ fun SmmApp() {
                     )
 
                     is Screen.ServiceList -> {
-                        val secKey = (current as Screen.ServiceList).key
-                        val section = catalog.firstOrNull { it.key == secKey }
+                        val section = catalog.firstOrNull { it.key == scr.key }
                         if (section == null) {
-                            Text(
-                                "القسم غير موجود",
-                                modifier = Modifier.align(Alignment.Center)
-                            )
+                            Text("القسم غير موجود", modifier = Modifier.align(Alignment.Center))
                         } else {
                             ServiceList(
                                 section = section,
                                 onBack = { current = Screen.SERVICES },
-                                onOrder = { svc ->
-                                    // طلب الخدمة (محليًا فقط لحد الآن)
-                                    // يمكنك لاحقًا ربطه بواجهة API
-                                }
+                                onOrder = { /* تنفيذ الطلب لاحقًا */ }
                             )
                         }
                     }
@@ -257,7 +250,7 @@ fun SmmApp() {
                         onSubmit = { pass ->
                             if (pass == "2000") {
                                 scope.launch {
-                                    context.ContextDataStore.edit { it[KEY_OWNER] = true }
+                                    context.ownerDataStore.edit { it[KEY_OWNER] = true }
                                     isOwner = true
                                     current = Screen.ADMIN_DASHBOARD
                                 }
@@ -268,10 +261,7 @@ fun SmmApp() {
                     )
 
                     Screen.ADMIN_DASHBOARD -> AdminDashboard(
-                        onBack = {
-                            // نرجع للواجهة الرئيسية لكن نبقي جلسة المالك محفوظة
-                            current = Screen.HOME
-                        }
+                        onBack = { current = Screen.HOME }
                     )
                 }
             }
@@ -279,15 +269,7 @@ fun SmmApp() {
     }
 }
 
-/*** Screens ***/
-sealed class Screen {
-    data object HOME : Screen()
-    data object SERVICES : Screen()
-    data class ServiceList(val key: String) : Screen()
-    data object ADMIN_LOGIN : Screen()
-    data object ADMIN_DASHBOARD : Screen()
-}
-
+/*** الشاشات ***/
 @Composable
 fun WelcomeScreen(
     onServices: () -> Unit,
@@ -309,7 +291,6 @@ fun WelcomeScreen(
             modifier = Modifier.padding(vertical = 8.dp)
         )
         Spacer(Modifier.height(16.dp))
-        // الأزرار الرئيسية
         VerticalButtons(
             items = listOf(
                 "الخدمات" to onServices,
@@ -460,7 +441,7 @@ fun OwnerLoginDialog(onCancel: () -> Unit, onSubmit: (String) -> Unit) {
         text = {
             Column {
                 Text("أدخل كلمة المرور الخاصة بالمالك")
-                androidx.compose.material3.OutlinedTextField(
+                OutlinedTextField(
                     value = pass,
                     onValueChange = { pass = it },
                     modifier = Modifier.fillMaxWidth(),

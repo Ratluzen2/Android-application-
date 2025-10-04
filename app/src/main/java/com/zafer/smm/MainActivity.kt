@@ -1,457 +1,540 @@
 package com.zafer.smm
 
+import android.content.Context
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
-import androidx.compose.material3.TopAppBarDefaults.topAppBarColors
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 
-/*** البيانات — كتالوج الخدمات ***/
-data class Service(val id: Int, val title: String, val price: Double)
-data class Section(val key: String, val title: String, val services: List<Service>)
+/*** نماذج البيانات ***/
+data class LocalService(val id: Int, val name: String, val price: Double)
+data class LocalSection(val key: String, val title: String, val services: List<LocalService>)
 
-private val catalog: List<Section> = listOf(
-    Section(
-        key = "followers", title = "قسم المتابعين",
-        services = listOf(
-            Service(1, "متابعين تيكتوك 100", 1.0),
-            Service(2, "متابعين تيكتوك 200", 2.0),
-            Service(3, "متابعين تيكتوك 300", 3.0),
-            Service(4, "متابعين تيكتوك 400", 4.0),
-            Service(5, "متابعين تيكتوك 500", 5.0),
-            Service(6, "متابعين تيكتوك 1000", 9.0),
-            Service(7, "متابعين تيكتوك 2000", 18.0),
-            Service(8, "متابعين تيكتوك 3000", 27.0),
-            Service(9, "متابعين تيكتوك 4000", 36.0),
-            Service(10, "متابعين تيكتوك 5000", 45.0)
-        )
-    ),
-    Section(
-        key = "likes", title = "قسم الإعجابات",
-        services = listOf(
-            Service(1, "لايكات 1k", 2.5),
-            Service(2, "لايكات 2k", 5.0),
-            Service(3, "لايكات 3k", 7.5),
-            Service(4, "لايكات 4k", 10.0),
-            Service(5, "لايكات 5k", 12.5)
-        )
-    ),
-    Section(
-        key = "views", title = "قسم المشاهدات",
-        services = listOf(
-            Service(1, "مشاهدات تيكتوك 1k", 0.5),
-            Service(2, "مشاهدات تيكتوك 2k", 1.0),
-            Service(3, "مشاهدات تيكتوك 3k", 1.5),
-            Service(4, "مشاهدات تيكتوك 4k", 2.0),
-            Service(5, "مشاهدات تيكتوك 5k", 2.5),
-            Service(6, "مشاهدات تيكتوك 10k", 4.5)
-        )
-    ),
-    Section(
-        key = "live", title = "قسم مشاهدات البث المباشر",
-        services = listOf(
-            Service(1, "مشاهدات بث مباشر 1k", 3.0),
-            Service(2, "مشاهدات بث مباشر 2k", 6.0),
-            Service(3, "مشاهدات بث مباشر 3k", 9.0),
-            Service(4, "مشاهدات بث مباشر 4k", 12.0),
-            Service(5, "مشاهدات بث مباشر 5k", 15.0)
-        )
-    ),
-    Section(
-        key = "pubg", title = "قسم شحن شدات ببجي",
-        services = listOf(
-            Service(1, "ببجي 60 UC", 1.2),
-            Service(2, "ببجي 120 UC", 2.3),
-            Service(3, "ببجي 180 UC", 3.5),
-            Service(4, "ببجي 240 UC", 4.7),
-            Service(5, "ببجي 325 UC", 6.0),
-            Service(6, "ببجي 660 UC", 11.5),
-            Service(7, "ببجي 1800 UC", 30.0)
-        )
-    ),
-    Section(
-        key = "itunes", title = "قسم شراء رصيد ايتونز",
-        services = listOf(
-            Service(1, "بطاقة iTunes $5", 4.9),
-            Service(2, "بطاقة iTunes $10", 9.7),
-            Service(3, "بطاقة iTunes $15", 14.4),
-            Service(4, "بطاقة iTunes $20", 19.0),
-            Service(5, "بطاقة iTunes $25", 23.7),
-            Service(6, "بطاقة iTunes $50", 47.0)
-        )
-    ),
-    Section(
-        key = "telegram", title = "قسم خدمات التليجرام",
-        services = listOf(
-            Service(1, "أعضاء قناة 1k", 9.0),
-            Service(2, "أعضاء قناة 2k", 17.5),
-            Service(3, "أعضاء قناة 3k", 25.0),
-            Service(4, "أعضاء كروب 1k", 10.0),
-            Service(5, "أعضاء كروب 2k", 19.0)
-        )
-    ),
-    Section(
-        key = "ludo", title = "قسم خدمات اللودو",
-        services = listOf(
-            Service(1, "لودو 100 ألماسة", 0.9),
-            Service(2, "لودو 200 ألماسة", 1.7),
-            Service(3, "لودو 500 ألماسة", 4.1),
-            Service(4, "لودو 1000 ألماسة", 8.0),
-            Service(5, "لودو 2000 ألماسة", 15.5)
-        )
-    ),
-    Section(
-        key = "mobile", title = "قسم شراء رصيد الهاتف",
-        services = listOf(
-            Service(1, "شراء رصيد 2$ أثير", 2.0),
-            Service(2, "شراء رصيد 5$ أثير", 5.0),
-            Service(3, "شراء رصيد 10$ أثير", 10.0),
-            Service(4, "شراء رصيد 20$ أثير", 20.0),
-            Service(5, "شراء رصيد 40$ أثير", 40.0),
-            Service(6, "شراء رصيد 2$ آسيا", 2.0),
-            Service(7, "شراء رصيد 5$ آسيا", 5.0),
-            Service(8, "شراء رصيد 10$ آسيا", 10.0),
-            Service(9, "شراء رصيد 20$ آسيا", 20.0),
-            Service(10, "شراء رصيد 40$ آسيا", 40.0),
-            Service(11, "شراء رصيد 2$ كورك", 2.0),
-            Service(12, "شراء رصيد 5$ كورك", 5.0),
-            Service(13, "شراء رصيد 10$ كورك", 10.0),
-            Service(14, "شراء رصيد 20$ كورك", 20.0),
-            Service(15, "شراء رصيد 40$ كورك", 40.0)
+/*** الكتالوج — مطابق لصور البوت التي أرسلتها ***/
+object UnifiedCatalog {
+    val sections: List<LocalSection> = listOf(
+
+        // المتابعين
+        LocalSection(
+            key = "followers",
+            title = "قسم المتابعين",
+            services = listOf(
+                // تيكتوك
+                LocalService(1, "متابعين تيكتوك (1000)", 3.5),
+                LocalService(2, "متابعين تيكتوك (2000)", 7.0),
+                LocalService(3, "متابعين تيكتوك (3000)", 10.5),
+                LocalService(4, "متابعين تيكتوك (4000)", 14.0),
+                // انستغرام
+                LocalService(5, "متابعين انستغرام (1000)", 3.0),
+                LocalService(6, "متابعين انستغرام (2000)", 6.0),
+                LocalService(7, "متابعين انستغرام (3000)", 9.0),
+                LocalService(8, "متابعين انستغرام (4000)", 12.0)
+            )
+        ),
+
+        // الإعجابات
+        LocalSection(
+            key = "likes",
+            title = "قسم الإعجابات",
+            services = listOf(
+                // تيكتوك
+                LocalService(1, "لايكات تيكتوك (1000)", 1.0),
+                LocalService(2, "لايكات تيكتوك (2000)", 2.0),
+                LocalService(3, "لايكات تيكتوك (3000)", 3.0),
+                LocalService(4, "لايكات تيكتوك (4000)", 4.0),
+                // انستغرام
+                LocalService(5, "لايكات انستغرام (1000)", 1.0),
+                LocalService(6, "لايكات انستغرام (2000)", 2.0),
+                LocalService(7, "لايكات انستغرام (3000)", 3.0),
+                LocalService(8, "لايكات انستغرام (4000)", 4.0)
+            )
+        ),
+
+        // المشاهدات
+        LocalSection(
+            key = "views",
+            title = "قسم المشاهدات",
+            services = listOf(
+                // تيكتوك
+                LocalService(1, "مشاهدات تيكتوك (1000)", 0.1),
+                LocalService(2, "مشاهدات تيكتوك (10000)", 0.8),
+                LocalService(3, "مشاهدات تيكتوك (20000)", 1.6),
+                LocalService(4, "مشاهدات تيكتوك (30000)", 2.4),
+                LocalService(5, "مشاهدات تيكتوك (50000)", 3.2),
+                // انستغرام
+                LocalService(6, "مشاهدات انستغرام (10000)", 0.8),
+                LocalService(7, "مشاهدات انستغرام (20000)", 1.6),
+                LocalService(8, "مشاهدات انستغرام (30000)", 2.4),
+                LocalService(9, "مشاهدات انستغرام (50000)", 3.2)
+            )
+        ),
+
+        // مشاهدات البث المباشر
+        LocalSection(
+            key = "live_views",
+            title = "قسم مشاهدات البث المباشر",
+            services = listOf(
+                // تيكتوك
+                LocalService(1, "مشاهدات بث تيكتوك (1000)", 2.0),
+                LocalService(2, "مشاهدات بث تيكتوك (2000)", 4.0),
+                LocalService(3, "مشاهدات بث تيكتوك (3000)", 6.0),
+                LocalService(4, "مشاهدات بث تيكتوك (4000)", 8.0),
+                // انستغرام
+                LocalService(5, "مشاهدات بث انستغرام (1000)", 2.0),
+                LocalService(6, "مشاهدات بث انستغرام (2000)", 4.0),
+                LocalService(7, "مشاهدات بث انستغرام (3000)", 6.0),
+                LocalService(8, "مشاهدات بث انستغرام (4000)", 8.0)
+            )
+        ),
+
+        // رفع سكور تيكتوك
+        LocalSection(
+            key = "tiktok_score",
+            title = "قسم رفع سكور تيكتوك",
+            services = listOf(
+                LocalService(1, "رفع سكور بنك (1000)", 2.0),
+                LocalService(2, "رفع سكور بنك (2000)", 4.0),
+                LocalService(3, "رفع سكور بنك (3000)", 6.0),
+                LocalService(4, "رفع سكور بنك (10000)", 20.0)
+            )
+        ),
+
+        // شحن شدات ببجي
+        LocalSection(
+            key = "pubg",
+            title = "قسم شحن شدات ببجي",
+            services = listOf(
+                LocalService(1, "ببجي 60 شدة", 2.0),
+                LocalService(2, "ببجي 120 شدة", 4.0),
+                LocalService(3, "ببجي 180 شدة", 6.0),
+                LocalService(4, "ببجي 240 شدة", 8.0),
+                LocalService(5, "ببجي 325 شدة", 9.0),
+                LocalService(6, "ببجي 660 شدة", 15.0),
+                LocalService(7, "ببجي 1800 شدة", 40.0)
+            )
+        ),
+
+        // شراء رصيد ايتونز
+        LocalSection(
+            key = "itunes",
+            title = "قسم شراء رصيد ايتونز",
+            services = listOf(
+                LocalService(1, "شراء رصيد 5 ايتونز", 9.0),
+                LocalService(2, "شراء رصيد 10 ايتونز", 18.0),
+                LocalService(3, "شراء رصيد 15 ايتونز", 27.0),
+                LocalService(4, "شراء رصيد 20 ايتونز", 36.0),
+                LocalService(5, "شراء رصيد 25 ايتونز", 45.0),
+                LocalService(6, "شراء رصيد 30 ايتونز", 54.0),
+                LocalService(7, "شراء رصيد 35 ايتونز", 63.0),
+                LocalService(8, "شراء رصيد 40 ايتونز", 72.0),
+                LocalService(9, "شراء رصيد 45 ايتونز", 81.0),
+                LocalService(10, "شراء رصيد 50 ايتونز", 90.0)
+            )
+        ),
+
+        // خدمات التليجرام
+        LocalSection(
+            key = "telegram",
+            title = "قسم خدمات التليجرام",
+            services = listOf(
+                // قنوات
+                LocalService(1, "أعضاء قنوات تيلي 1k", 3.0),
+                LocalService(2, "أعضاء قنوات تيلي 2k", 6.0),
+                LocalService(3, "أعضاء قنوات تيلي 3k", 9.0),
+                LocalService(4, "أعضاء قنوات تيلي 4k", 12.0),
+                LocalService(5, "أعضاء قنوات تيلي 5k", 15.0),
+                // كروبات
+                LocalService(6, "أعضاء كروبات تيلي 1k", 3.0),
+                LocalService(7, "أعضاء كروبات تيلي 2k", 6.0),
+                LocalService(8, "أعضاء كروبات تيلي 3k", 9.0),
+                LocalService(9, "أعضاء كروبات تيلي 4k", 12.0),
+                LocalService(10, "أعضاء كروبات تيلي 5k", 15.0)
+            )
+        ),
+
+        // خدمات اللودو
+        LocalSection(
+            key = "ludo",
+            title = "قسم خدمات اللودو",
+            services = listOf(
+                // ألماس
+                LocalService(1, "لودو 810 الماسة", 4.0),
+                LocalService(2, "لودو 2280 الماسة", 8.9),
+                LocalService(3, "لودو 5080 الماسة", 17.5),
+                LocalService(4, "لودو 12750 الماسة", 42.7),
+                // ذهب
+                LocalService(5, "لودو 66680 ذهب", 4.0),
+                LocalService(6, "لودو 219500 ذهب", 8.9),
+                LocalService(7, "لودو 1443000 ذهب", 17.5),
+                LocalService(8, "لودو 3627000 ذهب", 42.7)
+            )
+        ),
+
+        // شراء رصيد الهاتف
+        LocalSection(
+            key = "mobile_recharge",
+            title = "قسم شراء رصيد الهاتف",
+            services = listOf(
+                // أثير
+                LocalService(1, "شراء رصيد2 دولار أثير", 3.5),
+                LocalService(2, "شراء رصيد5 دولار أثير", 7.0),
+                LocalService(3, "شراء رصيد10 دولار أثير", 13.0),
+                LocalService(4, "شراء رصيد15 دولار أثير", 19.0),
+                LocalService(5, "شراء رصيد40 دولار أثير", 52.0),
+                // آسيا
+                LocalService(6, "شراء رصيد2 دولار اسيا", 3.5),
+                LocalService(7, "شراء رصيد5 دولار اسيا", 7.0),
+                LocalService(8, "شراء رصيد10 دولار اسيا", 13.0),
+                LocalService(9, "شراء رصيد15 دولار اسيا", 19.0),
+                LocalService(10, "شراء رصيد40 دولار اسيا", 52.0),
+                // كورك
+                LocalService(11, "شراء رصيد2 دولار كورك", 3.5),
+                LocalService(12, "شراء رصيد5 دولار كورك", 7.0),
+                LocalService(13, "شراء رصيد10 دولار كورك", 13.0),
+                LocalService(14, "شراء رصيد15 دولار كورك", 19.0)
+            )
         )
     )
-)
+}
 
-/*** DataStore: جلسة المالك ***/
-private val KEY_OWNER = booleanPreferencesKey("is_owner")
-private val android.content.Context.ownerDataStore by preferencesDataStore(name = "owner_session")
+/*** حفظ جلسة المالك ***/
+private const val PREFS = "smm_prefs"
+private const val KEY_IS_ADMIN = "is_admin"
 
-/*** النشاط ***/
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContent { SmmRoot() }
-    }
+private fun Context.isAdmin(): Boolean =
+    getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_IS_ADMIN, false)
+
+private fun Context.setAdmin(value: Boolean) {
+    getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_IS_ADMIN, value).apply()
 }
 
 /*** التنقّل ***/
 sealed class Screen {
-    data object HOME : Screen()
-    data object SERVICES : Screen()
-    data class ServiceList(val key: String) : Screen()
-    data object ADMIN_LOGIN : Screen()
-    data object ADMIN_DASHBOARD : Screen()
+    data object Welcome : Screen()
+    data object Services : Screen()
+    data class ServiceList(val sectionKey: String) : Screen()
+    data object Orders : Screen()
+    data object Balance : Screen()
+    data object Referral : Screen()
+    data object Leaderboard : Screen()
+    data object AdminLogin : Screen()
+    data object AdminDashboard : Screen()
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SmmRoot() {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    var isOwner by remember { mutableStateOf(false) }
-    // لا نستخدم rememberSaveable هنا لتفادي تعقيد Saver للـ sealed class
-    var current by remember { mutableStateOf<Screen>(Screen.HOME) }
-
-    LaunchedEffect(Unit) {
-        val saved = context.ownerDataStore.data.first()[KEY_OWNER] ?: false
-        isOwner = saved
-        if (isOwner) current = Screen.ADMIN_DASHBOARD
-    }
-
-    MaterialTheme {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            if (current == Screen.ADMIN_DASHBOARD) "لوحة تحكم المالك" else "خدمات راتلوزن"
-                        )
-                    },
-                    actions = {
-                        Text(
-                            text = if (isOwner) "خروج المالك" else "دخول المالك",
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .padding(end = 16.dp)
-                                .clickable {
-                                    if (isOwner) {
-                                        scope.launch {
-                                            context.ownerDataStore.edit { it[KEY_OWNER] = false }
-                                            isOwner = false
-                                            current = Screen.HOME
-                                        }
-                                    } else {
-                                        current = Screen.ADMIN_LOGIN
-                                    }
-                                }
-                        )
-                    },
-                    colors = topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
-                )
-            }
-        ) { inner ->
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .padding(inner)
-                    .background(MaterialTheme.colorScheme.background)
-            ) {
-                when (val scr = current) {
-                    Screen.HOME -> WelcomeScreen(
-                        onServices = { current = Screen.SERVICES },
-                        onOrders = { /* لاحقًا */ },
-                        onBalance = { /* لاحقًا */ },
-                        onReferral = { /* لاحقًا */ },
-                        onLeaders = { /* لاحقًا */ }
-                    )
-
-                    Screen.SERVICES -> ServicesScreen(
-                        sections = catalog,
-                        onBack = { current = Screen.HOME },
-                        onOpenSection = { current = Screen.ServiceList(it.key) }
-                    )
-
-                    is Screen.ServiceList -> {
-                        val section = catalog.firstOrNull { it.key == scr.key }
-                        if (section == null) {
-                            Text("القسم غير موجود", modifier = Modifier.align(Alignment.Center))
-                        } else {
-                            ServiceList(
-                                section = section,
-                                onBack = { current = Screen.SERVICES },
-                                onOrder = { /* تنفيذ الطلب لاحقًا */ }
-                            )
-                        }
-                    }
-
-                    Screen.ADMIN_LOGIN -> OwnerLoginDialog(
-                        onCancel = { current = if (isOwner) Screen.ADMIN_DASHBOARD else Screen.HOME },
-                        onSubmit = { pass ->
-                            if (pass == "2000") {
-                                scope.launch {
-                                    context.ownerDataStore.edit { it[KEY_OWNER] = true }
-                                    isOwner = true
-                                    current = Screen.ADMIN_DASHBOARD
-                                }
-                            } else {
-                                current = Screen.HOME
-                            }
-                        }
-                    )
-
-                    Screen.ADMIN_DASHBOARD -> AdminDashboard(
-                        onBack = { current = Screen.HOME }
-                    )
+/*** Activity ***/
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val startScreen = if (this.isAdmin()) Screen.AdminDashboard else Screen.Welcome
+        setContent {
+            MaterialTheme {
+                Surface(Modifier.fillMaxSize(), color = Color(0xFFF6EEF8)) {
+                    AppRoot(startScreen)
                 }
             }
         }
     }
 }
 
-/*** الشاشات ***/
+/*** Root ***/
 @Composable
-fun WelcomeScreen(
-    onServices: () -> Unit,
-    onOrders: () -> Unit,
-    onBalance: () -> Unit,
-    onReferral: () -> Unit,
-    onLeaders: () -> Unit
+private fun AppRoot(start: Screen) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var screen by remember { mutableStateOf(start) }
+
+    when (screen) {
+        Screen.Welcome -> WelcomeScreen(
+            onGoServices = { screen = Screen.Services },
+            onGoOrders = { screen = Screen.Orders },
+            onGoBalance = { screen = Screen.Balance },
+            onGoReferral = { screen = Screen.Referral },
+            onGoLeaderboard = { screen = Screen.Leaderboard },
+            onAdminClick = { screen = Screen.AdminLogin }
+        )
+
+        Screen.Services -> ServicesScreen(
+            sections = UnifiedCatalog.sections,
+            onBack = { screen = Screen.Welcome },
+            onOpenSection = { key -> screen = Screen.ServiceList(key) }
+        )
+
+        is Screen.ServiceList -> {
+            val key = (screen as Screen.ServiceList).sectionKey
+            val sec = UnifiedCatalog.sections.firstOrNull { it.key == key }
+            ServiceListScreen(
+                section = sec,
+                onBack = { screen = Screen.Services },
+                onOrder = { s ->
+                    Toast.makeText(ctx, "تم إرسال طلب: ${s.name} (${s.price}$)", Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
+
+        Screen.Orders -> PlaceholderScreen("طلباتي") { screen = Screen.Welcome }
+        Screen.Balance -> PlaceholderScreen("رصيدي") { screen = Screen.Welcome }
+        Screen.Referral -> PlaceholderScreen("الإحالة") { screen = Screen.Welcome }
+        Screen.Leaderboard -> PlaceholderScreen("المتصدرين 🎉") { screen = Screen.Welcome }
+
+        Screen.AdminLogin -> AdminLoginScreen(
+            onCancel = { screen = Screen.Welcome },
+            onSuccess = {
+                ctx.setAdmin(true)
+                screen = Screen.AdminDashboard
+            }
+        )
+
+        Screen.AdminDashboard -> AdminDashboardScreen(
+            onLogout = {
+                ctx.setAdmin(false)
+                screen = Screen.Welcome
+            }
+        )
+    }
+}
+
+/*** شاشة ترحيب ***/
+@Composable
+private fun WelcomeScreen(
+    onGoServices: () -> Unit,
+    onGoOrders: () -> Unit,
+    onGoBalance: () -> Unit,
+    onGoReferral: () -> Unit,
+    onGoLeaderboard: () -> Unit,
+    onAdminClick: () -> Unit
 ) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onAdminClick) { Text("دخول المالك") }
+        }
         Spacer(Modifier.height(8.dp))
         Text(
-            "أهلًا وسهلًا بكم في تطبيق خدمات راتلوزن",
-            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-            modifier = Modifier.padding(vertical = 8.dp)
+            "خدمات راتلوزن",
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
         )
-        Spacer(Modifier.height(16.dp))
-        VerticalButtons(
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "أهلا وسهلاً بكم في تطبيق خدمات راتلوزن",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(18.dp))
+        MainGrid(
             items = listOf(
-                "الخدمات" to onServices,
-                "طلباتي" to onOrders,
-                "رصيدي" to onBalance,
-                "الإحالة" to onReferral,
-                "المتصدرين 🎉" to onLeaders,
+                "الخدمات" to onGoServices,
+                "طلباتي" to onGoOrders,
+                "رصيدي" to onGoBalance,
+                "الإحالة" to onGoReferral,
+                "المتصدرين 🎉" to onGoLeaderboard
             )
         )
     }
 }
 
+/*** شاشة الأقسام ***/
 @Composable
-fun ServicesScreen(
-    sections: List<Section>,
+private fun ServicesScreen(
+    sections: List<LocalSection>,
     onBack: () -> Unit,
-    onOpenSection: (Section) -> Unit
+    onOpenSection: (String) -> Unit
 ) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        Text("الخدمات", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            items(sections) { sec ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpenSection(sec) },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(sec.title, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text("اضغط لعرض ${sec.services.size} خدمة", fontSize = 13.sp)
-                    }
-                }
-            }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("الخدمات", style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold))
+            TextButton(onClick = onBack) { Text("رجوع") }
         }
-        Spacer(Modifier.height(12.dp))
-        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
+        Spacer(Modifier.height(8.dp))
+        val items = sections.map { it.title to { onOpenSection(it.key) } }
+        MainGrid(items)
     }
 }
 
+/*** شاشة قائمة الخدمات ***/
 @Composable
-fun ServiceList(
-    section: Section,
+private fun ServiceListScreen(
+    section: LocalSection?,
     onBack: () -> Unit,
-    onOrder: (Service) -> Unit
+    onOrder: (LocalService) -> Unit
 ) {
+    if (section == null) {
+        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Text("القسم غير موجود")
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onBack) { Text("رجوع") }
+        }
+        return
+    }
+
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text(section.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(10.dp))
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            items(section.services) { svc ->
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(section.title, style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold))
+            TextButton(onClick = onBack) { Text("رجوع") }
+        }
+        Spacer(Modifier.height(8.dp))
+
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(section.services.size) { i ->
+                val s = section.services[i]
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color(0xFFDDD0F3)),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
+                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(svc.title, fontWeight = FontWeight.Medium)
-                            Text("${svc.price} $", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                            Text(s.name, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(4.dp))
+                            Text("${s.price} $", color = Color(0xFF7A53C4))
                         }
-                        Button(onClick = { onOrder(svc) }) { Text("طلب الخدمة") }
+                        Button(onClick = { onOrder(s) }) { Text("طلب الخدمة") }
                     }
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
     }
 }
 
+/*** تسجيل دخول المالك ***/
 @Composable
-fun AdminDashboard(onBack: () -> Unit) {
-    val entries = listOf(
-        "تعديل الأسعار والكميات",
-        "الطلبات المعلقة (الخدمات)",
-        "الكارتات المعلقة",
-        "طلبات شدات ببجي",
-        "طلبات شحن الايتونز",
-        "طلبات الأرصدة المعلقة",
-        "طلبات لودو المعلقة",
-        "خصم الرصيد",
-        "إضافة رصيد",
-        "فحص حالة طلب API",
-        "فحص رصيد API",
-        "رصيد المستخدمين",
-        "عدد المستخدمين",
-        "إدارة المشرفين",
-        "إلغاء حظر المستخدم",
-        "حظر المستخدم",
-        "إعلان التطبيق",
-        "أكواد خدمات API",
-        "نظام الإحالة",
-        "شرح الخصومات",
-        "المتصدرين"
-    )
-
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("لوحة تحكم المالك", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            items(entries) { title ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) { Text(title, modifier = Modifier.padding(14.dp), fontSize = 16.sp) }
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-@Composable
-fun VerticalButtons(items: List<Pair<String, () -> Unit>>) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-        items.forEach { (label, onClick) ->
-            Button(onClick = onClick, modifier = Modifier.fillMaxWidth()) { Text(label) }
-        }
-    }
-}
-
-@Composable
-fun OwnerLoginDialog(onCancel: () -> Unit, onSubmit: (String) -> Unit) {
+private fun AdminLoginScreen(
+    onCancel: () -> Unit,
+    onSuccess: () -> Unit
+) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     var pass by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text("دخول المالك") },
-        text = {
-            Column {
-                Text("أدخل كلمة المرور الخاصة بالمالك")
-                OutlinedTextField(
-                    value = pass,
-                    onValueChange = { pass = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    singleLine = true,
-                    placeholder = { Text("****") }
-                )
+
+    Column(
+        Modifier.fillMaxSize().padding(20.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("تسجيل دخول المالك", style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold))
+        Spacer(Modifier.height(12.dp))
+        OutlinedTextField(
+            value = pass,
+            onValueChange = { pass = it },
+            label = { Text("كلمة المرور") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            singleLine = true
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onCancel) { Text("إلغاء") }
+            Button(onClick = {
+                if (pass.trim() == "2000") onSuccess()
+                else Toast.makeText(ctx, "كلمة المرور غير صحيحة", Toast.LENGTH_SHORT).show()
+            }) { Text("دخول") }
+        }
+    }
+}
+
+/*** لوحة تحكم المالك ***/
+@Composable
+private fun AdminDashboardScreen(onLogout: () -> Unit) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scroll = rememberScrollState()
+
+    fun click(msg: String) =
+        Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
+
+    Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(scroll)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("لوحة تحكم المالك", style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold))
+            TextButton(onClick = onLogout) { Text("خروج من اللوحة") }
+        }
+        Spacer(Modifier.height(8.dp))
+
+        MainGrid(
+            items = listOf(
+                "تعديل الأسعار والكميات" to { click("تعديل الأسعار والكميات") },
+                "الطلبات المعلقة (الخدمات)" to { click("الطلبات المعلقة") },
+                "الكارتات المعلقة" to { click("الكارتات المعلقة") },
+                "طلبات شدات ببجي" to { click("طلبات شدات ببجي") },
+                "طلبات شحن الايتونز" to { click("طلبات ايتونز") },
+                "طلبات الأرصدة المعلقة" to { click("طلبات الأرصدة") },
+                "طلبات لودو المعلقة" to { click("طلبات لودو") },
+                "خصم الرصيد" to { click("خصم الرصيد") },
+                "إضافة رصيد" to { click("إضافة رصيد") },
+                "فحص حالة طلب API" to { click("فحص حالة طلب API") },
+                "فحص رصيد API" to { click("فحص رصيد API") },
+                "رصيد المستخدمين" to { click("رصيد المستخدمين") },
+                "عدد المستخدمين" to { click("عدد المستخدمين") },
+                "إدارة المشرفين" to { click("إدارة المشرفين") },
+                "إلغاء حظر المستخدم" to { click("إلغاء الحظر") },
+                "حظر المستخدم" to { click("حظر المستخدم") },
+                "إعلان التطبيق" to { click("إعلان التطبيق") },
+                "أكواد خدمات API" to { click("أكواد خدمات API") },
+                "نظام الإحالة" to { click("نظام الإحالة") },
+                "شرح الخصومات" to { click("شرح الخصومات") },
+                "المتصدرين" to { click("المتصدرين") }
+            )
+        )
+    }
+}
+
+/*** شاشة نائبة ***/
+@Composable
+private fun PlaceholderScreen(title: String, onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(title, style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold))
+            TextButton(onClick = onBack) { Text("رجوع") }
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("هذه الشاشة قيد التنفيذ…", color = Color(0xFF7A53C4))
+    }
+}
+
+/*** شبكة بطاقات ***/
+@Composable
+private fun MainGrid(items: List<Pair<String, () -> Unit>>) {
+    val rows = items.chunked(2)
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        rows.forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                row.forEach { (label, onClick) ->
+                    DashboardCard(label = label, modifier = Modifier.weight(1f), onClick = onClick)
+                }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
             }
-        },
-        confirmButton = { TextButton(onClick = { onSubmit(pass) }) { Text("دخول") } },
-        dismissButton = { TextButton(onClick = onCancel) { Text("إلغاء") } }
-    )
+        }
+    }
+}
+
+@Composable
+private fun DashboardCard(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Card(
+        modifier = modifier
+            .heightIn(min = 90.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, Color(0xFFDDCFF5)),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+            Text(label, textAlign = TextAlign.Center, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF4E3B87))
+        }
+    }
 }

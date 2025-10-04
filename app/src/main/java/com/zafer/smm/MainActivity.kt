@@ -46,7 +46,7 @@ enum class OrderStatus { PENDING, IN_PROGRESS, DONE, REJECTED }
 data class ServiceItem(
     val id: Int,
     val category: String,
-    val display: String,   // نص الزر كما في البوت (الاسم + الكمية + السعر)
+    val display: String,   // نص الزر (الاسم + الكمية + السعر)
     val quantity: Int,
     val price: Double
 )
@@ -65,8 +65,8 @@ enum class TopupStatus { PENDING, APPROVED, REJECTED }
 data class TopupRequest(
     val id: String,
     val userId: String,
-    val method: String,       // "asiacell", "superkey", ...
-    val code: String?,        // لاسياسيل
+    val method: String,
+    val code: String?,
     val submittedAt: Long,
     var status: TopupStatus,
     var approvedAmount: Double?,
@@ -74,11 +74,11 @@ data class TopupRequest(
 )
 
 // -------------------------
-// كاتالوج الخدمات (قابلة للتعديل لاحقًا)
+// كاتالوج الخدمات (موسّع)
 // -------------------------
 object Catalog {
 
-    // ترتيب الأقسام لزر "الخدمات"
+    // الأقسام وترتيبها
     val sections: LinkedHashMap<String, String> = linkedMapOf(
         "tiktok_followers" to "قسم المتابعين (تيكتوك)",
         "instagram_followers" to "قسم المتابعين (انستغرام)",
@@ -88,56 +88,155 @@ object Catalog {
         "instagram_views" to "قسم المشاهدات (انستغرام)",
         "tiktok_live" to "قسم مشاهدات البث (تيكتوك)",
         "instagram_live" to "قسم مشاهدات البث (انستغرام)",
+        "pubg" to "قسم شحن شدات ببجي",
+        "itunes" to "قسم شراء رصيد ايتونز",
         "telegram_members_channels" to "قسم خدمات التليجرام (قنوات)",
         "telegram_members_groups" to "قسم خدمات التليجرام (كروبات)",
         "ludo" to "قسم خدمات اللودو",
-        "pubg" to "قسم شحن شدات ببجي",
-        "itunes" to "قسم شراء رصيد ايتونز",
         "bank_score" to "قسم رفع سكور تيكتوك",
         "balance_buy" to "قسم شراء رصيد الهاتف"
     )
 
+    // لسهولة ضبط الأرقام
+    private fun f(n: Int) = "%,d".format(n).replace(",", "٬")
+    private fun price(p: Double) = if (p % 1.0 == 0.0) "%.0f".format(p) else "%.2f".format(p)
+
     val items: List<ServiceItem> = buildList {
-        // === مثال لخدمات (يمكنك توسيعها لاحقاً) ===
-        // متابعين تيكتوك
-        add(ServiceItem(1001,"tiktok_followers","متابعين تيكتوك (1000) - $3.5",1000,3.5))
-        add(ServiceItem(1002,"tiktok_followers","متابعين تيكتوك (2000) - $7.0",2000,7.0))
-        add(ServiceItem(1003,"tiktok_followers","متابعين تيكتوك (3000) - $10.5",3000,10.5))
-        add(ServiceItem(1004,"tiktok_followers","متابعين تيكتوك (4000) - $14.0",4000,14.0))
 
-        // متابعين انستغرام
-        add(ServiceItem(1101,"instagram_followers","متابعين انستغرام (1000) - $3.0",1000,3.0))
-        add(ServiceItem(1102,"instagram_followers","متابعين انستغرام (2000) - $6.0",2000,6.0))
+        // ==== TikTok Followers (id range 10000+) ====
+        var id = 10000
+        fun addTikTokFollowers(q: Int, p: Double) {
+            add(ServiceItem(id++, "tiktok_followers", "متابعين تيكتوك (${f(q)}) - $${price(p)}", q, p))
+        }
+        listOf(
+            100 to 0.45, 200 to 0.85, 300 to 1.20, 400 to 1.60, 500 to 1.95,
+            1000 to 3.50, 2000 to 7.00, 3000 to 10.50, 4000 to 14.00, 5000 to 17.50,
+            10000 to 34.00, 20000 to 66.00, 50000 to 160.00
+        ).forEach { (q, p) -> addTikTokFollowers(q, p) }
 
-        // لايكات تيكتوك
-        add(ServiceItem(1201,"tiktok_likes","لايكات تيكتوك (1000) - $1.0",1000,1.0))
+        // ==== Instagram Followers (id range 11000+) ====
+        id = 11000
+        fun addInstaFollowers(q: Int, p: Double) {
+            add(ServiceItem(id++, "instagram_followers", "متابعين انستغرام (${f(q)}) - $${price(p)}", q, p))
+        }
+        listOf(
+            100 to 0.40, 200 to 0.78, 300 to 1.15, 400 to 1.50, 500 to 1.85,
+            1000 to 3.00, 2000 to 6.00, 3000 to 9.00, 4000 to 12.00, 5000 to 15.00,
+            10000 to 29.00, 20000 to 56.00, 50000 to 135.00
+        ).forEach { (q, p) -> addInstaFollowers(q, p) }
 
-        // مشاهدات تيكتوك
-        add(ServiceItem(1401,"tiktok_views","مشاهدات تيكتوك (10000) - $0.8",10000,0.8))
+        // ==== TikTok Likes (12000+) ====
+        id = 12000
+        fun addTTLikes(q: Int, p: Double) {
+            add(ServiceItem(id++, "tiktok_likes", "لايكات تيكتوك (${f(q)}) - $${price(p)}", q, p))
+        }
+        listOf(
+            100 to 0.10, 500 to 0.40, 1000 to 0.80, 2000 to 1.50, 5000 to 3.50,
+            10000 to 6.50, 20000 to 12.50, 50000 to 29.00
+        ).forEach { (q, p) -> addTTLikes(q, p) }
 
-        // مشاهدات بث تيكتوك
-        add(ServiceItem(1601,"tiktok_live","مشاهدات بث تيكتوك (1000) - $2.0",1000,2.0))
+        // ==== Instagram Likes (13000+) ====
+        id = 13000
+        fun addIGLikes(q: Int, p: Double) {
+            add(ServiceItem(id++, "instagram_likes", "لايكات انستغرام (${f(q)}) - $${price(p)}", q, p))
+        }
+        listOf(
+            100 to 0.12, 500 to 0.45, 1000 to 0.90, 2000 to 1.70, 5000 to 3.80,
+            10000 to 7.20, 20000 to 13.50, 50000 to 30.00
+        ).forEach { (q, p) -> addIGLikes(q, p) }
 
-        // تليجرام
-        add(ServiceItem(1801,"telegram_members_channels","أعضاء قنوات تيلي 1k - $3.0",1000,3.0))
-        add(ServiceItem(1901,"telegram_members_groups","أعضاء كروبات تيلي 1k - $3.0",1000,3.0))
+        // ==== TikTok Views (14000+) ====
+        id = 14000
+        fun addTTViews(q: Int, p: Double) {
+            add(ServiceItem(id++, "tiktok_views", "مشاهدات تيكتوك (${f(q)}) - $${price(p)}", q, p))
+        }
+        listOf(
+            1000 to 0.08, 5000 to 0.35, 10000 to 0.65, 20000 to 1.20, 50000 to 2.80,
+            100000 to 5.00, 200000 to 9.50, 500000 to 23.00, 1000000 to 45.00
+        ).forEach { (q, p) -> addTTViews(q, p) }
 
-        // لودو
-        add(ServiceItem(2001,"ludo","لودو 810 الماسة - $4.0",810,4.0))
+        // ==== Instagram Views (15000+) ====
+        id = 15000
+        fun addIGViews(q: Int, p: Double) {
+            add(ServiceItem(id++, "instagram_views", "مشاهدات انستغرام (${f(q)}) - $${price(p)}", q, p))
+        }
+        listOf(
+            1000 to 0.10, 5000 to 0.40, 10000 to 0.70, 20000 to 1.30, 50000 to 3.00,
+            100000 to 5.50, 200000 to 10.50, 500000 to 25.00, 1000000 to 49.00
+        ).forEach { (q, p) -> addIGViews(q, p) }
 
-        // ببجي
-        add(ServiceItem(2101,"pubg","ببجي 60 شدة - $2.0",60,2.0))
+        // ==== TikTok Live Views (16000+) ====
+        id = 16000
+        fun addTTLive(q: Int, p: Double) {
+            add(ServiceItem(id++, "tiktok_live", "مشاهدات بث تيكتوك (${f(q)}) - $${price(p)}", q, p))
+        }
+        listOf(500 to 1.20, 1000 to 2.20, 2000 to 4.20, 5000 to 9.80, 10000 to 19.00).forEach { (q, p) -> addTTLive(q, p) }
 
-        // ايتونز
-        add(ServiceItem(2201,"itunes","$9.0 - شراء رصيد 5 ايتونز",5,9.0))
+        // ==== Instagram Live Views (17000+) ====
+        id = 17000
+        fun addIGLive(q: Int, p: Double) {
+            add(ServiceItem(id++, "instagram_live", "مشاهدات بث انستغرام (${f(q)}) - $${price(p)}", q, p))
+        }
+        listOf(500 to 1.30, 1000 to 2.40, 2000 to 4.50, 5000 to 10.00).forEach { (q, p) -> addIGLive(q, p) }
 
-        // رفع سكور
-        add(ServiceItem(2301,"bank_score","رفع سكور بنك (1000) - $2.0",1000,2.0))
+        // ==== PUBG UC (18000+) ====
+        id = 18000
+        fun addPubg(q: Int, p: Double) {
+            add(ServiceItem(id++, "pubg", "ببجي ${f(q)} UC - $${price(p)}", q, p))
+        }
+        listOf(
+            60 to 1.90, 120 to 3.70, 180 to 5.40, 240 to 7.10, 325 to 9.40, 660 to 18.50,
+            1800 to 49.00, 3850 to 99.00
+        ).forEach { (q, p) -> addPubg(q, p) }
 
-        // شراء رصيد الشبكات
-        add(ServiceItem(2401,"balance_buy","$3.5 - شراء رصيد 2 دولار أثير",2,3.5))
-        add(ServiceItem(2411,"balance_buy","$3.5 - شراء رصيد 2 دولار اسيا",2,3.5))
-        add(ServiceItem(2421,"balance_buy","$3.5 - شراء رصيد 2 دولار كورك",2,3.5))
+        // ==== iTunes (19000+) ====
+        id = 19000
+        fun addItunes(qUSD: Int, p: Double) {
+            add(ServiceItem(id++, "itunes", "بطاقة iTunes $${qUSD} - $${price(p)}", qUSD, p))
+        }
+        listOf(5 to 4.90, 10 to 9.70, 15 to 14.40, 20 to 19.00, 25 to 23.70, 50 to 47.00, 100 to 94.00)
+            .forEach { (q, p) -> addItunes(q, p) }
+
+        // ==== Telegram Members Channels (20000+) ====
+        id = 20000
+        fun addTgCh(q: Int, p: Double) {
+            add(ServiceItem(id++, "telegram_members_channels", "أعضاء قناة (${f(q)}) - $${price(p)}", q, p))
+        }
+        listOf(500 to 4.80, 1000 to 9.00, 2000 to 17.50, 3000 to 25.00, 5000 to 39.00, 10000 to 75.00)
+            .forEach { (q, p) -> addTgCh(q, p) }
+
+        // ==== Telegram Members Groups (21000+) ====
+        id = 21000
+        fun addTgGp(q: Int, p: Double) {
+            add(ServiceItem(id++, "telegram_members_groups", "أعضاء كروب (${f(q)}) - $${price(p)}", q, p))
+        }
+        listOf(500 to 5.00, 1000 to 10.00, 2000 to 19.00, 3000 to 27.00, 5000 to 42.00, 10000 to 80.00)
+            .forEach { (q, p) -> addTgGp(q, p) }
+
+        // ==== Ludo (22000+) ====
+        id = 22000
+        fun addLudo(q: Int, p: Double) {
+            add(ServiceItem(id++, "ludo", "لودو ${f(q)} ألماسة - $${price(p)}", q, p))
+        }
+        listOf(100 to 0.90, 200 to 1.70, 500 to 4.10, 810 to 6.20, 1000 to 8.00, 2000 to 15.50, 5000 to 38.00)
+            .forEach { (q, p) -> addLudo(q, p) }
+
+        // ==== TikTok Bank Score (23000+) ====
+        id = 23000
+        fun addScore(q: Int, p: Double) {
+            add(ServiceItem(id++, "bank_score", "رفع سكور تيكتوك (${f(q)}) - $${price(p)}", q, p))
+        }
+        listOf(500 to 1.20, 1000 to 2.00, 2000 to 3.80, 5000 to 8.80, 10000 to 16.50).forEach { (q, p) -> addScore(q, p) }
+
+        // ==== Mobile balance buy (أثير/آسيا/كورك) (24000+) ====
+        id = 24000
+        fun addMB(title: String, qUSD: Int, p: Double) {
+            add(ServiceItem(id++, "balance_buy", "$title (${qUSD}$) - $${price(p)}", qUSD, p))
+        }
+        val mb = listOf(2 to 3.50, 5 to 8.50, 10 to 16.50, 20 to 32.00, 40 to 62.00)
+        mb.forEach { (q, p) -> addMB("شراء رصيد أثير", q, p) }
+        mb.forEach { (q, p) -> addMB("شراء رصيد آسيا", q, p) }
+        mb.forEach { (q, p) -> addMB("شراء رصيد كورك", q, p) }
     }
 
     fun byCategory(cat: String) = items.filter { it.category == cat }
@@ -227,8 +326,8 @@ class LocalRepo(private val ctx: Context) {
 // -------------------------
 sealed class Screen {
     object HOME: Screen()
-    object SERVICES: Screen()                          // شاشة عرض أقسام الخدمات
-    data class SERVICE_LIST(val cat: String): Screen() // خدمات قسم محدد
+    object SERVICES: Screen()
+    data class SERVICE_LIST(val cat: String): Screen()
     data class ORDER_CREATE(val item: ServiceItem): Screen()
     object BALANCE: Screen()
     object TOPUP_METHODS: Screen()
@@ -272,7 +371,7 @@ fun AppRoot() {
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                         )
-                        SmallAdminButton { screen = Screen.ADMIN_LOGIN } // زر المالك أعلى اليمين
+                        SmallAdminButton { screen = Screen.ADMIN_LOGIN }
                     }
                 }
             )
@@ -361,7 +460,7 @@ fun AppRoot() {
 }
 
 // -------------------------
-// واجهة المستخدم الرئيسية (ترتيب الأزرار القديم)
+// الواجهة الرئيسية (نفس الشكل/الألوان)
 // -------------------------
 @Composable
 fun HomeScreen(
@@ -379,7 +478,6 @@ fun HomeScreen(
             .padding(16.dp)
             .verticalScroll(scroll)
     ) {
-        // بطاقة الرصيد أعلى الصفحة
         Card(
             Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color(0xFFF7F7F7))
@@ -400,22 +498,18 @@ fun HomeScreen(
 
         Spacer(Modifier.height(14.dp))
 
-        // شبكة الأزرار الرئيسية (نفس الترتيب القديم)
         Text("القائمة الرئيسية", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(Modifier.height(10.dp))
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            // الصف 1
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 Box(modifier = Modifier.weight(1f)) { GreenItem("الخدمات") { onOpenServices() } }
                 Box(modifier = Modifier.weight(1f)) { GreenItem("طلباتي") { onOrders() } }
             }
-            // الصف 2
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 Box(modifier = Modifier.weight(1f)) { GreenItem("رصيدي") { onBalance() } }
                 Box(modifier = Modifier.weight(1f)) { GreenItem("الإحالة") { onReferral() } }
             }
-            // الصف 3
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 Box(modifier = Modifier.weight(1f)) { GreenItem("المتصدرين 🎉") { onLeaderboard() } }
                 Spacer(Modifier.weight(1f))
@@ -425,7 +519,7 @@ fun HomeScreen(
 }
 
 // -------------------------
-// شاشة أقسام "الخدمات" (ترتيب ورجوع كما كان سابقًا)
+// أقسام الخدمات
 // -------------------------
 @Composable
 fun ServicesCategoriesScreen(
@@ -445,7 +539,7 @@ fun ServicesCategoriesScreen(
 }
 
 // -------------------------
-// قائمة خدمات القسم المحدد
+// خدمات قسم محدد
 // -------------------------
 @Composable
 fun ServiceListScreen(
@@ -518,7 +612,7 @@ fun OrderCreateScreen(
 }
 
 // -------------------------
-// رصيدي + طرق الشحن
+// رصيدي وطرق الشحن
 // -------------------------
 @Composable
 fun BalanceScreen(
@@ -665,7 +759,7 @@ fun MyOrdersScreen(repo: LocalRepo, userId: String, onBack: () -> Unit) {
 }
 
 // -------------------------
-// الإحالة (عرض بسيط)
+// الإحالة (عرض مبسّط)
 @Composable
 fun ReferralScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
@@ -689,7 +783,7 @@ fun ReferralScreen(onBack: () -> Unit) {
 }
 
 // -------------------------
-// المتصدرين (محلي مبسّط)
+// المتصدرين (Placeholder)
 @Composable
 fun LeaderboardScreen(onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -701,14 +795,14 @@ fun LeaderboardScreen(onBack: () -> Unit) {
 }
 
 // -------------------------
-// دخول المالك + لوحة التحكم (ترتيب الأزرار كما طلبت)
+// دخول المالك + لوحة التحكم
 // -------------------------
 @Composable
 fun AdminLoginScreen(onCancel: () -> Unit, onOk: (String) -> Unit) {
     var pass by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         BackButton(onCancel)
-        Text("تسجيل دخول المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text("تسجيل دخول المالك", style = MaterialTheme.typTypography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
         OutlinedTextField(
             value = pass, onValueChange = { pass = it },
@@ -738,7 +832,6 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
         Text("لوحة تحكم المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
 
-        // شبكة الأزرار (نفس الأسماء التي طلبتها)
         Text("إجراءات سريعة", fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
 
@@ -768,8 +861,8 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
             )
         ) { title ->
             when (title) {
-                "الكارتات المعلقه" -> Unit // القسم التفصيلي أدناه
-                "الطلبات المعلقه (الخدمات)" -> Unit // سنعرض الطلبات أدناه
+                "الكارتات المعلقه" -> Unit
+                "الطلبات المعلقه (الخدمات)" -> Unit
                 "اضافه رصيد" -> quickBalanceDialog(ctx, repo, add = true) { refreshAll() }
                 "خصم الرصيد" -> quickBalanceDialog(ctx, repo, add = false) { refreshAll() }
                 else -> Toast.makeText(ctx, "$title (قريبًا)", Toast.LENGTH_SHORT).show()
@@ -870,19 +963,19 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
                             GreenMini("بدء تنفيذ") {
                                 val list = repo.loadOrders().toMutableList()
                                 val idx = list.indexOfFirst { it.id==o.id }
-                                if (idx>=0) { list[idx] = list[idx].copy(status = OrderStatus.IN_PROGRESS); repo.saveOrders(list); refreshAll() }
+                                if (idx>=0) { list[idx] = list[idx].copy(status = OrderStatus.IN_PROGRESS); repo.saveOrders(list) }
                             }
                             GreenMini("اكتمال") {
                                 val list = repo.loadOrders().toMutableList()
                                 val idx = list.indexOfFirst { it.id==o.id }
-                                if (idx>=0) { list[idx] = list[idx].copy(status = OrderStatus.DONE); repo.saveOrders(list); refreshAll() }
+                                if (idx>=0) { list[idx] = list[idx].copy(status = OrderStatus.DONE); repo.saveOrders(list) }
                             }
                             GreenMini("رفض + استرجاع") {
                                 val list = repo.loadOrders().toMutableList()
                                 val idx = list.indexOfFirst { it.id==o.id }
                                 if (idx>=0) {
                                     val cur = list[idx]; list[idx] = cur.copy(status = OrderStatus.REJECTED)
-                                    repo.saveOrders(list); repo.credit(cur.userId, cur.price); refreshAll()
+                                    repo.saveOrders(list); repo.credit(cur.userId, cur.price)
                                     Toast.makeText(ctx,"تم الرفض واسترجاع $${cur.price}",Toast.LENGTH_SHORT).show()
                                 }
                             }

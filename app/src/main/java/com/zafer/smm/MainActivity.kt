@@ -1,6 +1,4 @@
-@file:OptIn(
-    androidx.compose.material3.ExperimentalMaterial3Api::class
-)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
 
@@ -20,14 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,27 +78,27 @@ data class TopupRequest(
 // -------------------------
 object Catalog {
 
-    // ترتيب الأقسام
+    // ترتيب الأقسام لزر "الخدمات"
     val sections: LinkedHashMap<String, String> = linkedMapOf(
-        "tiktok_followers" to "متابعين تيكتوك",
-        "instagram_followers" to "متابعين انستغرام",
-        "tiktok_likes" to "لايكات تيكتوك",
-        "instagram_likes" to "لايكات انستغرام",
-        "tiktok_views" to "مشاهدات تيكتوك",
-        "instagram_views" to "مشاهدات انستغرام",
-        "tiktok_live" to "مشاهدات بث تيكتوك",
-        "instagram_live" to "مشاهدات بث انستغرام",
-        "telegram_members_channels" to "اعضاء قنوات تيلي",
-        "telegram_members_groups" to "اعضاء كروبات تيلي",
-        "ludo" to "خدمات لودو",
-        "pubg" to "شحن شدات ببجي",
-        "itunes" to "شراء رصيد ايتونز",
-        "bank_score" to "رفع سكور بنك تيكتوك",
-        "balance_buy" to "شراء رصيد (أثير/اسيا/كورك)"
+        "tiktok_followers" to "قسم المتابعين (تيكتوك)",
+        "instagram_followers" to "قسم المتابعين (انستغرام)",
+        "tiktok_likes" to "قسم الإعجابات (تيكتوك)",
+        "instagram_likes" to "قسم الإعجابات (انستغرام)",
+        "tiktok_views" to "قسم المشاهدات (تيكتوك)",
+        "instagram_views" to "قسم المشاهدات (انستغرام)",
+        "tiktok_live" to "قسم مشاهدات البث (تيكتوك)",
+        "instagram_live" to "قسم مشاهدات البث (انستغرام)",
+        "telegram_members_channels" to "قسم خدمات التليجرام (قنوات)",
+        "telegram_members_groups" to "قسم خدمات التليجرام (كروبات)",
+        "ludo" to "قسم خدمات اللودو",
+        "pubg" to "قسم شحن شدات ببجي",
+        "itunes" to "قسم شراء رصيد ايتونز",
+        "bank_score" to "قسم رفع سكور تيكتوك",
+        "balance_buy" to "قسم شراء رصيد الهاتف"
     )
 
     val items: List<ServiceItem> = buildList {
-
+        // === مثال لخدمات (يمكنك توسيعها لاحقاً) ===
         // متابعين تيكتوك
         add(ServiceItem(1001,"tiktok_followers","متابعين تيكتوك (1000) - $3.5",1000,3.5))
         add(ServiceItem(1002,"tiktok_followers","متابعين تيكتوك (2000) - $7.0",2000,7.0))
@@ -117,114 +108,36 @@ object Catalog {
         // متابعين انستغرام
         add(ServiceItem(1101,"instagram_followers","متابعين انستغرام (1000) - $3.0",1000,3.0))
         add(ServiceItem(1102,"instagram_followers","متابعين انستغرام (2000) - $6.0",2000,6.0))
-        add(ServiceItem(1103,"instagram_followers","متابعين انستغرام (3000) - $9.0",3000,9.0))
-        add(ServiceItem(1104,"instagram_followers","متابعين انستغرام (4000) - $12.0",4000,12.0))
 
         // لايكات تيكتوك
         add(ServiceItem(1201,"tiktok_likes","لايكات تيكتوك (1000) - $1.0",1000,1.0))
-        add(ServiceItem(1202,"tiktok_likes","لايكات تيكتوك (2000) - $2.0",2000,2.0))
-        add(ServiceItem(1203,"tiktok_likes","لايكات تيكتوك (3000) - $3.0",3000,3.0))
-        add(ServiceItem(1204,"tiktok_likes","لايكات تيكتوك (4000) - $4.0",4000,4.0))
-
-        // لايكات انستغرام
-        add(ServiceItem(1301,"instagram_likes","لايكات انستغرام (1000) - $1.0",1000,1.0))
-        add(ServiceItem(1302,"instagram_likes","لايكات انستغرام (2000) - $2.0",2000,2.0))
-        add(ServiceItem(1303,"instagram_likes","لايكات انستغرام (3000) - $3.0",3000,3.0))
-        add(ServiceItem(1304,"instagram_likes","لايكات انستغرام (4000) - $4.0",4000,4.0))
 
         // مشاهدات تيكتوك
-        add(ServiceItem(1401,"tiktok_views","مشاهدات تيكتوك (1000) - $0.1",1000,0.1))
-        add(ServiceItem(1402,"tiktok_views","مشاهدات تيكتوك (10000) - $0.8",10000,0.8))
-        add(ServiceItem(1403,"tiktok_views","مشاهدات تيكتوك (20000) - $1.6",20000,1.6))
-        add(ServiceItem(1404,"tiktok_views","مشاهدات تيكتوك (30000) - $2.4",30000,2.4))
-        add(ServiceItem(1405,"tiktok_views","مشاهدات تيكتوك (50000) - $3.2",50000,3.2))
-
-        // مشاهدات انستغرام
-        add(ServiceItem(1501,"instagram_views","مشاهدات انستغرام (10000) - $0.8",10000,0.8))
-        add(ServiceItem(1502,"instagram_views","مشاهدات انستغرام (20000) - $1.6",20000,1.6))
-        add(ServiceItem(1503,"instagram_views","مشاهدات انستغرام (30000) - $2.4",30000,2.4))
-        add(ServiceItem(1504,"instagram_views","مشاهدات انستغرام (50000) - $3.2",50000,3.2))
+        add(ServiceItem(1401,"tiktok_views","مشاهدات تيكتوك (10000) - $0.8",10000,0.8))
 
         // مشاهدات بث تيكتوك
         add(ServiceItem(1601,"tiktok_live","مشاهدات بث تيكتوك (1000) - $2.0",1000,2.0))
-        add(ServiceItem(1602,"tiktok_live","مشاهدات بث تيكتوك (2000) - $4.0",2000,4.0))
-        add(ServiceItem(1603,"tiktok_live","مشاهدات بث تيكتوك (3000) - $6.0",3000,6.0))
-        add(ServiceItem(1604,"tiktok_live","مشاهدات بث تيكتوك (4000) - $8.0",4000,8.0))
 
-        // مشاهدات بث انستغرام
-        add(ServiceItem(1701,"instagram_live","مشاهدات بث انستغرام (1000) - $2.0",1000,2.0))
-        add(ServiceItem(1702,"instagram_live","مشاهدات بث انستغرام (2000) - $4.0",2000,4.0))
-        add(ServiceItem(1703,"instagram_live","مشاهدات بث انستغرام (3000) - $6.0",3000,6.0))
-        add(ServiceItem(1704,"instagram_live","مشاهدات بث انستغرام (4000) - $8.0",4000,8.0))
+        // تليجرام
+        add(ServiceItem(1801,"telegram_members_channels","أعضاء قنوات تيلي 1k - $3.0",1000,3.0))
+        add(ServiceItem(1901,"telegram_members_groups","أعضاء كروبات تيلي 1k - $3.0",1000,3.0))
 
-        // اعضاء قنوات تيلي
-        add(ServiceItem(1801,"telegram_members_channels","اعضاء قنوات تيلي 1k - 3.0$",1000,3.0))
-        add(ServiceItem(1802,"telegram_members_channels","اعضاء قنوات تيلي 2k - 6.0$",2000,6.0))
-        add(ServiceItem(1803,"telegram_members_channels","اعضاء قنوات تيلي 3k - 9.0$",3000,9.0))
-        add(ServiceItem(1804,"telegram_members_channels","اعضاء قنوات تيلي 4k - 12.0$",4000,12.0))
-        add(ServiceItem(1805,"telegram_members_channels","اعضاء قنوات تيلي 5k - 15.0$",5000,15.0))
-
-        // اعضاء كروبات تيلي
-        add(ServiceItem(1901,"telegram_members_groups","اعضاء كروبات تيلي 1k - 3.0$",1000,3.0))
-        add(ServiceItem(1902,"telegram_members_groups","اعضاء كروبات تيلي 2k - 6.0$",2000,6.0))
-        add(ServiceItem(1903,"telegram_members_groups","اعضاء كروبات تيلي 3k - 9.0$",3000,9.0))
-        add(ServiceItem(1904,"telegram_members_groups","اعضاء كروبات تيلي 4k - 12.0$",4000,12.0))
-        add(ServiceItem(1905,"telegram_members_groups","اعضاء كروبات تيلي 5k - 15.0$",5000,15.0))
-
-        // لودو (ألماس/ذهب)
+        // لودو
         add(ServiceItem(2001,"ludo","لودو 810 الماسة - $4.0",810,4.0))
-        add(ServiceItem(2002,"ludo","لودو 2280 الماسة - $8.9",2280,8.9))
-        add(ServiceItem(2003,"ludo","لودو 5080 الماسة - $17.5",5080,17.5))
-        add(ServiceItem(2004,"ludo","لودو 12750 الماسة - $42.7",12750,42.7))
-        add(ServiceItem(2005,"ludo","لودو ذهب 66680 - $4.0",66680,4.0))
-        add(ServiceItem(2006,"ludo","لودو ذهب 219500 - $8.9",219500,8.9))
-        add(ServiceItem(2007,"ludo","لودو ذهب 1443000 - $17.5",1443000,17.5))
-        add(ServiceItem(2008,"ludo","لودو ذهب 3627000 - $42.7",3627000,42.7))
 
         // ببجي
         add(ServiceItem(2101,"pubg","ببجي 60 شدة - $2.0",60,2.0))
-        add(ServiceItem(2102,"pubg","ببجي 120 شدة - $4.0",120,4.0))
-        add(ServiceItem(2103,"pubg","ببجي 180 شدة - $6.0",180,6.0))
-        add(ServiceItem(2104,"pubg","ببجي 240 شدة - $8.0",240,8.0))
-        add(ServiceItem(2105,"pubg","ببجي 325 شدة - $9.0",325,9.0))
-        add(ServiceItem(2106,"pubg","ببجي 660 شدة - $15.0",660,15.0))
-        add(ServiceItem(2107,"pubg","ببجي 1800 شدة - $40.0",1800,40.0))
 
-        // آيتونز (السعر أولًا)
+        // ايتونز
         add(ServiceItem(2201,"itunes","$9.0 - شراء رصيد 5 ايتونز",5,9.0))
-        add(ServiceItem(2202,"itunes","$18.0 - شراء رصيد 10 ايتونز",10,18.0))
-        add(ServiceItem(2203,"itunes","$27.0 - شراء رصيد 15 ايتونز",15,27.0))
-        add(ServiceItem(2204,"itunes","$36.0 - شراء رصيد 20 ايتونز",20,36.0))
-        add(ServiceItem(2205,"itunes","$45.0 - شراء رصيد 25 ايتونز",25,45.0))
-        add(ServiceItem(2206,"itunes","$54.0 - شراء رصيد 30 ايتونز",30,54.0))
-        add(ServiceItem(2207,"itunes","$63.0 - شراء رصيد 35 ايتونز",35,63.0))
-        add(ServiceItem(2208,"itunes","$72.0 - شراء رصيد 40 ايتونز",40,72.0))
-        add(ServiceItem(2209,"itunes","$81.0 - شراء رصيد 45 ايتونز",45,81.0))
-        add(ServiceItem(2210,"itunes","$90.0 - شراء رصيد 50 ايتونز",50,90.0))
 
-        // رفع سكور بنك تيكتوك
+        // رفع سكور
         add(ServiceItem(2301,"bank_score","رفع سكور بنك (1000) - $2.0",1000,2.0))
-        add(ServiceItem(2302,"bank_score","رفع سكور بنك (2000) - $4.0",2000,4.0))
-        add(ServiceItem(2303,"bank_score","رفع سكور بنك (3000) - $6.0",3000,6.0))
-        add(ServiceItem(2304,"bank_score","رفع سكور بنك (10000) - $20.0",10000,20.0))
 
-        // شراء رصيد الشبكات (السعر أولًا)
+        // شراء رصيد الشبكات
         add(ServiceItem(2401,"balance_buy","$3.5 - شراء رصيد 2 دولار أثير",2,3.5))
-        add(ServiceItem(2402,"balance_buy","$7.0 - شراء رصيد 5 دولار أثير",5,7.0))
-        add(ServiceItem(2403,"balance_buy","$13.0 - شراء رصيد 10 دولار أثير",10,13.0))
-        add(ServiceItem(2404,"balance_buy","$19.0 - شراء رصيد 15 دولار أثير",15,19.0))
-        add(ServiceItem(2405,"balance_buy","$52.0 - شراء رصيد 40 دولار أثير",40,52.0))
-
         add(ServiceItem(2411,"balance_buy","$3.5 - شراء رصيد 2 دولار اسيا",2,3.5))
-        add(ServiceItem(2412,"balance_buy","$7.0 - شراء رصيد 5 دولار اسيا",5,7.0))
-        add(ServiceItem(2413,"balance_buy","$13.0 - شراء رصيد 10 دولار اسيا",10,13.0))
-        add(ServiceItem(2414,"balance_buy","$19.0 - شراء رصيد 15 دولار اسيا",15,19.0))
-        add(ServiceItem(2415,"balance_buy","$52.0 - شراء رصيد 40 دولار اسيا",40,52.0))
-
         add(ServiceItem(2421,"balance_buy","$3.5 - شراء رصيد 2 دولار كورك",2,3.5))
-        add(ServiceItem(2422,"balance_buy","$7.0 - شراء رصيد 5 دولار كورك",5,7.0))
-        add(ServiceItem(2423,"balance_buy","$13.0 - شراء رصيد 10 دولار كورك",10,13.0))
-        add(ServiceItem(2424,"balance_buy","$19.0 - شراء رصيد 15 دولار كورك",15,19.0))
     }
 
     fun byCategory(cat: String) = items.filter { it.category == cat }
@@ -314,13 +227,16 @@ class LocalRepo(private val ctx: Context) {
 // -------------------------
 sealed class Screen {
     object HOME: Screen()
-    data class SERVICE_LIST(val cat: String): Screen()
+    object SERVICES: Screen()                          // شاشة عرض أقسام الخدمات
+    data class SERVICE_LIST(val cat: String): Screen() // خدمات قسم محدد
     data class ORDER_CREATE(val item: ServiceItem): Screen()
     object BALANCE: Screen()
     object TOPUP_METHODS: Screen()
     object TOPUP_ASIACELL: Screen()
     data class TOPUP_SUPPORT(val method: String): Screen()
     object MY_ORDERS: Screen()
+    object REFERRAL: Screen()
+    object LEADERBOARD: Screen()
     object ADMIN_LOGIN: Screen()
     object ADMIN_PANEL: Screen()
 }
@@ -331,9 +247,7 @@ sealed class Screen {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            MaterialTheme { AppRoot() }
-        }
+        setContent { MaterialTheme { AppRoot() } }
     }
 }
 
@@ -358,7 +272,7 @@ fun AppRoot() {
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                         )
-                        SmallAdminButton { screen = Screen.ADMIN_LOGIN }
+                        SmallAdminButton { screen = Screen.ADMIN_LOGIN } // زر المالك أعلى اليمين
                     }
                 }
             )
@@ -368,15 +282,24 @@ fun AppRoot() {
             when (val s = screen) {
                 Screen.HOME -> HomeScreen(
                     user = user,
-                    onSection = { screen = Screen.SERVICE_LIST(it) },
+                    onOpenServices = { screen = Screen.SERVICES },
+                    onOrders = { screen = Screen.MY_ORDERS },
                     onBalance = { screen = Screen.BALANCE },
-                    onOrders = { screen = Screen.MY_ORDERS }
+                    onReferral = { screen = Screen.REFERRAL },
+                    onLeaderboard = { screen = Screen.LEADERBOARD },
                 )
+
+                Screen.SERVICES -> ServicesCategoriesScreen(
+                    onBack = { screen = Screen.HOME },
+                    onOpenCategory = { key -> screen = Screen.SERVICE_LIST(key) }
+                )
+
                 is Screen.SERVICE_LIST -> ServiceListScreen(
                     cat = s.cat,
-                    onBack = { screen = Screen.HOME },
-                    onPick = { screen = Screen.ORDER_CREATE(it) }
+                    onBack = { screen = Screen.SERVICES },
+                    onPick = { item -> screen = Screen.ORDER_CREATE(item) }
                 )
+
                 is Screen.ORDER_CREATE -> OrderCreateScreen(
                     repo = repo, userId = user.id, item = s.item,
                     onDone = {
@@ -385,16 +308,19 @@ fun AppRoot() {
                     },
                     onBack = { screen = Screen.SERVICE_LIST(s.item.category) }
                 )
+
                 Screen.BALANCE -> BalanceScreen(
                     repo = repo, userId = user.id,
                     onBack = { screen = Screen.HOME },
                     onTopup = { screen = Screen.TOPUP_METHODS }
                 )
+
                 Screen.TOPUP_METHODS -> TopupMethodsScreen(
                     onBack = { screen = Screen.BALANCE },
                     onAsiacell = { screen = Screen.TOPUP_ASIACELL },
                     onSupport = { method -> screen = Screen.TOPUP_SUPPORT(method) }
                 )
+
                 Screen.TOPUP_ASIACELL -> AsiacellCardScreen(
                     repo = repo, userId = user.id,
                     onBack = { screen = Screen.TOPUP_METHODS },
@@ -403,14 +329,20 @@ fun AppRoot() {
                         screen = Screen.BALANCE
                     }
                 )
+
                 is Screen.TOPUP_SUPPORT -> SupportTopupScreen(
                     method = s.method,
                     onBack = { screen = Screen.TOPUP_METHODS }
                 )
+
                 Screen.MY_ORDERS -> MyOrdersScreen(
                     repo = repo, userId = user.id,
                     onBack = { screen = Screen.HOME }
                 )
+
+                Screen.REFERRAL -> ReferralScreen(onBack = { screen = Screen.HOME })
+                Screen.LEADERBOARD -> LeaderboardScreen(onBack = { screen = Screen.HOME })
+
                 Screen.ADMIN_LOGIN -> AdminLoginScreen(
                     onCancel = { screen = Screen.HOME },
                     onOk = { pass ->
@@ -418,6 +350,7 @@ fun AppRoot() {
                         else Toast.makeText(ctx,"كلمة مرور خاطئة",Toast.LENGTH_SHORT).show()
                     }
                 )
+
                 Screen.ADMIN_PANEL -> AdminPanelScreen(
                     repo = repo,
                     onBack = { screen = Screen.HOME }
@@ -428,40 +361,92 @@ fun AppRoot() {
 }
 
 // -------------------------
-// الواجهات
+// واجهة المستخدم الرئيسية (ترتيب الأزرار القديم)
 // -------------------------
 @Composable
 fun HomeScreen(
     user: User,
-    onSection: (String) -> Unit,
-    onBalance: () -> Unit,
+    onOpenServices: () -> Unit,
     onOrders: () -> Unit,
+    onBalance: () -> Unit,
+    onReferral: () -> Unit,
+    onLeaderboard: () -> Unit,
 ) {
     val scroll = rememberScrollState()
     Column(
-        Modifier.fillMaxSize().padding(16.dp).verticalScroll(scroll)
+        Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(scroll)
     ) {
-        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFF7F7F7))) {
+        // بطاقة الرصيد أعلى الصفحة
+        Card(
+            Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFF7F7F7))
+        ) {
             Column(Modifier.padding(14.dp)) {
-                Text("رصيدك الحالي:", fontWeight = FontWeight.Bold, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
-                Text("$${"%.2f".format(user.balance)}", fontSize = 22.sp, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    GreenButton("رصيدي / شحن") { onBalance() }
-                    GreenButton("طلباتي") { onOrders() }
+                Text("أهلًا وسهلًا بكم في تطبيق خدمات راتلوزن", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "رصيدك الحالي:",
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text("$${"%.2f".format(user.balance)}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
+
         Spacer(Modifier.height(14.dp))
-        Text("الأقسام", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Spacer(Modifier.height(8.dp))
-        Catalog.sections.forEach { (key, title) ->
-            GreenItem(title) { onSection(key) }
-            Spacer(Modifier.height(8.dp))
+
+        // شبكة الأزرار الرئيسية (نفس الترتيب القديم)
+        Text("القائمة الرئيسية", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Spacer(Modifier.height(10.dp))
+
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // الصف 1
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Box(modifier = Modifier.weight(1f)) { GreenItem("الخدمات") { onOpenServices() } }
+                Box(modifier = Modifier.weight(1f)) { GreenItem("طلباتي") { onOrders() } }
+            }
+            // الصف 2
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Box(modifier = Modifier.weight(1f)) { GreenItem("رصيدي") { onBalance() } }
+                Box(modifier = Modifier.weight(1f)) { GreenItem("الإحالة") { onReferral() } }
+            }
+            // الصف 3
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Box(modifier = Modifier.weight(1f)) { GreenItem("المتصدرين 🎉") { onLeaderboard() } }
+                Spacer(Modifier.weight(1f))
+            }
         }
     }
 }
 
+// -------------------------
+// شاشة أقسام "الخدمات" (ترتيب ورجوع كما كان سابقًا)
+// -------------------------
+@Composable
+fun ServicesCategoriesScreen(
+    onBack: () -> Unit,
+    onOpenCategory: (String) -> Unit
+) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        BackButton(onBack)
+        Text("الخدمات", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(Catalog.sections.entries.toList()) { (key, title) ->
+                GreenItem(title) { onOpenCategory(key) }
+            }
+        }
+    }
+}
+
+// -------------------------
+// قائمة خدمات القسم المحدد
+// -------------------------
 @Composable
 fun ServiceListScreen(
     cat: String,
@@ -481,6 +466,9 @@ fun ServiceListScreen(
     }
 }
 
+// -------------------------
+// إنشاء الطلب
+// -------------------------
 @Composable
 fun OrderCreateScreen(
     repo: LocalRepo,
@@ -498,7 +486,7 @@ fun OrderCreateScreen(
         Text(item.display, fontWeight = FontWeight.Bold)
         Text("السعر: $${item.price} | الكمية: ${item.quantity}")
         Spacer(Modifier.height(12.dp))
-        androidx.compose.material3.OutlinedTextField(
+        OutlinedTextField(
             value = input, onValueChange = { input = it },
             label = { Text("أدخل رابط/يوزر أو بيانات الطلب") },
             modifier = Modifier.fillMaxWidth()
@@ -529,6 +517,9 @@ fun OrderCreateScreen(
     }
 }
 
+// -------------------------
+// رصيدي + طرق الشحن
+// -------------------------
 @Composable
 fun BalanceScreen(
     repo: LocalRepo,
@@ -609,7 +600,7 @@ fun AsiacellCardScreen(
         Spacer(Modifier.height(10.dp))
         Text("أرسل رقم الكارت المكون من 14 أو 16 رقم.")
         Spacer(Modifier.height(8.dp))
-        androidx.compose.material3.OutlinedTextField(
+        OutlinedTextField(
             value = code,
             onValueChange = { code = it.filter { ch -> ch.isDigit() }.take(20) },
             label = { Text("رقم الكارت") },
@@ -639,6 +630,9 @@ fun AsiacellCardScreen(
     }
 }
 
+// -------------------------
+// طلباتي
+// -------------------------
 @Composable
 fun MyOrdersScreen(repo: LocalRepo, userId: String, onBack: () -> Unit) {
     val orders = remember { mutableStateListOf<Order>() }
@@ -670,6 +664,45 @@ fun MyOrdersScreen(repo: LocalRepo, userId: String, onBack: () -> Unit) {
     }
 }
 
+// -------------------------
+// الإحالة (عرض بسيط)
+@Composable
+fun ReferralScreen(onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val clip = LocalClipboardManager.current
+    val invite = remember { "RAT-${UUID.randomUUID().toString().take(8)}" }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        BackButton(onBack)
+        Text("نظام الإحالة", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        Text("كود الدعوة الخاص بك:")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(invite, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.weight(1f))
+            GreenMini("نسخ") {
+                clip.setText(AnnotatedString(invite))
+                Toast.makeText(ctx,"تم نسخ الكود",Toast.LENGTH_SHORT).show()
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text("عند أول تمويل للمحالة تُضاف عمولة ثابتة لحسابك (مثال: $0.10).")
+    }
+}
+
+// -------------------------
+// المتصدرين (محلي مبسّط)
+@Composable
+fun LeaderboardScreen(onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        BackButton(onBack)
+        Text("المتصدرين 🎉", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        Text("سيتم عرض أعلى المستخدمين إنفاقًا هنا (عند ربط قاعدة بيانات).")
+    }
+}
+
+// -------------------------
+// دخول المالك + لوحة التحكم (ترتيب الأزرار كما طلبت)
+// -------------------------
 @Composable
 fun AdminLoginScreen(onCancel: () -> Unit, onOk: (String) -> Unit) {
     var pass by remember { mutableStateOf("") }
@@ -677,7 +710,7 @@ fun AdminLoginScreen(onCancel: () -> Unit, onOk: (String) -> Unit) {
         BackButton(onCancel)
         Text("تسجيل دخول المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
-        androidx.compose.material3.OutlinedTextField(
+        OutlinedTextField(
             value = pass, onValueChange = { pass = it },
             label = { Text("كلمة المرور") },
             visualTransformation = PasswordVisualTransformation(),
@@ -698,7 +731,6 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
         topups.clear(); topups.addAll(repo.loadTopups().sortedByDescending { it.submittedAt })
         orders.clear(); orders.addAll(repo.loadOrders().sortedByDescending { it.createdAt })
     }
-
     LaunchedEffect(Unit) { refreshAll() }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -706,91 +738,128 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
         Text("لوحة تحكم المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
 
+        // شبكة الأزرار (نفس الأسماء التي طلبتها)
+        Text("إجراءات سريعة", fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+
+        AdminGrid(
+            listOf(
+                "تعديل الاسعار والكميات",
+                "الطلبات المعلقه (الخدمات)",
+                "الكارتات المعلقه",
+                "طلبات شدات ببجي",
+                "طلبات شحن الايتونز",
+                "طلبات الارصدة المعلقه",
+                "طلبات لودو المعلقه",
+                "خصم الرصيد",
+                "اضافه رصيد",
+                "فحص حالة طلب API",
+                "فحص رصيد API",
+                "رصيد المستخدمين",
+                "عدد المستخدمين",
+                "ادارة المشرفين",
+                "الغاء حظر المستخدم",
+                "حظر المستخدم",
+                "اعلان التطبيق",
+                "اكواد خدمات API",
+                "نظام الاحالة",
+                "شرح الخصومات",
+                "المتصدرين"
+            )
+        ) { title ->
+            when (title) {
+                "الكارتات المعلقه" -> Unit // القسم التفصيلي أدناه
+                "الطلبات المعلقه (الخدمات)" -> Unit // سنعرض الطلبات أدناه
+                "اضافه رصيد" -> quickBalanceDialog(ctx, repo, add = true) { refreshAll() }
+                "خصم الرصيد" -> quickBalanceDialog(ctx, repo, add = false) { refreshAll() }
+                else -> Toast.makeText(ctx, "$title (قريبًا)", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
         Text("الكروت/الشحنات المعلقة", fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         val pendingTopups = topups.filter { it.status == TopupStatus.PENDING }
-        if (pendingTopups.isEmpty()) {
-            Text("لا توجد كروت معلقة حالياً.")
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(pendingTopups) { t ->
-                    var showApprove by remember { mutableStateOf(false) }
-                    var amount by remember { mutableStateOf("") }
+        if (pendingTopups.isEmpty()) Text("لا توجد كروت معلقة حالياً.")
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(pendingTopups) { t ->
+                var showApprove by remember { mutableStateOf(false) }
+                var amount by remember { mutableStateOf("") }
 
-                    Card {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(
-                                "الطريقة: ${when(t.method){
-                                    "asiacell"->"اسياسيل"; "superkey"->"سوبركي"; "usdt"->"USDT"; else->t.method
-                                }}",
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text("المستخدم: ${t.userId.take(8)}…")
-                            t.code?.let { Text("الكارت: $it") }
-                            Spacer(Modifier.height(6.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                GreenMini("اعتماد + رصيد") { showApprove = true }
-                                GreenMini("رفض") {
-                                    val list = repo.loadTopups().toMutableList()
-                                    val idx = list.indexOfFirst { it.id==t.id }
-                                    if (idx>=0) {
-                                        val tt = list[idx]; tt.status = TopupStatus.REJECTED
-                                        list[idx] = tt; repo.saveTopups(list); refreshAll()
-                                        Toast.makeText(ctx,"تم رفض الطلب",Toast.LENGTH_SHORT).show()
-                                    }
+                Card {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(
+                            "الطريقة: ${when(t.method){
+                                "asiacell"->"اسياسيل"; "superkey"->"سوبركي"; "usdt"->"USDT"; else->t.method
+                            }}",
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text("المستخدم: ${t.userId.take(8)}…")
+                        t.code?.let { Text("الكارت: $it") }
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            GreenMini("اعتماد + رصيد") { showApprove = true }
+                            GreenMini("رفض") {
+                                val list = repo.loadTopups().toMutableList()
+                                val idx = list.indexOfFirst { it.id==t.id }
+                                if (idx>=0) {
+                                    val tt = list[idx]; tt.status = TopupStatus.REJECTED
+                                    list[idx] = tt; repo.saveTopups(list); refreshAll()
+                                    Toast.makeText(ctx,"تم رفض الطلب",Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
                     }
+                }
 
-                    if (showApprove) {
-                        AlertDialog(
-                            onDismissRequest = { showApprove=false },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    val a = amount.toDoubleOrNull()
-                                    if (a==null || a<=0) {
-                                        Toast.makeText(ctx,"أدخل مبلغ صحيح",Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        val list = repo.loadTopups().toMutableList()
-                                        val idx = list.indexOfFirst { it.id==t.id }
-                                        if (idx>=0) {
-                                            val tt = list[idx]
-                                            tt.status = TopupStatus.APPROVED
-                                            tt.approvedAmount = a
-                                            list[idx] = tt
-                                            repo.saveTopups(list)
-                                            repo.credit(t.userId, a)
-                                            showApprove=false; refreshAll()
-                                            Toast.makeText(ctx,"تم إضافة $$a للمستخدم",Toast.LENGTH_LONG).show()
-                                        }
+                if (showApprove) {
+                    AlertDialog(
+                        onDismissRequest = { showApprove=false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                val a = amount.toDoubleOrNull()
+                                if (a==null || a<=0) {
+                                    Toast.makeText(ctx,"أدخل مبلغ صحيح",Toast.LENGTH_SHORT).show()
+                                } else {
+                                    val list = repo.loadTopups().toMutableList()
+                                    val idx = list.indexOfFirst { it.id==t.id }
+                                    if (idx>=0) {
+                                        val tt = list[idx]
+                                        tt.status = TopupStatus.APPROVED
+                                        tt.approvedAmount = a
+                                        list[idx] = tt
+                                        repo.saveTopups(list)
+                                        repo.credit(t.userId, a)
+                                        showApprove=false; refreshAll()
+                                        Toast.makeText(ctx,"تم إضافة $$a للمستخدم",Toast.LENGTH_LONG).show()
                                     }
-                                }) { Text("اعتماد") }
-                            },
-                            dismissButton = { TextButton(onClick = { showApprove=false }) { Text("إلغاء") } },
-                            title = { Text("اعتماد الكارت") },
-                            text = {
-                                Column {
-                                    Text("ضع مبلغ الشحن (بالدولار):")
-                                    androidx.compose.material3.OutlinedTextField(
-                                        value = amount,
-                                        onValueChange = { amount = it.filter { ch-> ch.isDigit() || ch=='.' } },
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                                    )
                                 }
+                            }) { Text("اعتماد") }
+                        },
+                        dismissButton = { TextButton(onClick = { showApprove=false }) { Text("إلغاء") } },
+                        title = { Text("اعتماد الكارت") },
+                        text = {
+                            Column {
+                                Text("ضع مبلغ الشحن (بالدولار):")
+                                OutlinedTextField(
+                                    value = amount,
+                                    onValueChange = { amount = it.filter { ch-> ch.isDigit() || ch=='.' } },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                )
                             }
-                        )
-                    }
+                        }
+                    )
                 }
             }
         }
 
         Spacer(Modifier.height(18.dp))
-        Text("الطلبات", fontWeight = FontWeight.Bold)
+        Text("الطلبات (قيد المراجعة/التنفيذ)", fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        if (orders.isEmpty()) Text("لا توجد طلبات.")
+        val reviewOrders = orders.filter { it.status==OrderStatus.PENDING || it.status==OrderStatus.IN_PROGRESS }
+        if (reviewOrders.isEmpty()) Text("لا توجد طلبات.")
         else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(orders) { o ->
+            items(reviewOrders) { o ->
                 Card {
                     Column(Modifier.padding(12.dp)) {
                         Text(o.serviceDisplay, fontWeight = FontWeight.Bold)
@@ -825,8 +894,57 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
     }
 }
 
+// حوار سريع لإضافة/خصم رصيد
+@Composable
+private fun quickBalanceDialog(
+    ctx: Context,
+    repo: LocalRepo,
+    add: Boolean,
+    onDone: () -> Unit
+) {
+    var open by remember { mutableStateOf(true) }
+    var uid by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    if (!open) return
+
+    AlertDialog(
+        onDismissRequest = { open = false },
+        confirmButton = {
+            TextButton(onClick = {
+                val a = amount.toDoubleOrNull()
+                if (uid.isBlank() || a==null || a<=0) {
+                    Toast.makeText(ctx,"أدخل معرّف مستخدم ومبلغ صحيح",Toast.LENGTH_SHORT).show()
+                } else {
+                    if (add) repo.credit(uid, a) else {
+                        val ok = repo.debit(uid, a)
+                        if (!ok) { Toast.makeText(ctx,"رصيد غير كافٍ أو مستخدم غير مطابق",Toast.LENGTH_SHORT).show() }
+                    }
+                    open = false; onDone()
+                    Toast.makeText(ctx, if (add) "تمت إضافة $$a" else "تم الخصم $$a", Toast.LENGTH_SHORT).show()
+                }
+            }) { Text(if (add) "تنفيذ الإضافة" else "تنفيذ الخصم") }
+        },
+        dismissButton = { TextButton(onClick = { open = false }) { Text("إلغاء") } },
+        title = { Text(if (add) "إضافة رصيد" else "خصم رصيد") },
+        text = {
+            Column {
+                Text("أدخل معرّف المستخدم (User ID) والمبلغ بالدولار:")
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = uid, onValueChange = { uid = it }, label = { Text("User ID") })
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch=='.' } },
+                    label = { Text("Amount $") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+            }
+        }
+    )
+}
+
 // -------------------------
-// عناصر واجهة مشتركة
+// عناصر واجهة مشتركة (نفس الألوان/الأشكال الحالية)
 // -------------------------
 @Composable fun BackButton(onBack: () -> Unit) { TextButton(onClick = onBack) { Text("رجوع") } }
 
@@ -879,4 +997,17 @@ fun SmallAdminButton(onClick: () -> Unit) {
             .padding(horizontal = 12.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) { Text("دخول المالك", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+}
+
+@Composable
+private fun AdminGrid(titles: List<String>, onClick: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        val rows = titles.chunked(2)
+        rows.forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                row.forEach { t -> Box(Modifier.weight(1f)) { GreenItem(t) { onClick(t) } } }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
 }

@@ -1,23 +1,33 @@
 @file:OptIn(
-    androidx.compose.material3.ExperimentalMaterial3Api::class,
-    androidx.compose.foundation.ExperimentalFoundationApi::class
+    androidx.compose.material3.ExperimentalMaterial3Api::class
 )
 
 package com.zafer.smm
 
-import android.content.*
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +36,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -44,7 +55,7 @@ enum class OrderStatus { PENDING, IN_PROGRESS, DONE, REJECTED }
 data class ServiceItem(
     val id: Int,
     val category: String,
-    val display: String,   // نص الزر كاملًا كما في البوت (الاسم+الكمية+السعر)
+    val display: String,   // نص الزر كما في البوت (الاسم + الكمية + السعر)
     val quantity: Int,
     val price: Double
 )
@@ -72,11 +83,11 @@ data class TopupRequest(
 )
 
 // -------------------------
-// كاتالوج الخدمات (مطابق للصور حرفيًا)
+// كاتالوج الخدمات (مطابق للصور/الأسماء/الكميات/الأسعار)
 // -------------------------
 object Catalog {
 
-    // ترتيب الأقسام كما بالبوت
+    // ترتيب الأقسام
     val sections: LinkedHashMap<String, String> = linkedMapOf(
         "tiktok_followers" to "متابعين تيكتوك",
         "instagram_followers" to "متابعين انستغرام",
@@ -160,7 +171,7 @@ object Catalog {
         add(ServiceItem(1904,"telegram_members_groups","اعضاء كروبات تيلي 4k - 12.0$",4000,12.0))
         add(ServiceItem(1905,"telegram_members_groups","اعضاء كروبات تيلي 5k - 15.0$",5000,15.0))
 
-        // لودو ألماس وذهب
+        // لودو (ألماس/ذهب)
         add(ServiceItem(2001,"ludo","لودو 810 الماسة - $4.0",810,4.0))
         add(ServiceItem(2002,"ludo","لودو 2280 الماسة - $8.9",2280,8.9))
         add(ServiceItem(2003,"ludo","لودو 5080 الماسة - $17.5",5080,17.5))
@@ -179,7 +190,7 @@ object Catalog {
         add(ServiceItem(2106,"pubg","ببجي 660 شدة - $15.0",660,15.0))
         add(ServiceItem(2107,"pubg","ببجي 1800 شدة - $40.0",1800,40.0))
 
-        // آيتونز (السعر أولاً كما بالصورة)
+        // آيتونز (السعر أولًا)
         add(ServiceItem(2201,"itunes","$9.0 - شراء رصيد 5 ايتونز",5,9.0))
         add(ServiceItem(2202,"itunes","$18.0 - شراء رصيد 10 ايتونز",10,18.0))
         add(ServiceItem(2203,"itunes","$27.0 - شراء رصيد 15 ايتونز",15,27.0))
@@ -197,7 +208,7 @@ object Catalog {
         add(ServiceItem(2303,"bank_score","رفع سكور بنك (3000) - $6.0",3000,6.0))
         add(ServiceItem(2304,"bank_score","رفع سكور بنك (10000) - $20.0",10000,20.0))
 
-        // شراء رصيد الشبكات (أثير/اسيا/كورك) — السعر أولاً كما بالصورة
+        // شراء رصيد الشبكات (السعر أولًا)
         add(ServiceItem(2401,"balance_buy","$3.5 - شراء رصيد 2 دولار أثير",2,3.5))
         add(ServiceItem(2402,"balance_buy","$7.0 - شراء رصيد 5 دولار أثير",5,7.0))
         add(ServiceItem(2403,"balance_buy","$13.0 - شراء رصيد 10 دولار أثير",10,13.0))
@@ -321,7 +332,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme(colorScheme = lightColorScheme()) { AppRoot() }
+            MaterialTheme { AppRoot() }
         }
     }
 }
@@ -337,14 +348,18 @@ fun AppRoot() {
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "خدمات راتلوزن",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .combinedClickable(onClick = {}, onLongClick = { screen = Screen.ADMIN_LOGIN }),
-                        textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "خدمات راتلوزن",
+                            modifier = Modifier.weight(1f),
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                        )
+                        SmallAdminButton { screen = Screen.ADMIN_LOGIN }
+                    }
                 }
             )
         }
@@ -364,8 +379,8 @@ fun AppRoot() {
                 )
                 is Screen.ORDER_CREATE -> OrderCreateScreen(
                     repo = repo, userId = user.id, item = s.item,
-                    onDone = { ok ->
-                        if (ok) Toast.makeText(LocalContext.current,"تم إرسال الطلب وخصم الرصيد",Toast.LENGTH_SHORT).show()
+                    onDone = {
+                        if (it) Toast.makeText(LocalContext.current,"تم إرسال الطلب وخصم الرصيد",Toast.LENGTH_SHORT).show()
                         screen = Screen.MY_ORDERS
                     },
                     onBack = { screen = Screen.SERVICE_LIST(s.item.category) }
@@ -399,7 +414,7 @@ fun AppRoot() {
                 Screen.ADMIN_LOGIN -> AdminLoginScreen(
                     onCancel = { screen = Screen.HOME },
                     onOk = { pass ->
-                        if (pass == "ratluzen") screen = Screen.ADMIN_PANEL
+                        if (pass.trim() == "2000") screen = Screen.ADMIN_PANEL
                         else Toast.makeText(LocalContext.current,"كلمة مرور خاطئة",Toast.LENGTH_SHORT).show()
                     }
                 )
@@ -483,7 +498,7 @@ fun OrderCreateScreen(
         Text(item.display, fontWeight = FontWeight.Bold)
         Text("السعر: $${item.price} | الكمية: ${item.quantity}")
         Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
+        androidx.compose.material3.OutlinedTextField(
             value = input, onValueChange = { input = it },
             label = { Text("أدخل رابط/يوزر أو بيانات الطلب") },
             modifier = Modifier.fillMaxWidth()
@@ -521,7 +536,8 @@ fun BalanceScreen(
     onBack: () -> Unit,
     onTopup: () -> Unit
 ) {
-    val user by remember { mutableStateOf(repo.getOrCreateUser()) }
+    val userState = remember { mutableStateOf(repo.getOrCreateUser()) }
+    val user = userState.value
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         BackButton(onBack)
         Text("رصيدي", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -566,7 +582,7 @@ fun SupportTopupScreen(method: String, onBack: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GreenButton("نسخ الرقم") {
-                clip.setText(androidx.compose.ui.text.AnnotatedString(phone))
+                clip.setText(AnnotatedString(phone))
                 Toast.makeText(ctx,"تم نسخ الرقم",Toast.LENGTH_SHORT).show()
             }
             GreenButton("فتح واتساب") {
@@ -592,7 +608,7 @@ fun AsiacellCardScreen(
         Spacer(Modifier.height(10.dp))
         Text("أرسل رقم الكارت المكون من 14 أو 16 رقم.")
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
+        androidx.compose.material3.OutlinedTextField(
             value = code,
             onValueChange = { code = it.filter { ch -> ch.isDigit() }.take(20) },
             label = { Text("رقم الكارت") },
@@ -623,9 +639,7 @@ fun AsiacellCardScreen(
 
 @Composable
 fun MyOrdersScreen(repo: LocalRepo, userId: String, onBack: () -> Unit) {
-    val orders = remember { mutableStateListOf<Order>().apply {
-        addAll(repo.loadOrders().filter { it.userId==userId }.sortedByDescending { it.createdAt })
-    } }
+    val orders = remember { mutableStateListOf<Order>() }
     LaunchedEffect(Unit) {
         orders.clear()
         orders.addAll(repo.loadOrders().filter { it.userId==userId }.sortedByDescending { it.createdAt })
@@ -661,7 +675,7 @@ fun AdminLoginScreen(onCancel: () -> Unit, onOk: (String) -> Unit) {
         BackButton(onCancel)
         Text("تسجيل دخول المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
-        OutlinedTextField(
+        androidx.compose.material3.OutlinedTextField(
             value = pass, onValueChange = { pass = it },
             label = { Text("كلمة المرور") },
             visualTransformation = PasswordVisualTransformation(),
@@ -675,12 +689,16 @@ fun AdminLoginScreen(onCancel: () -> Unit, onOk: (String) -> Unit) {
 @Composable
 fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
     val ctx = LocalContext.current
-    val topups = remember { mutableStateListOf<TopupRequest>().apply { addAll(repo.loadTopups().sortedByDescending { it.submittedAt }) } }
-    val orders = remember { mutableStateListOf<Order>().apply { addAll(repo.loadOrders().sortedByDescending { it.createdAt }) } }
+    val topups = remember { mutableStateListOf<TopupRequest>() }
+    val orders = remember { mutableStateListOf<Order>() }
+
     fun refreshAll() {
+        // ملاحظة: هذه الدالة غير Composable ولا تستدعي أي Composable
         topups.clear(); topups.addAll(repo.loadTopups().sortedByDescending { it.submittedAt })
         orders.clear(); orders.addAll(repo.loadOrders().sortedByDescending { it.createdAt })
     }
+
+    LaunchedEffect(Unit) { refreshAll() }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         BackButton(onBack)
@@ -689,60 +707,28 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
 
         Text("الكروت/الشحنات المعلقة", fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        if (topups.none { it.status == TopupStatus.PENDING }) {
+        val pendingTopups = topups.filter { it.status == TopupStatus.PENDING }
+        if (pendingTopups.isEmpty()) {
             Text("لا توجد كروت معلقة حالياً.")
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(topups.filter { it.status==TopupStatus.PENDING }) { t ->
+                items(pendingTopups) { t ->
+                    var showApprove by remember { mutableStateOf(false) }
+                    var amount by remember { mutableStateOf("") }
+
                     Card {
                         Column(Modifier.padding(12.dp)) {
-                            Text("الطريقة: ${when(t.method){
-                                "asiacell"->"اسياسيل"; "superkey"->"سوبركي"; "usdt"->"USDT"; else->t.method
-                            }}", fontWeight = FontWeight.Bold)
+                            Text(
+                                "الطريقة: ${when(t.method){
+                                    "asiacell"->"اسياسيل"; "superkey"->"سوبركي"; "usdt"->"USDT"; else->t.method
+                                }}",
+                                fontWeight = FontWeight.Bold
+                            )
                             Text("المستخدم: ${t.userId.take(8)}…")
                             t.code?.let { Text("الكارت: $it") }
                             Spacer(Modifier.height(6.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                var show by remember { mutableStateOf(false) }
-                                var amount by remember { mutableStateOf("") }
-                                if (show) {
-                                    AlertDialog(
-                                        onDismissRequest = { show=false },
-                                        confirmButton = {
-                                            TextButton(onClick = {
-                                                val a = amount.toDoubleOrNull()
-                                                if (a==null || a<=0) {
-                                                    Toast.makeText(ctx,"أدخل مبلغ صحيح",Toast.LENGTH_SHORT).show()
-                                                } else {
-                                                    val list = repo.loadTopups().toMutableList()
-                                                    val idx = list.indexOfFirst { it.id==t.id }
-                                                    if (idx>=0) {
-                                                        val tt = list[idx]
-                                                        tt.status = TopupStatus.APPROVED
-                                                        tt.approvedAmount = a
-                                                        list[idx] = tt
-                                                        repo.saveTopups(list)
-                                                        repo.credit(t.userId, a)
-                                                        show=false; refreshAll()
-                                                        Toast.makeText(ctx,"تم إضافة $$a للمستخدم",Toast.LENGTH_LONG).show()
-                                                    }
-                                                }
-                                            }) { Text("اعتماد") }
-                                        },
-                                        dismissButton = { TextButton(onClick = { show=false }) { Text("إلغاء") } },
-                                        title = { Text("اعتماد الكارت") },
-                                        text = {
-                                            Column {
-                                                Text("ضع مبلغ الشحن (بالدولار):")
-                                                OutlinedTextField(
-                                                    value = amount, onValueChange = { amount = it.filter { ch-> ch.isDigit() || ch=='.' } },
-                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                                                )
-                                            }
-                                        }
-                                    )
-                                }
-                                GreenMini("اعتماد + رصيد") { show = true }
+                                GreenMini("اعتماد + رصيد") { showApprove = true }
                                 GreenMini("رفض") {
                                     val list = repo.loadTopups().toMutableList()
                                     val idx = list.indexOfFirst { it.id==t.id }
@@ -754,6 +740,45 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
                                 }
                             }
                         }
+                    }
+
+                    if (showApprove) {
+                        AlertDialog(
+                            onDismissRequest = { showApprove=false },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    val a = amount.toDoubleOrNull()
+                                    if (a==null || a<=0) {
+                                        Toast.makeText(ctx,"أدخل مبلغ صحيح",Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        val list = repo.loadTopups().toMutableList()
+                                        val idx = list.indexOfFirst { it.id==t.id }
+                                        if (idx>=0) {
+                                            val tt = list[idx]
+                                            tt.status = TopupStatus.APPROVED
+                                            tt.approvedAmount = a
+                                            list[idx] = tt
+                                            repo.saveTopups(list)
+                                            repo.credit(t.userId, a)
+                                            showApprove=false; refreshAll()
+                                            Toast.makeText(ctx,"تم إضافة $$a للمستخدم",Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }) { Text("اعتماد") }
+                            },
+                            dismissButton = { TextButton(onClick = { showApprove=false }) { Text("إلغاء") } },
+                            title = { Text("اعتماد الكارت") },
+                            text = {
+                                Column {
+                                    Text("ضع مبلغ الشحن (بالدولار):")
+                                    androidx.compose.material3.OutlinedTextField(
+                                        value = amount,
+                                        onValueChange = { amount = it.filter { ch-> ch.isDigit() || ch=='.' } },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                    )
+                                }
+                            }
+                        )
                     }
                 }
             }
@@ -841,4 +866,16 @@ fun GreenItem(text: String, onClick: () -> Unit) {
     ) {
         Text(text, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     }
+}
+
+@Composable
+fun SmallAdminButton(onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xFF2E7D32))
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) { Text("دخول المالك", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
 }

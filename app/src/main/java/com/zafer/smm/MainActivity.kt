@@ -11,12 +11,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 // ---------------------- شاشات التطبيق البسيطة (تنقّل داخلي) ----------------------
 private sealed class Screen {
@@ -46,6 +48,7 @@ class MainActivity : ComponentActivity() {
 private fun AppRoot() {
     var current by remember { mutableStateOf<Screen>(Screen.Welcome) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -54,27 +57,27 @@ private fun AppRoot() {
             when (current) {
                 Screen.Welcome -> WelcomeScreen(
                     onOpenServices = { current = Screen.Services },
-                    onOpenOrders = { showSoon(snackbarHostState) },
-                    onOpenWallet = { showSoon(snackbarHostState) },
-                    onOpenReferral = { showSoon(snackbarHostState) },
-                    onOpenLeaderboard = { showSoon(snackbarHostState) },
+                    onOpenOrders = { showSoon(scope, snackbarHostState) },
+                    onOpenWallet = { showSoon(scope, snackbarHostState) },
+                    onOpenReferral = { showSoon(scope, snackbarHostState) },
+                    onOpenLeaderboard = { showSoon(scope, snackbarHostState) },
                     onOwnerClick = { current = Screen.AdminLogin }
                 )
 
                 Screen.Services -> ServicesScreen(
                     onBack = { current = Screen.Welcome },
-                    onCategoryClick = { /* افتح شاشة التفاصيل لاحقاً */ showSoon(snackbarHostState) }
+                    onCategoryClick = { showSoon(scope, snackbarHostState) }
                 )
 
                 Screen.AdminLogin -> AdminLoginScreen(
                     onBack = { current = Screen.Welcome },
                     onLoginOk = { current = Screen.AdminPanel },
-                    onLoginFail = { msg -> showSnack(snackbarHostState, msg) }
+                    onLoginFail = { msg -> showSnack(scope, snackbarHostState, msg) }
                 )
 
                 Screen.AdminPanel -> AdminPanelScreen(
                     onBack = { current = Screen.Welcome },
-                    onItemClick = { showSoon(snackbarHostState) }
+                    onItemClick = { showSoon(scope, snackbarHostState) }
                 )
             }
         }
@@ -108,22 +111,22 @@ private fun WelcomeScreen(
         )
         Spacer(Modifier.height(18.dp))
 
-        PrimaryButton(text = "الخدمات", onClick = onOpenServices)
+        PrimaryButton(label = "الخدمات", onClick = onOpenServices)
         Spacer(Modifier.height(10.dp))
-        PrimaryButton(text = "طلباتي", onClick = onOpenOrders)
+        PrimaryButton(label = "طلباتي", onClick = onOpenOrders)
         Spacer(Modifier.height(10.dp))
-        PrimaryButton(text = "رصيدي", onClick = onOpenWallet)
+        PrimaryButton(label = "رصيدي", onClick = onOpenWallet)
         Spacer(Modifier.height(10.dp))
-        PrimaryButton(text = "الإحالة", onClick = onOpenReferral)
+        PrimaryButton(label = "الإحالة", onClick = onOpenReferral)
         Spacer(Modifier.height(10.dp))
-        PrimaryButton(text = "المتصدرين 🎉", onClick = onOpenLeaderboard)
+        PrimaryButton(label = "المتصدرين 🎉", onClick = onOpenLeaderboard)
         Spacer(Modifier.height(18.dp))
         Divider()
         Spacer(Modifier.height(12.dp))
         PrimaryButton(
-            text = "دخول المالك",
-            onClick = onOwnerClick,
-            prominent = true
+            label = "دخول المالك",
+            prominent = true,
+            onClick = onOwnerClick
         )
     }
 }
@@ -131,6 +134,7 @@ private fun WelcomeScreen(
 // ---------------------- شاشة الأقسام داخل "الخدمات" ----------------------
 private data class ServiceCategory(val id: String, val title: String, val emoji: String)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ServicesScreen(
     onBack: () -> Unit,
@@ -198,10 +202,7 @@ private fun CategoryCard(cat: ServiceCategory, onClick: () -> Unit) {
             Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                cat.emoji,
-                fontSize = 28.sp
-            )
+            Text(cat.emoji, fontSize = 28.sp)
             Spacer(Modifier.height(8.dp))
             Text(
                 cat.title,
@@ -213,6 +214,7 @@ private fun CategoryCard(cat: ServiceCategory, onClick: () -> Unit) {
 }
 
 // ---------------------- شاشة تسجيل دخول المالك (كلمة مرور 2000) ----------------------
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AdminLoginScreen(
     onBack: () -> Unit,
@@ -247,18 +249,19 @@ private fun AdminLoginScreen(
                 singleLine = true
             )
             Spacer(Modifier.height(12.dp))
-            PrimaryButton(text = "دخول") {
+            PrimaryButton(label = "دخول", onClick = {
                 if (password == "2000") {
                     onLoginOk()
                 } else {
                     onLoginFail("كلمة المرور غير صحيحة")
                 }
-            }
+            })
         }
     }
 }
 
 // ---------------------- شاشة لوحة تحكم المالك (أزرار فقط الآن) ----------------------
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AdminPanelScreen(
     onBack: () -> Unit,
@@ -342,9 +345,10 @@ private fun AdminPanelScreen(
 // ---------------------- عناصر مساعدة ----------------------
 @Composable
 private fun PrimaryButton(
-    text: String,
-    onClick: () -> Unit,
-    prominent: Boolean = false
+    label: String,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    prominent: Boolean = false,
+    onClick: () -> Unit
 ) {
     val colors = if (prominent)
         ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
@@ -353,22 +357,19 @@ private fun PrimaryButton(
 
     Button(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
         colors = colors,
         shape = MaterialTheme.shapes.large,
         contentPadding = PaddingValues(vertical = 12.dp, horizontal = 16.dp)
     ) {
-        Text(text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(label, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
-private suspend fun showSnack(host: SnackbarHostState, msg: String) {
-    host.showSnackbar(message = msg, withDismissAction = true)
+private fun showSnack(scope: CoroutineScope, host: SnackbarHostState, msg: String) {
+    scope.launch { host.showSnackbar(message = msg, withDismissAction = true) }
 }
 
-private fun showSoon(host: SnackbarHostState) {
-    // إطلاق كوروتين بسيط لعرض سنackbar
-    LaunchedEffect(Unit) {
-        host.showSnackbar("سيتوفر قريبًا")
-    }
+private fun showSoon(scope: CoroutineScope, host: SnackbarHostState) {
+    scope.launch { host.showSnackbar("سيتوفر قريبًا") }
 }

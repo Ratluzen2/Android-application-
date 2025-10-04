@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -31,6 +32,7 @@ private enum class Screen {
     HOME, SERVICES, BALANCE, LEADERS, TIKTOK, INSTAGRAM
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AppRoot() {
     var current by remember { mutableStateOf(Screen.HOME) }
@@ -138,7 +140,7 @@ private fun ServicesScreen(
     }
 }
 
-/** شاشة الرصيد (مكان مبدئي – لاحقًا تربطها بالباكند) */
+/** شاشة الرصيد (مبدئيًا – لاحقًا تربطها بالباكند) */
 @Composable
 private fun BalanceScreen() {
     Column(
@@ -153,7 +155,7 @@ private fun BalanceScreen() {
     }
 }
 
-/** شاشة المتصدّرين (مكان مبدئي) */
+/** شاشة المتصدّرين (مبدئيًا) */
 @Composable
 private fun LeadersScreen() {
     val dummy = remember {

@@ -18,9 +18,32 @@ import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.BottomAppBarDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ElevatedButton
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Typography
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,21 +64,18 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * MainActivity
- * - يطلق شجرة Compose فقط داخل setContent
- * - لا يوجد أي استدعاء @Composable خارج السياق الصحيح
+ * - كل استدعاءات @Composable داخل setContent/Compose فقط.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent {
-            App()
-        }
+        setContent { App() }
     }
 }
 
 /* =========================
-   Theme (يمكن استبداله بثيم مشروعك)
+   Theme (بسيط ويمكن تغييره)
    ========================= */
 @Composable
 fun App() {
@@ -70,7 +90,7 @@ fun App() {
 }
 
 /* =========================
-   Navigation Destinations
+   Routes
    ========================= */
 private object Routes {
     const val USER_HOME = "user_home"
@@ -81,13 +101,13 @@ private object Routes {
 }
 
 /* =========================
-   ViewModel و نماذج البيانات
+   Models & ViewModel
    ========================= */
 data class Service(
     val id: String,
     val category: String,      // TikTok / Instagram / Telegram / PUBG
-    val name: String,          // اسم الخدمة الظاهر للمستخدم
-    val basePrice: Double,     // سعر 1000 وحدة مثلاً أو السعر الأساسي
+    val name: String,          // اسم الخدمة
+    val basePrice: Double,     // السعر الأساسي
     val minQty: Int,
     val maxQty: Int,
     val step: Int = 100,
@@ -102,7 +122,7 @@ data class Order(
 )
 
 class AppViewModel : ViewModel() {
-    // صلاحية المالك (يمكنك ربطها بتوثيق/إعداد حقيقي لاحقاً)
+    // صلاحية المالك (للتجربة؛ اربطها لاحقاً بمصدر حقيقي)
     private val _isOwner = MutableStateFlow(true)
     val isOwner: StateFlow<Boolean> = _isOwner
 
@@ -110,7 +130,7 @@ class AppViewModel : ViewModel() {
     private val _balance = MutableStateFlow(15.75)
     val balance: StateFlow<Double> = _balance
 
-    // قائمة الخدمات (موسّعة ويمكن تعديلها حياً)
+    // الخدمات (عينات قابلة للتعديل)
     private val _services = MutableStateFlow(
         listOf(
             Service("ttk_1", "TikTok", "متابعين تيكتوك 1k - سريع", 2.30, minQty = 100, maxQty = 100000, step = 100),
@@ -125,7 +145,7 @@ class AppViewModel : ViewModel() {
     )
     val services: StateFlow<List<Service>> = _services
 
-    // الطلبات (عينة)
+    // الطلبات (عينات)
     private val _orders = MutableStateFlow(
         listOf(
             Order("Z-10021", "متابعين تيكتوك 1k - سريع", 2000, 4.60, "مكتمل"),
@@ -135,25 +155,23 @@ class AppViewModel : ViewModel() {
     )
     val orders: StateFlow<List<Order>> = _orders
 
-    // تحديث السعر الأساسي لخدمة محددة (انعكاس فوري في الواجهة)
     fun updateServicePrice(id: String, newBasePrice: Double) {
         _services.value = _services.value.map {
             if (it.id == id) it.copy(basePrice = newBasePrice) else it
         }
     }
 
-    // مثال: تعبئة رصيد
     fun addBalance(amount: Double) {
         _balance.value = (_balance.value + amount).coerceAtLeast(0.0)
     }
 
-    // تبديل صلاحية المالك (لتجربة ظهور تبويب المالك)
     fun toggleOwner() { _isOwner.value = !_isOwner.value }
 }
 
 /* =========================
-   App Root with Bottom Navigation
+   App Root + Bottom Navigation
    ========================= */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppRoot(viewModel: AppViewModel = viewModel()) {
     val navController = rememberNavController()
@@ -164,7 +182,7 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
             CenterAlignedTopAppBar(
                 title = { Text("SMM App", fontWeight = FontWeight.SemiBold) },
                 actions = {
-                    // زر بسيط لتفعيل/إلغاء وضع المالك أثناء التطوير
+                    // مفتاح تبديل وضع المالك أثناء التطوير
                     TextButton(onClick = { viewModel.toggleOwner() }) {
                         Text(if (isOwner) "مالك: تشغيل" else "مالك: إيقاف")
                     }
@@ -181,16 +199,14 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
     }
 }
 
-/* =========================
-   Bottom Bar
-   ========================= */
 @Composable
 fun BottomBar(navController: NavHostController, isOwner: Boolean) {
     val items = remember(isOwner) {
         buildList {
             add(BottomItem("الرئيسية", Routes.USER_HOME, Icons.Filled.Home))
             add(BottomItem("الطلبات", Routes.USER_ORDERS, Icons.Filled.List))
-            add(BottomItem("المحفظة", Routes.USER_WALLET, Icons.Filled.Payments))
+            // استخدمت AccountCircle للمحفظة لضمان تواجد الأيقونة
+            add(BottomItem("المحفظة", Routes.USER_WALLET, Icons.Filled.AccountCircle))
             add(BottomItem("الدعم", Routes.USER_SUPPORT, Icons.Filled.Help))
             if (isOwner) add(BottomItem("لوحة المالك", Routes.OWNER_DASHBOARD, Icons.Filled.Dashboard))
         }
@@ -204,9 +220,8 @@ fun BottomBar(navController: NavHostController, isOwner: Boolean) {
         val currentRoute = navBackStackEntry?.destination?.route
 
         items.forEach { item ->
-            val selected = currentRoute == item.route
             NavigationBarItem(
-                selected = selected,
+                selected = currentRoute == item.route,
                 onClick = {
                     navController.navigate(item.route) {
                         popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -272,7 +287,7 @@ fun UserHomeScreen(viewModel: AppViewModel) {
         Text("الخدمات", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
 
-        // بحث بسيط
+        // بحث
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
@@ -280,7 +295,7 @@ fun UserHomeScreen(viewModel: AppViewModel) {
             modifier = Modifier.fillMaxWidth()
         )
 
-        // فلاتر تصنيفات
+        // فلاتر تصنيف
         Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AssistChip(
                 onClick = { selectedCategory = null },
@@ -570,7 +585,7 @@ fun OwnerServiceRow(service: Service, onChangePrice: (Double) -> Unit) {
                 Text("تعديل السعر")
             }
             AssistChip(
-                onClick = { /* فتح مزيد من الإعدادات لاحقاً */ },
+                onClick = { /* إعدادات متقدمة لاحقاً */ },
                 label = { Text("إعدادات متقدمة") },
                 leadingIcon = { Icon(Icons.Filled.AccountCircle, contentDescription = null) }
             )
@@ -590,7 +605,7 @@ fun OwnerServiceRow(service: Service, onChangePrice: (Double) -> Unit) {
                     )
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "تلميح: السعر هنا هو الأساس الذي يحسب عليه التطبيق حِزم 1k/10k… أو القطع في PUBG.",
+                        "تلميح: هذا هو السعر الأساسي الذي تُحسب عليه حزم 1k/10k… أو القطع في PUBG.",
                         fontSize = 12.sp
                     )
                 }

@@ -17,9 +17,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.KeyboardOptions
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -130,15 +127,15 @@ class Prefs(ctx: Context) {
 data class Order(val id: Int, val title: String, val price: Double)
 
 sealed class Screen {
-    data object HOME : Screen()
-    data object SERVICES : Screen()
+    object HOME : Screen()
+    object SERVICES : Screen()
     data class SERVICE_LIST(val section: LocalSection) : Screen()
-    data object ORDERS : Screen()
-    data object BALANCE : Screen()
-    data object REFERRAL : Screen()
-    data object LEADERBOARD : Screen()
-    data object ADMIN_LOGIN : Screen()
-    data object ADMIN_DASHBOARD : Screen()
+    object ORDERS : Screen()
+    object BALANCE : Screen()
+    object REFERRAL : Screen()
+    object LEADERBOARD : Screen()
+    object ADMIN_LOGIN : Screen()
+    object ADMIN_DASHBOARD : Screen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -445,13 +442,12 @@ fun AdminLoginScreen(onBack: () -> Unit, onSuccess: () -> Unit) {
             Text("تسجيل دخول المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(16.dp))
 
+            // بدون KeyboardOptions لتفادي الخطأ
             OutlinedTextField(
                 value = pass,
                 onValueChange = { pass = it },
                 label = { Text("كلمة المرور") },
                 singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth()
             )
 

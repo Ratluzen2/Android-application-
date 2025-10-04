@@ -11,7 +11,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.AlertDialog
@@ -37,15 +39,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberDrawerState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,8 +58,8 @@ import kotlin.math.min
 import kotlin.math.round
 
 /**
- * كل استدعاءات @Composable داخل setContent/Compose فقط.
- * لا توجد تبعيات Navigation Compose — يبني مباشرة عبر GitHub Actions.
+ * تطبيق SMM Mobile — كل الميزات ضمن ملف واحد.
+ * بدون Navigation Compose — لا حاجة لأي تبعيات إضافية.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -97,91 +92,288 @@ enum class Screen {
 }
 
 /* =========================
-   Models & ViewModel
+   نماذج البيانات
    ========================= */
-data class Service(
-    val id: String,
-    val category: String,      // TikTok / Instagram / Telegram / PUBG
-    val name: String,          // اسم الخدمة (الأساس)
-    val basePrice: Double,     // السعر الأساسي
-    val minQty: Int,
-    val maxQty: Int,
-    val step: Int = 100,
-)
-
 data class Order(
-    val orderId: String,
+    val id: Int,
+    val userId: Int,
+    val category: String,
     val serviceName: String,
     val qty: Int,
     val price: Double,
-    val status: String
+    val status: String,
+    val link: String,
+    val timestamp: Long = System.currentTimeMillis()
 )
 
+data class CardSubmission(
+    val userId: Int,
+    val digits: String,
+    val ts: Long = System.currentTimeMillis()
+)
+
+/* =========================
+   ViewModel — تخزين الحالة والعمليات
+   ========================= */
 class AppViewModel : ViewModel() {
-    // صلاحية المالك (للتجربة؛ اربطها لاحقاً بمصدر حقيقي)
+
+    // --------- إعدادات عامة ---------
+    val currentUserId = 1
     private val _isOwner = MutableStateFlow(true)
     val isOwner: StateFlow<Boolean> = _isOwner
 
-    // رصيد المستخدم
+    private val _moderators = MutableStateFlow<Set<Int>>(emptySet())
+    val moderators: StateFlow<Set<Int>> = _moderators
+
     private val _balance = MutableStateFlow(15.75)
     val balance: StateFlow<Double> = _balance
 
-    // الخدمات (عينات قابلة للتعديل)
-    private val _services = MutableStateFlow(
-        listOf(
-            Service("ttk_1", "TikTok", "متابعين تيكتوك 1k - سريع", 2.30, minQty = 100, maxQty = 100_000, step = 100),
-            Service("ttk_2", "TikTok", "مشاهدات تيكتوك 10k", 0.90, minQty = 1_000, maxQty = 1_000_000, step = 1_000),
-            Service("ig_1", "Instagram", "متابعين انستغرام 1k - ثابت", 3.20, minQty = 100, maxQty = 100_000, step = 100),
-            Service("ig_2", "Instagram", "لايكات انستغرام 1k", 1.10, minQty = 100, maxQty = 500_000, step = 100),
-            Service("tg_1", "Telegram", "أعضاء قنوات تلي 6.0 - 2k", 6.0, minQty = 100, maxQty = 200_000, step = 100),
-            Service("tg_2", "Telegram", "مشاهدات تيليجرام 10k", 0.45, minQty = 1_000, maxQty = 2_000_000, step = 1_000),
-            Service("pubg_1", "PUBG", "UC شدات 60", 1.05, minQty = 1, maxQty = 100, step = 1),
-            Service("pubg_2", "PUBG", "UC شدات 325", 4.90, minQty = 1, maxQty = 100, step = 1),
-        )
+    // خرائط الخدمات (الأسماء والسعر الأساسي)
+    val servicesTikIgViewsLikesScore = linkedMapOf(
+        "متابعين تيكتوك 1k" to 3.50,
+        "متابعين تيكتوك 2k" to 7.0,
+        "متابعين تيكتوك 3k" to 10.50,
+        "متابعين تيكتوك 4k" to 14.0,
+        "مشاهدات تيكتوك 1k" to 0.10,
+        "مشاهدات تيكتوك 10k" to 0.80,
+        "مشاهدات تيكتوك 20k" to 1.60,
+        "مشاهدات تيكتوك 30k" to 2.40,
+        "مشاهدات تيكتوك 50k" to 3.20,
+        "متابعين انستغرام 1k" to 3.0,
+        "متابعين انستغرام 2k" to 6.0,
+        "متابعين انستغرام 3k" to 9.0,
+        "متابعين انستغرام 4k" to 12.0,
+        "لايكات تيكتوك 1k" to 1.0,
+        "لايكات تيكتوك 2k" to 2.0,
+        "لايكات تيكتوك 3k" to 3.0,
+        "لايكات تيكتوك 4k" to 4.0,
+        "لايكات انستغرام 1k" to 1.0,
+        "لايكات انستغرام 2k" to 2.0,
+        "لايكات انستغرام 3k" to 3.0,
+        "لايكات انستغرام 4k" to 4.0,
+        "مشاهدات انستغرام 10k" to 0.80,
+        "مشاهدات انستغرام 20k" to 1.60,
+        "مشاهدات انستغرام 30k" to 2.40,
+        "مشاهدات انستغرام 50k" to 3.20,
+        "مشاهدات بث تيكتوك 1k" to 2.0,
+        "مشاهدات بث تيكتوك 2k" to 4.0,
+        "مشاهدات بث تيكتوك 3k" to 6.0,
+        "مشاهدات بث تيكتوك 4k" to 8.0,
+        "مشاهدات بث انستغرام 1k" to 2.0,
+        "مشاهدات بث انستغرام 2k" to 4.0,
+        "مشاهدات بث انستغرام 3k" to 6.0,
+        "مشاهدات بث انستغرام 4k" to 8.0,
+        "رفع سكور بثك1k" to 2.0,
+        "رفع سكور بثك2k" to 4.0,
+        "رفع سكور بثك3k" to 6.0,
+        "رفع سكور بثك10k" to 20.0,
     )
-    val services: StateFlow<List<Service>> = _services
 
-    // الطلبات (عينات)
-    private val _orders = MutableStateFlow(
-        listOf(
-            Order("Z-10021", "متابعين تيكتوك 1k - سريع", 2000, 4.60, "مكتمل"),
-            Order("Z-10022", "UC شدات 325", 1, 4.90, "قيد التنفيذ"),
-            Order("Z-10023", "أعضاء قنوات تلي 6.0 - (500)", 500, 3.0, "ملغي"),
-        )
+    val servicesTelegram = linkedMapOf(
+        "اعضاء قنوات تلي 1k" to 3.0,
+        "اعضاء قنوات تلي 2k" to 6.0,
+        "اعضاء قنوات تلي 3k" to 9.0,
+        "اعضاء قنوات تلي 4k" to 12.0,
+        "اعضاء قنوات تلي 5k" to 15.0,
+        "اعضاء كروبات تلي 1k" to 3.0,
+        "اعضاء كروبات تلي 2k" to 6.0,
+        "اعضاء كروبات تلي 3k" to 9.0,
+        "اعضاء كروبات تلي 4k" to 12.0,
+        "اعضاء كروبات تلي 5k" to 15.0,
     )
+
+    val servicesPubg = linkedMapOf(
+        "ببجي 60 شدة" to 2.0,
+        "ببجي 120 شده" to 4.0,
+        "ببجي 180 شدة" to 6.0,
+        "ببجي 240 شدة" to 8.0,
+        "ببجي 325 شدة" to 9.0,
+        "ببجي 660 شدة" to 15.0,
+        "ببجي 1800 شدة" to 40.0,
+    )
+
+    val servicesItunes = linkedMapOf(
+        "شراء رصيد 5 ايتونز" to 9.0,
+        "شراء رصيد 10 ايتونز" to 18.0,
+        "شراء رصيد 15 ايتونز" to 27.0,
+        "شراء رصيد 20 ايتونز" to 36.0,
+        "شراء رصيد 25 ايتونز" to 45.0,
+        "شراء رصيد 30 ايتونز" to 54.0,
+        "شراء رصيد 35 ايتونز" to 63.0,
+        "شراء رصيد 40 ايتونز" to 72.0,
+        "شراء رصيد 45 ايتونز" to 81.0,
+        "شراء رصيد 50 ايتونز" to 90.0,
+    )
+
+    val servicesMobile = linkedMapOf(
+        "شراء رصيد 2دولار اثير" to 2.0,
+        "شراء رصيد 5دولار اثير" to 5.0,
+        "شراء رصيد 10دولار اثير" to 10.0,
+        "شراء رصيد 15دولار اثير" to 15.0,
+        "شراء رصيد 40دولار اثير" to 40.0,
+        "شراء رصيد 2دولار اسيا" to 2.0,
+        "شراء رصيد 5دولار اسيا" to 5.0,
+        "شراء رصيد 10دولار اسيا" to 10.0,
+        "شراء رصيد 15دولار اسيا" to 15.0,
+        "شراء رصيد 40دولار اسيا" to 40.0,
+        "شراء رصيد 2دولار كورك" to 2.0,
+        "شراء رصيد 5دولار كورك" to 5.0,
+        "شراء رصيد 10دولار كورك" to 10.0,
+        "شراء رصيد 15دولار كورك" to 15.0,
+        "شراء رصيد 40دولار كورك" to 40.0,
+    )
+
+    val servicesLudo = linkedMapOf(
+        "لودو 810 الماسة" to 3.0,
+        "لودو 2280 الماسة" to 7.0,
+        "لودو 5080 الماسة" to 13.0,
+        "لودو 12750 الماسة" to 28.0,
+        "لودو 66680 ذهب" to 3.0,
+        "لودو 219500 ذهب" to 7.0,
+        "لودو 1443000 ذهب" to 13.0,
+        "لودو 3627000 ذهب" to 28.0,
+    )
+
+    // Overrides
+    private val _priceOverrides = MutableStateFlow<Map<String, Double>>(emptyMap())
+    val priceOverrides: StateFlow<Map<String, Double>> = _priceOverrides
+
+    private val _qtyOverrides = MutableStateFlow<Map<String, Int>>(emptyMap()) // لكل خدمة، كمية افتراضية مخصصة
+    val qtyOverrides: StateFlow<Map<String, Int>> = _qtyOverrides
+
+    // طلبات + إرسال كروت
+    private val _orders = MutableStateFlow<List<Order>>(emptyList())
     val orders: StateFlow<List<Order>> = _orders
+    private var orderAutoId = 10000
 
-    fun updateServicePrice(id: String, newBasePrice: Double) {
-        _services.value = _services.value.map {
-            if (it.id == id) it.copy(basePrice = newBasePrice) else it
-        }
+    private val cardSubmissions = mutableListOf<CardSubmission>()
+    private val CARD_DUP_LIMIT = 2
+    private val CARD_SPAM_COUNT = 5
+    private val CARD_SPAM_WINDOW_MS = 120_000L
+
+    // --------- عمليات ---------
+    fun toggleOwner() { _isOwner.value = !_isOwner.value }
+
+    fun isModerator(userId: Int): Boolean = _moderators.value.contains(userId)
+    fun addModerator(userId: Int) { _moderators.value = _moderators.value + userId }
+    fun removeModerator(userId: Int) { _moderators.value = _moderators.value - userId }
+
+    fun setPriceOverride(serviceName: String, price: Double) {
+        _priceOverrides.value = _priceOverrides.value.toMutableMap().apply { this[serviceName] = price }
+    }
+
+    fun setQtyOverride(serviceName: String, qty: Int) {
+        _qtyOverrides.value = _qtyOverrides.value.toMutableMap().apply { this[serviceName] = qty }
+    }
+
+    fun effectiveBasePrice(userId: Int, serviceName: String, defaultPrice: Double): Double {
+        val base = _priceOverrides.value[serviceName] ?: defaultPrice
+        return if (isModerator(userId)) round2(base * 0.9) else base
+    }
+
+    fun addOrder(
+        userId: Int,
+        category: String,
+        serviceName: String,
+        qty: Int,
+        price: Double,
+        link: String
+    ) {
+        val o = Order(
+            id = ++orderAutoId,
+            userId = userId,
+            category = category,
+            serviceName = serviceName,
+            qty = qty,
+            price = round2(price),
+            status = "pending",
+            link = link
+        )
+        _orders.value = listOf(o) + _orders.value
     }
 
     fun addBalance(amount: Double) {
         _balance.value = (_balance.value + amount).coerceAtLeast(0.0)
     }
 
-    fun toggleOwner() { _isOwner.value = !_isOwner.value }
+    fun withdrawBalance(amount: Double): Boolean {
+        return if (amount <= _balance.value) {
+            _balance.value -= amount
+            true
+        } else false
+    }
+
+    fun submitCard(userId: Int, digits: String): Pair<Boolean, String> {
+        val now = System.currentTimeMillis()
+        // تكرار لنفس الرقم
+        val dupCount = cardSubmissions.count { it.userId == userId && it.digits == digits }
+        if (dupCount > CARD_DUP_LIMIT) return false to "مرفوض: تكرار لنفس رقم الكارت"
+
+        // سبام خلال نافذة زمنية
+        val recentCount = cardSubmissions.count { it.userId == userId && it.ts >= now - CARD_SPAM_WINDOW_MS }
+        if (recentCount > CARD_SPAM_COUNT) return false to "مرفوض: محاولات كثيرة خلال وقت قصير"
+
+        cardSubmissions += CardSubmission(userId, digits, now)
+        return true to "تم إرسال الكارت للمراجعة"
+    }
+
+    // أدوات عامة
+    private fun round2(v: Double) = kotlin.math.round(v * 100.0) / 100.0
 }
 
 /* =========================
-   Helpers: حساب السعر + صياغة اسم تليجرام
+   Helpers: التسعير + تنسيق أسماء التليجرام + استخراج الكمية
    ========================= */
-private fun priceFor(service: Service, qty: Int): Double {
-    val divisor = when {
-        service.category == "PUBG" -> 1
-        service.name.contains("10k", ignoreCase = true) -> 10_000
-        else -> 1_000
+private fun stripK(s: String): String = s.replace("k", "", ignoreCase = true)
+
+private fun cleanedTitleWithoutQty(name: String): String {
+    val patterns = listOf(
+        "\\s*\\d+\\s*k\\b",
+        "\\s*\\d+k\\b",
+        "\\s*\\d+\\s*شدة",
+        "\\s*\\d+\\s*ايتونز",
+        "\\s*\\d+\\s*دولار\\s*(?:اثير|اسيا|كورك)",
+        "\\s*\\d+\\s*(?:الماسة|ذهب)",
+        "بثك\\s*\\d+\\s*k\\b",
+    )
+    var base = name
+    patterns.forEach { pat ->
+        base = Regex(pat, RegexOption.IGNORE_CASE).replace(base, "").trim()
     }
-    val raw = service.basePrice * (qty.toDouble() / divisor.toDouble())
+    return stripK(base).trim()
+}
+
+private fun extractQtyFromName(name: String): Int {
+    // 10k -> 10000, 1k -> 1000, أو آخر رقم موجود كـ Fallback
+    val kMatch = Regex("(\\d+)\\s*k\\b", RegexOption.IGNORE_CASE).find(name) ?:
+    Regex("(\\d+)k\\b", RegexOption.IGNORE_CASE).find(name) ?:
+    Regex("(\\d+)k", RegexOption.IGNORE_CASE).find(name)
+    if (kMatch != null) return kMatch.groupValues[1].toInt() * 1000
+    val num = Regex("(\\d+)").findAll(name).lastOrNull()?.groupValues?.getOrNull(1)
+    return num?.toIntOrNull() ?: 1000
+}
+
+private fun labelForTelegram(baseName: String, qty: Int): String {
+    val title = cleanedTitleWithoutQty(baseName)
+    return "$title - ($qty)" // بدون k
+}
+
+private fun priceFor(serviceName: String, qty: Int, basePrice: Double): Double {
+    val div = when {
+        serviceName.contains("10k", ignoreCase = true) -> 10000.0
+        serviceName.contains("ببجي") || serviceName.contains("شدة") -> 1.0
+        else -> 1000.0
+    }
+    val raw = basePrice * (qty.toDouble() / div)
     return (round(raw * 100.0) / 100.0)
 }
 
-private fun formatTelegramName(baseName: String, qty: Int): String {
-    // إزالة أي لاحقة " - <number>k" من الاسم الأساسي
-    val cleaned = baseName.replace(Regex("\\s*-\\s*\\d+\\s*k?", RegexOption.IGNORE_CASE), "")
-    // مطلوب: إظهار الكمية بين قوسين بدون k
-    return "$cleaned - ($qty)"
+private fun stepFor(serviceName: String): Int {
+    return when {
+        serviceName.contains("ببجي") || serviceName.contains("شدة") -> 1
+        serviceName.contains("10k", ignoreCase = true) || serviceName.contains("k", ignoreCase = true) -> 1000
+        else -> 1000
+    }
 }
 
 /* =========================
@@ -192,8 +384,6 @@ private fun formatTelegramName(baseName: String, qty: Int): String {
 fun AppRoot(viewModel: AppViewModel = viewModel()) {
     var current by rememberSaveable { mutableStateOf(Screen.USER_HOME) }
     val isOwner by viewModel.isOwner.collectAsState()
-
-    // Drawer
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
@@ -224,7 +414,6 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                     },
                     title = { Text("SMM App", fontWeight = FontWeight.SemiBold) },
                     actions = {
-                        // مفتاح تبديل وضع المالك أثناء التطوير
                         TextButton(onClick = { viewModel.toggleOwner() }) {
                             Text(if (isOwner) "مالك: تشغيل" else "مالك: إيقاف")
                         }
@@ -232,19 +421,12 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                 )
             },
             bottomBar = {
-                BottomBar(
-                    current = current,
-                    isOwner = isOwner,
-                    onSelect = { current = it }
-                )
+                BottomBar(current = current, isOwner = isOwner) { current = it }
             }
         ) { padding ->
             Box(Modifier.padding(padding)) {
                 when (current) {
-                    Screen.USER_HOME       -> UserHomeScreen(
-                        viewModel,
-                        onOpen = { current = it }
-                    )
+                    Screen.USER_HOME       -> UserHomeScreen(viewModel) { current = it }
                     Screen.USER_SERVICES   -> UserServicesScreen(viewModel)
                     Screen.USER_ORDERS     -> UserOrdersScreen(viewModel)
                     Screen.USER_WALLET     -> UserWalletScreen(viewModel)
@@ -280,13 +462,13 @@ private fun DrawerContent(
             label = { Text("الطلبات") },
             selected = current == Screen.USER_ORDERS,
             onClick = { onSelect(Screen.USER_ORDERS) },
-            icon = { Icon(Icons.Filled.ReceiptLong, null) }
+            icon = { Icon(Icons.Filled.ShoppingCart, null) }
         )
         NavigationDrawerItem(
             label = { Text("المحفظة") },
             selected = current == Screen.USER_WALLET,
             onClick = { onSelect(Screen.USER_WALLET) },
-            icon = { Icon(Icons.Filled.AccountCircle, null) }
+            icon = { Icon(Icons.Filled.AccountBalanceWallet, null) }
         )
         NavigationDrawerItem(
             label = { Text("الدعم") },
@@ -315,8 +497,8 @@ fun BottomBar(
         buildList {
             add(Triple("الرئيسية", Screen.USER_HOME, Icons.Filled.Home))
             add(Triple("الخدمات", Screen.USER_SERVICES, Icons.Filled.List))
-            add(Triple("الطلبات", Screen.USER_ORDERS, Icons.Filled.ReceiptLong))
-            add(Triple("المحفظة", Screen.USER_WALLET, Icons.Filled.AccountCircle))
+            add(Triple("الطلبات", Screen.USER_ORDERS, Icons.Filled.ShoppingCart))
+            add(Triple("المحفظة", Screen.USER_WALLET, Icons.Filled.AccountBalanceWallet))
             if (isOwner) add(Triple("المالك", Screen.OWNER_DASHBOARD, Icons.Filled.Dashboard))
             add(Triple("الدعم", Screen.USER_SUPPORT, Icons.Filled.Help))
         }
@@ -337,32 +519,30 @@ fun BottomBar(
 }
 
 /* =========================
-   User Home: أزرار رئيسية + لمحة خدمات
+   Home — أزرار سريعة + لمحة خدمات
    ========================= */
 @Composable
 fun UserHomeScreen(viewModel: AppViewModel, onOpen: (Screen) -> Unit) {
-    val services by viewModel.services.collectAsState()
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Text("مرحباً 👋", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-
-        // أزرار رئيسية سريعة
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             QuickAction("قوائم الخدمات", Icons.Filled.List) { onOpen(Screen.USER_SERVICES) }
-            QuickAction("طلباتي", Icons.Filled.ReceiptLong) { onOpen(Screen.USER_ORDERS) }
-            QuickAction("المحفظة", Icons.Filled.AccountCircle) { onOpen(Screen.USER_WALLET) }
+            QuickAction("طلباتي", Icons.Filled.ShoppingCart) { onOpen(Screen.USER_ORDERS) }
+            QuickAction("المحفظة", Icons.Filled.AccountBalanceWallet) { onOpen(Screen.USER_WALLET) }
             QuickAction("الدعم", Icons.Filled.Help) { onOpen(Screen.USER_SUPPORT) }
         }
-
         Spacer(Modifier.height(16.dp))
         Text("أبرز الخدمات", fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
-
-        services.take(4).forEach { svc ->
-            ServiceCardPreview(svc)
+        val sample = listOf(
+            viewModel.servicesTikIgViewsLikesScore.keys.first(),
+            viewModel.servicesTelegram.keys.first(),
+            viewModel.servicesPubg.keys.first(),
+            viewModel.servicesItunes.keys.first()
+        )
+        sample.forEach { name ->
+            ServiceCardPreview(name, price = 0.0)
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -385,7 +565,7 @@ private fun QuickAction(title: String, icon: androidx.compose.ui.graphics.vector
 }
 
 @Composable
-private fun ServiceCardPreview(service: Service) {
+private fun ServiceCardPreview(name: String, price: Double) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -393,24 +573,27 @@ private fun ServiceCardPreview(service: Service) {
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(12.dp)
     ) {
-        Text("${service.category} • ${service.name}", fontWeight = FontWeight.Medium)
-        Spacer(Modifier.height(4.dp))
-        Text("السعر الأساسي: ${service.basePrice} $", fontSize = 12.sp)
+        Text(name, fontWeight = FontWeight.Medium)
+        if (price > 0) Text("السعر الأساسي: $price $", fontSize = 12.sp)
     }
 }
 
 /* =========================
-   User Services: قوائم/فلترة/تعديل سعر/كمية
+   Services — بحث/فلترة/سعر/كمية/شراء/تعديل
    ========================= */
 @Composable
 fun UserServicesScreen(viewModel: AppViewModel) {
-    val services by viewModel.services.collectAsState()
-    var query by remember { mutableStateOf("") }
-    val categories = remember(services) { services.map { it.category }.toSet().toList() }
-    var selectedCategory by remember { mutableStateOf<String?>(null) }
-    var showPriceEditor by remember { mutableStateOf<Service?>(null) }
+    val moderators by viewModel.moderators.collectAsState()
+    val qtyOverrides by viewModel.qtyOverrides.collectAsState()
+    val priceOverrides by viewModel.priceOverrides.collectAsState()
 
-    // حفظ كميات كل خدمة (لكي تُعرض داخل الاسم للتلغرام)
+    var query by remember { mutableStateOf("") }
+    val categories = listOf("TikTok/Instagram/Views/Likes/Score", "Telegram", "PUBG", "iTunes", "Mobile", "Ludo")
+    var selectedCategory by remember { mutableStateOf<String?>(null) }
+    var showPriceEditor by remember { mutableStateOf<String?>(null) }
+    var linkForBuy by remember { mutableStateOf("") }
+
+    // حفظ كميات لكل خدمة
     val qtyMap = rememberSaveable { mutableStateMapOf<String, Int>() }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
@@ -425,67 +608,110 @@ fun UserServicesScreen(viewModel: AppViewModel) {
         )
 
         Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            AssistChip(
-                onClick = { selectedCategory = null },
-                label = { Text("الكل") },
-                leadingIcon = { Icon(Icons.Filled.Home, contentDescription = null) }
-            )
+            AssistChip(onClick = { selectedCategory = null }, label = { Text("الكل") }, leadingIcon = { Icon(Icons.Filled.Home, null) })
             categories.forEach { cat ->
-                AssistChip(
-                    onClick = { selectedCategory = cat },
-                    label = { Text(cat) }
-                )
+                AssistChip(onClick = { selectedCategory = cat }, label = { Text(cat) })
             }
         }
 
         Spacer(Modifier.height(8.dp))
 
-        val filtered = services.filter {
-            (selectedCategory == null || it.category == selectedCategory) &&
-            (query.isBlank() || it.name.contains(query, ignoreCase = true))
-        }
+        val blocks = listOf(
+            "TikTok/Instagram/Views/Likes/Score" to viewModel.servicesTikIgViewsLikesScore,
+            "Telegram" to viewModel.servicesTelegram,
+            "PUBG" to viewModel.servicesPubg,
+            "iTunes" to viewModel.servicesItunes,
+            "Mobile" to viewModel.servicesMobile,
+            "Ludo" to viewModel.servicesLudo,
+        )
 
-        LazyColumn(
-            contentPadding = PaddingValues(bottom = 100.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(filtered, key = { it.id }) { svc ->
-                val selQty = qtyMap[svc.id] ?: svc.minQty
-                ServiceCard(
-                    service = svc,
-                    selectedQty = selQty,
-                    onQtyChange = { q -> qtyMap[svc.id] = q },
-                    onEditPrice = { showPriceEditor = svc }
-                )
+        LazyColumn(contentPadding = PaddingValues(bottom = 120.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            blocks.forEach { (groupName, data) ->
+                if (selectedCategory != null && selectedCategory != groupName) return@forEach
+                // عنوان القسم
+                item {
+                    Text(groupName, fontWeight = FontWeight.SemiBold)
+                }
+                items(data.toList(), key = { it.first }) { (svc, base) ->
+                    if (query.isNotBlank() && !svc.contains(query, ignoreCase = true)) return@items
+
+                    val step = stepFor(svc)
+                    val overrideQty = qtyOverrides[svc]
+                    val defaultQty = overrideQty ?: extractQtyFromName(svc)
+                    val selectedQty = qtyMap[svc] ?: defaultQty
+
+                    val basePrice = viewModel.effectiveBasePrice(viewModel.currentUserId, svc, base)
+                    val currentPrice = priceFor(svc, selectedQty, basePrice)
+
+                    ServiceCard(
+                        serviceName = if (groupName == "Telegram") labelForTelegram(svc, selectedQty) else svc,
+                        basePrice = basePrice,
+                        currentPrice = currentPrice,
+                        qty = selectedQty,
+                        onDec = { qtyMap[svc] = max(step, selectedQty - step) },
+                        onInc = { qtyMap[svc] = selectedQty + step },
+                        onBuy = {
+                            linkForBuy = ""
+                            showBuyDialog(
+                                service = svc,
+                                qty = selectedQty,
+                                price = currentPrice,
+                                onConfirm = { link ->
+                                    viewModel.addOrder(
+                                        userId = viewModel.currentUserId,
+                                        category = groupName,
+                                        serviceName = svc,
+                                        qty = selectedQty,
+                                        price = currentPrice,
+                                        link = link
+                                    )
+                                }
+                            )
+                        },
+                        onEditPrice = { showPriceEditor = svc }
+                    )
+                }
             }
         }
     }
 
+    // محرر السعر
     if (showPriceEditor != null) {
-        EditPriceDialog(
-            service = showPriceEditor!!,
-            onDismiss = { showPriceEditor = null },
-            onSave = { id, newPrice ->
-                viewModel.updateServicePrice(id, newPrice)
-                showPriceEditor = null
-            }
+        var priceTxt by remember { mutableStateOf((priceOverrides[showPriceEditor!!] ?: 0.0).takeIf { it > 0 }?.toString() ?: "") }
+        AlertDialog(
+            onDismissRequest = { showPriceEditor = null },
+            title = { Text("تعديل سعر: ${showPriceEditor!!}") },
+            text = {
+                Column {
+                    OutlinedTextField(value = priceTxt, onValueChange = { priceTxt = it }, label = { Text("السعر بالدولار") })
+                    Spacer(Modifier.height(6.dp))
+                    Text("يتم تطبيق خصم 10% تلقائيًا لحسابات المشرفين.", fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    priceTxt.toDoubleOrNull()?.let {
+                        viewModel.setPriceOverride(showPriceEditor!!, it)
+                        showPriceEditor = null
+                    }
+                }) { Text("حفظ") }
+            },
+            dismissButton = { TextButton(onClick = { showPriceEditor = null }) { Text("إلغاء") } }
         )
     }
 }
 
 @Composable
-fun ServiceCard(
-    service: Service,
-    selectedQty: Int,
-    onQtyChange: (Int) -> Unit,
-    onEditPrice: (Service) -> Unit
+private fun ServiceCard(
+    serviceName: String,
+    basePrice: Double,
+    currentPrice: Double,
+    qty: Int,
+    onDec: () -> Unit,
+    onInc: () -> Unit,
+    onBuy: () -> Unit,
+    onEditPrice: () -> Unit
 ) {
-    val nameToShow = if (service.category == "Telegram")
-        formatTelegramName(service.name, selectedQty)
-    else service.name
-
-    val price = priceFor(service, selectedQty)
-
     Column(
         Modifier
             .fillMaxWidth()
@@ -493,33 +719,19 @@ fun ServiceCard(
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(12.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(service.category, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.width(12.dp))
-            Text(nameToShow, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Spacer(Modifier.height(6.dp))
-        Text("السعر الأساسي: ${service.basePrice} $", fontSize = 12.sp)
+        Text(serviceName, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(4.dp))
+        Text("السعر الأساسي: ${"%.2f".format(basePrice)} $", fontSize = 12.sp)
         Spacer(Modifier.height(2.dp))
-        Text("سعر الطلب الحالي: ${"%.2f".format(price)} $", fontWeight = FontWeight.SemiBold)
+        Text("سعر الطلب الحالي: ${"%.2f".format(currentPrice)} $", fontWeight = FontWeight.SemiBold)
 
         Spacer(Modifier.height(8.dp))
-        QuantityStepper(
-            value = selectedQty,
-            min = service.minQty,
-            max = service.maxQty,
-            step = service.step,
-            onChange = onQtyChange
-        )
+        QuantityStepper(value = qty, stepLabel = stepFor(serviceName).toString(), onDec = onDec, onInc = onInc)
 
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ElevatedButton(onClick = { /* تنفيذ طلب شراء بالكمية الحالية */ }, modifier = Modifier.weight(1f)) {
-                Text("شراء")
-            }
-            OutlinedButton(onClick = { onEditPrice(service) }, modifier = Modifier.weight(1f)) {
-                Text("تعديل السعر")
-            }
+            ElevatedButton(onClick = onBuy, modifier = Modifier.weight(1f)) { Text("شراء") }
+            OutlinedButton(onClick = onEditPrice, modifier = Modifier.weight(1f)) { Text("تعديل السعر") }
         }
     }
 }
@@ -527,19 +739,45 @@ fun ServiceCard(
 @Composable
 private fun QuantityStepper(
     value: Int,
-    min: Int,
-    max: Int,
-    step: Int,
-    onChange: (Int) -> Unit
+    stepLabel: String,
+    onDec: () -> Unit,
+    onInc: () -> Unit
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        OutlinedButton(onClick = { onChange(max(min, value - step)) }) { Text("-$step") }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = onDec) { Text("-$stepLabel") }
         Text("$value", fontWeight = FontWeight.Bold)
-        OutlinedButton(onClick = { onChange(min(max, value + step)) }) { Text("+$step") }
+        OutlinedButton(onClick = onInc) { Text("+$stepLabel") }
     }
+}
+
+@Composable
+private fun showBuyDialog(
+    service: String,
+    qty: Int,
+    price: Double,
+    onConfirm: (String) -> Unit
+) {
+    var open by remember { mutableStateOf(true) }
+    var link by remember { mutableStateOf("") }
+    if (!open) return
+    AlertDialog(
+        onDismissRequest = { open = false },
+        title = { Text("شراء: $service") },
+        text = {
+            Column {
+                Text("الكمية: $qty — السعر: ${"%.2f".format(price)} $")
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = link, onValueChange = { link = it }, label = { Text("الرابط/المعرف") })
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onConfirm(link)
+                open = false
+            }) { Text("تأكيد") }
+        },
+        dismissButton = { TextButton(onClick = { open = false }) { Text("إلغاء") } }
+    )
 }
 
 /* =========================
@@ -551,23 +789,25 @@ fun UserOrdersScreen(viewModel: AppViewModel) {
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         Text("طلباتي", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        LazyColumn(
-            contentPadding = PaddingValues(bottom = 80.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(orders, key = { it.orderId }) { o ->
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(12.dp)
-                ) {
-                    Text("رقم الطلب: ${o.orderId}", fontWeight = FontWeight.SemiBold)
-                    Text("الخدمة: ${o.serviceName}")
-                    Text("الكمية: ${o.qty}")
-                    Text("السعر: ${o.price} $")
-                    Text("الحالة: ${o.status}", fontWeight = FontWeight.Medium)
+        if (orders.isEmpty()) {
+            Text("لا توجد طلبات بعد.", modifier = Modifier.padding(8.dp))
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(bottom = 80.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(orders, key = { it.id }) { o ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .padding(12.dp)
+                    ) {
+                        Text("#${o.id} • ${o.serviceName}", fontWeight = FontWeight.SemiBold)
+                        Text("${o.category} • ${o.qty} • ${"%.2f".format(o.price)}$")
+                        Text("الحالة: ${o.status}")
+                    }
                 }
             }
         }
@@ -575,12 +815,16 @@ fun UserOrdersScreen(viewModel: AppViewModel) {
 }
 
 /* =========================
-   Wallet
+   Wallet + Anti-Spam Cards
    ========================= */
 @Composable
 fun UserWalletScreen(viewModel: AppViewModel) {
     val balance by viewModel.balance.collectAsState()
     var showAdd by remember { mutableStateOf(false) }
+    var showWithdraw by remember { mutableStateOf(false) }
+
+    var cardDigits by remember { mutableStateOf("") }
+    var cardMsg by remember { mutableStateOf<String?>(null) }
 
     Column(
         Modifier.fillMaxSize().padding(12.dp),
@@ -595,10 +839,27 @@ fun UserWalletScreen(viewModel: AppViewModel) {
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     ElevatedButton(onClick = { showAdd = true }) { Text("إيداع") }
-                    OutlinedButton(onClick = { /* سحب */ }) { Text("سحب") }
+                    OutlinedButton(onClick = { showWithdraw = true }) { Text("سحب") }
                 }
             }
         }
+
+        Spacer(Modifier.height(16.dp))
+        Text("إرسال كارت آسياسيل (حماية ضد التكرار/السبام):")
+        Spacer(Modifier.height(6.dp))
+        OutlinedTextField(
+            value = cardDigits,
+            onValueChange = { cardDigits = it },
+            label = { Text("رقم الكارت") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(6.dp))
+        ElevatedButton(onClick = {
+            val (ok, msg) = viewModel.submitCard(viewModel.currentUserId, cardDigits.trim())
+            cardMsg = msg
+            if (ok) cardDigits = ""
+        }) { Text("إرسال الكارت") }
+        cardMsg?.let { Text(it, modifier = Modifier.padding(top = 6.dp)) }
     }
 
     if (showAdd) {
@@ -607,23 +868,38 @@ fun UserWalletScreen(viewModel: AppViewModel) {
             onDismissRequest = { showAdd = false },
             title = { Text("إضافة رصيد") },
             text = {
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = { amount = it },
-                    label = { Text("القيمة بالدولار") }
-                )
+                OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("القيمة بالدولار") })
             },
             confirmButton = {
                 TextButton(onClick = {
-                    amount.toDoubleOrNull()?.let {
-                        viewModel.addBalance(it)
-                        showAdd = false
+                    amount.toDoubleOrNull()?.let { viewModel.addBalance(it); showAdd = false }
+                }) { Text("تأكيد") }
+            },
+            dismissButton = { TextButton(onClick = { showAdd = false }) { Text("إلغاء") } }
+        )
+    }
+
+    if (showWithdraw) {
+        var amount by remember { mutableStateOf("2.00") }
+        var error by remember { mutableStateOf<String?>(null) }
+        AlertDialog(
+            onDismissRequest = { showWithdraw = false },
+            title = { Text("سحب رصيد") },
+            text = {
+                Column {
+                    OutlinedTextField(value = amount, onValueChange = { amount = it }, label = { Text("القيمة بالدولار") })
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    amount.toDoubleOrNull()?.let { v ->
+                        if (!viewModel.withdrawBalance(v)) error = "الرصيد غير كافٍ"
+                        else showWithdraw = false
                     }
                 }) { Text("تأكيد") }
             },
-            dismissButton = {
-                TextButton(onClick = { showAdd = false }) { Text("إلغاء") }
-            }
+            dismissButton = { TextButton(onClick = { showWithdraw = false }) { Text("إلغاء") } }
         )
     }
 }
@@ -639,130 +915,98 @@ fun UserSupportScreen() {
     ) {
         Text("الدعم", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text(
-            "تواصل معنا عبر التليجرام أو البريد.\n" +
-            "- تيليجرام: @your_channel\n- البريد: support@example.com"
-        )
+        Text("تواصل معنا:\n- تيليجرام: @your_channel\n- البريد: support@example.com")
     }
 }
 
 /* =========================
-   Owner Dashboard
+   Owner Dashboard — أسعار/كميات/مشرفون
    ========================= */
 @Composable
 fun OwnerDashboardScreen(viewModel: AppViewModel) {
-    val services by viewModel.services.collectAsState()
-    var expanded by remember { mutableStateOf(true) }
+    val moderators by viewModel.moderators.collectAsState()
+    val priceOverrides by viewModel.priceOverrides.collectAsState()
+    val qtyOverrides by viewModel.qtyOverrides.collectAsState()
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text("لوحة تحكم المالك", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Icon(Icons.Filled.Dashboard, contentDescription = null)
-        }
+    var svcForPrice by remember { mutableStateOf("") }
+    var newPrice by remember { mutableStateOf("") }
+    var svcForQty by remember { mutableStateOf("") }
+    var newQty by remember { mutableStateOf("") }
+    var modIdTxt by remember { mutableStateOf("") }
+
+    Column(Modifier.fillMaxSize().padding(12.dp).verticalScroll(rememberScrollState())) {
+        Text("لوحة تحكم المالك", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
+        Text("تعديل الأسعار والكميات + إدارة المشرفين. أي تعديل ينعكس فورًا على واجهة المستخدم.", fontSize = 12.sp)
+        Spacer(Modifier.height(12.dp))
 
-        Text(
-            "إدارة الخدمات والأسعار والكميات بشكل مباشر.\n" +
-            "أي تعديل ينعكس فوراً على واجهة المستخدم.",
-            fontSize = 12.sp
-        )
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp)) {
+                Text("تعديل الأسعار", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = svcForPrice, onValueChange = { svcForPrice = it }, label = { Text("اسم الخدمة (بالضبط)") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(value = newPrice, onValueChange = { newPrice = it }, label = { Text("سعر جديد بالدولار") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ElevatedButton(onClick = {
+                        newPrice.toDoubleOrNull()?.let { p ->
+                            if (svcForPrice.isNotBlank()) viewModel.setPriceOverride(svcForPrice.trim(), p)
+                        }
+                    }) { Text("حفظ السعر") }
+                    OutlinedButton(onClick = { svcForPrice = ""; newPrice = "" }) { Text("تفريغ") }
+                }
+                Spacer(Modifier.height(10.dp))
+                Text("Overrides الحالية:")
+                priceOverrides.forEach { (k, v) -> Text("- $k = ${"%.2f".format(v)}$") }
+            }
+        }
 
         Spacer(Modifier.height(12.dp))
 
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp)) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("الخدمات (${services.size})", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        if (expanded) "إخفاء" else "إظهار",
-                        modifier = Modifier.clickable { expanded = !expanded },
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                if (expanded) {
-                    Spacer(Modifier.height(8.dp))
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(bottom = 80.dp)
-                    ) {
-                        items(services, key = { it.id }) { svc ->
-                            OwnerServiceRow(svc, onChangePrice = { newPrice ->
-                                viewModel.updateServicePrice(svc.id, newPrice)
-                            })
+                Text("تعديل الكمية الافتراضية", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = svcForQty, onValueChange = { svcForQty = it }, label = { Text("اسم الخدمة (بالضبط)") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(value = newQty, onValueChange = { newQty = it }, label = { Text("الكمية (عدد صحيح)") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ElevatedButton(onClick = {
+                        newQty.toIntOrNull()?.let { q ->
+                            if (svcForQty.isNotBlank()) viewModel.setQtyOverride(svcForQty.trim(), q)
                         }
-                    }
+                    }) { Text("حفظ الكمية") }
+                    OutlinedButton(onClick = { svcForQty = ""; newQty = "" }) { Text("تفريغ") }
                 }
+                Spacer(Modifier.height(10.dp))
+                Text("كميات افتراضية مخصصة:")
+                qtyOverrides.forEach { (k, v) -> Text("- $k = $v") }
             }
         }
-    }
-}
 
-@Composable
-fun OwnerServiceRow(service: Service, onChangePrice: (Double) -> Unit) {
-    var editing by remember { mutableStateOf(false) }
-    var priceText by remember { mutableStateOf(service.basePrice.toString()) }
+        Spacer(Modifier.height(12.dp))
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(12.dp)
-    ) {
-        Text("${service.category} • ${service.name}", fontWeight = FontWeight.Medium)
-        Spacer(Modifier.height(6.dp))
-        Text("السعر: ${service.basePrice} $")
-        Text("الكمية: ${service.minQty}..${service.maxQty} (خطوة ${service.step})", fontSize = 12.sp)
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { editing = true }) {
-                Text("تعديل السعر")
-            }
-            AssistChip(
-                onClick = { /* إعدادات متقدمة لاحقاً */ },
-                label = { Text("إعدادات متقدمة") },
-                leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null) }
-            )
-        }
-    }
-
-    if (editing) {
-        AlertDialog(
-            onDismissRequest = { editing = false },
-            title = { Text("تعديل سعر: ${service.name}") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = priceText,
-                        onValueChange = { priceText = it },
-                        label = { Text("السعر بالدولار") }
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "تلميح: هذا هو السعر الأساسي الذي تُحسب عليه حزم 1k/10k… أو القطع في PUBG.",
-                        fontSize = 12.sp
-                    )
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp)) {
+                Text("إدارة المشرفين (خصم 10%)", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = modIdTxt, onValueChange = { modIdTxt = it }, label = { Text("User ID رقمي") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ElevatedButton(onClick = {
+                        modIdTxt.toIntOrNull()?.let { viewModel.addModerator(it) }
+                    }) { Text("إضافة مشرف") }
+                    OutlinedButton(onClick = {
+                        modIdTxt.toIntOrNull()?.let { viewModel.removeModerator(it) }
+                    }) { Text("حذف مشرف") }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    priceText.toDoubleOrNull()?.let {
-                        onChangePrice(it)
-                        editing = false
-                    }
-                }) { Text("حفظ") }
-            },
-            dismissButton = {
-                TextButton(onClick = { editing = false }) { Text("إلغاء") }
+                Spacer(Modifier.height(10.dp))
+                Text("قائمة المشرفين:")
+                if (moderators.isEmpty()) Text("- لا يوجد")
+                else moderators.sorted().forEach { Text("- $it") }
             }
-        )
+        }
     }
 }

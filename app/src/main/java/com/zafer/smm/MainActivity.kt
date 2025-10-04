@@ -38,15 +38,16 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
 
-// -------------------------
+// ---------------------------------------------------------
 // نماذج البيانات
-// -------------------------
+// ---------------------------------------------------------
 data class User(val id: String, val createdAt: Long, var balance: Double)
 enum class OrderStatus { PENDING, IN_PROGRESS, DONE, REJECTED }
 data class ServiceItem(
     val id: Int,
-    val category: String,
-    val display: String,   // نص الزر (الاسم + الكمية + السعر)
+    val categoryKey: String,
+    val categoryTitle: String,
+    val display: String,   // النص الظاهر (الاسم + الكمية + السعر) كما تريد بالضبط
     val quantity: Int,
     val price: Double
 )
@@ -73,183 +74,48 @@ data class TopupRequest(
     var note: String?
 )
 
-// -------------------------
-// كاتالوج الخدمات (موسّع)
-// -------------------------
-object Catalog {
-
-    // الأقسام وترتيبها
-    val sections: LinkedHashMap<String, String> = linkedMapOf(
-        "tiktok_followers" to "قسم المتابعين (تيكتوك)",
-        "instagram_followers" to "قسم المتابعين (انستغرام)",
-        "tiktok_likes" to "قسم الإعجابات (تيكتوك)",
-        "instagram_likes" to "قسم الإعجابات (انستغرام)",
-        "tiktok_views" to "قسم المشاهدات (تيكتوك)",
-        "instagram_views" to "قسم المشاهدات (انستغرام)",
-        "tiktok_live" to "قسم مشاهدات البث (تيكتوك)",
-        "instagram_live" to "قسم مشاهدات البث (انستغرام)",
+// ---------------------------------------------------------
+// كتالوج افتراضي بسيط (يُستبدل عند الاستيراد)
+// ---------------------------------------------------------
+object DefaultCatalog {
+    // مفاتيح الأقسام الافتراضية وترجمتها (يمكن تعديل العناوين فقط لو رغبت)
+    val sectionTitles: LinkedHashMap<String, String> = linkedMapOf(
+        "followers_tiktok" to "قسم المتابعين (تيكتوك)",
+        "followers_instagram" to "قسم المتابعين (انستغرام)",
+        "likes_tiktok" to "قسم الإعجابات (تيكتوك)",
+        "likes_instagram" to "قسم الإعجابات (انستغرام)",
+        "views_tiktok" to "قسم المشاهدات (تيكتوك)",
+        "views_instagram" to "قسم المشاهدات (انستغرام)",
+        "live_tiktok" to "قسم مشاهدات البث (تيكتوك)",
+        "live_instagram" to "قسم مشاهدات البث (انستغرام)",
         "pubg" to "قسم شحن شدات ببجي",
         "itunes" to "قسم شراء رصيد ايتونز",
-        "telegram_members_channels" to "قسم خدمات التليجرام (قنوات)",
-        "telegram_members_groups" to "قسم خدمات التليجرام (كروبات)",
+        "telegram_channels" to "قسم خدمات التليجرام (قنوات)",
+        "telegram_groups" to "قسم خدمات التليجرام (كروبات)",
         "ludo" to "قسم خدمات اللودو",
-        "bank_score" to "قسم رفع سكور تيكتوك",
-        "balance_buy" to "قسم شراء رصيد الهاتف"
+        "score_tiktok" to "قسم رفع سكور تيكتوك",
+        "mobile_balance" to "قسم شراء رصيد الهاتف"
     )
 
-    // لسهولة ضبط الأرقام
-    private fun f(n: Int) = "%,d".format(n).replace(",", "٬")
-    private fun price(p: Double) = if (p % 1.0 == 0.0) "%.0f".format(p) else "%.2f".format(p)
-
-    val items: List<ServiceItem> = buildList {
-
-        // ==== TikTok Followers (id range 10000+) ====
-        var id = 10000
-        fun addTikTokFollowers(q: Int, p: Double) {
-            add(ServiceItem(id++, "tiktok_followers", "متابعين تيكتوك (${f(q)}) - $${price(p)}", q, p))
-        }
-        listOf(
-            100 to 0.45, 200 to 0.85, 300 to 1.20, 400 to 1.60, 500 to 1.95,
-            1000 to 3.50, 2000 to 7.00, 3000 to 10.50, 4000 to 14.00, 5000 to 17.50,
-            10000 to 34.00, 20000 to 66.00, 50000 to 160.00
-        ).forEach { (q, p) -> addTikTokFollowers(q, p) }
-
-        // ==== Instagram Followers (id range 11000+) ====
-        id = 11000
-        fun addInstaFollowers(q: Int, p: Double) {
-            add(ServiceItem(id++, "instagram_followers", "متابعين انستغرام (${f(q)}) - $${price(p)}", q, p))
-        }
-        listOf(
-            100 to 0.40, 200 to 0.78, 300 to 1.15, 400 to 1.50, 500 to 1.85,
-            1000 to 3.00, 2000 to 6.00, 3000 to 9.00, 4000 to 12.00, 5000 to 15.00,
-            10000 to 29.00, 20000 to 56.00, 50000 to 135.00
-        ).forEach { (q, p) -> addInstaFollowers(q, p) }
-
-        // ==== TikTok Likes (12000+) ====
-        id = 12000
-        fun addTTLikes(q: Int, p: Double) {
-            add(ServiceItem(id++, "tiktok_likes", "لايكات تيكتوك (${f(q)}) - $${price(p)}", q, p))
-        }
-        listOf(
-            100 to 0.10, 500 to 0.40, 1000 to 0.80, 2000 to 1.50, 5000 to 3.50,
-            10000 to 6.50, 20000 to 12.50, 50000 to 29.00
-        ).forEach { (q, p) -> addTTLikes(q, p) }
-
-        // ==== Instagram Likes (13000+) ====
-        id = 13000
-        fun addIGLikes(q: Int, p: Double) {
-            add(ServiceItem(id++, "instagram_likes", "لايكات انستغرام (${f(q)}) - $${price(p)}", q, p))
-        }
-        listOf(
-            100 to 0.12, 500 to 0.45, 1000 to 0.90, 2000 to 1.70, 5000 to 3.80,
-            10000 to 7.20, 20000 to 13.50, 50000 to 30.00
-        ).forEach { (q, p) -> addIGLikes(q, p) }
-
-        // ==== TikTok Views (14000+) ====
-        id = 14000
-        fun addTTViews(q: Int, p: Double) {
-            add(ServiceItem(id++, "tiktok_views", "مشاهدات تيكتوك (${f(q)}) - $${price(p)}", q, p))
-        }
-        listOf(
-            1000 to 0.08, 5000 to 0.35, 10000 to 0.65, 20000 to 1.20, 50000 to 2.80,
-            100000 to 5.00, 200000 to 9.50, 500000 to 23.00, 1000000 to 45.00
-        ).forEach { (q, p) -> addTTViews(q, p) }
-
-        // ==== Instagram Views (15000+) ====
-        id = 15000
-        fun addIGViews(q: Int, p: Double) {
-            add(ServiceItem(id++, "instagram_views", "مشاهدات انستغرام (${f(q)}) - $${price(p)}", q, p))
-        }
-        listOf(
-            1000 to 0.10, 5000 to 0.40, 10000 to 0.70, 20000 to 1.30, 50000 to 3.00,
-            100000 to 5.50, 200000 to 10.50, 500000 to 25.00, 1000000 to 49.00
-        ).forEach { (q, p) -> addIGViews(q, p) }
-
-        // ==== TikTok Live Views (16000+) ====
-        id = 16000
-        fun addTTLive(q: Int, p: Double) {
-            add(ServiceItem(id++, "tiktok_live", "مشاهدات بث تيكتوك (${f(q)}) - $${price(p)}", q, p))
-        }
-        listOf(500 to 1.20, 1000 to 2.20, 2000 to 4.20, 5000 to 9.80, 10000 to 19.00).forEach { (q, p) -> addTTLive(q, p) }
-
-        // ==== Instagram Live Views (17000+) ====
-        id = 17000
-        fun addIGLive(q: Int, p: Double) {
-            add(ServiceItem(id++, "instagram_live", "مشاهدات بث انستغرام (${f(q)}) - $${price(p)}", q, p))
-        }
-        listOf(500 to 1.30, 1000 to 2.40, 2000 to 4.50, 5000 to 10.00).forEach { (q, p) -> addIGLive(q, p) }
-
-        // ==== PUBG UC (18000+) ====
-        id = 18000
-        fun addPubg(q: Int, p: Double) {
-            add(ServiceItem(id++, "pubg", "ببجي ${f(q)} UC - $${price(p)}", q, p))
-        }
-        listOf(
-            60 to 1.90, 120 to 3.70, 180 to 5.40, 240 to 7.10, 325 to 9.40, 660 to 18.50,
-            1800 to 49.00, 3850 to 99.00
-        ).forEach { (q, p) -> addPubg(q, p) }
-
-        // ==== iTunes (19000+) ====
-        id = 19000
-        fun addItunes(qUSD: Int, p: Double) {
-            add(ServiceItem(id++, "itunes", "بطاقة iTunes $${qUSD} - $${price(p)}", qUSD, p))
-        }
-        listOf(5 to 4.90, 10 to 9.70, 15 to 14.40, 20 to 19.00, 25 to 23.70, 50 to 47.00, 100 to 94.00)
-            .forEach { (q, p) -> addItunes(q, p) }
-
-        // ==== Telegram Members Channels (20000+) ====
-        id = 20000
-        fun addTgCh(q: Int, p: Double) {
-            add(ServiceItem(id++, "telegram_members_channels", "أعضاء قناة (${f(q)}) - $${price(p)}", q, p))
-        }
-        listOf(500 to 4.80, 1000 to 9.00, 2000 to 17.50, 3000 to 25.00, 5000 to 39.00, 10000 to 75.00)
-            .forEach { (q, p) -> addTgCh(q, p) }
-
-        // ==== Telegram Members Groups (21000+) ====
-        id = 21000
-        fun addTgGp(q: Int, p: Double) {
-            add(ServiceItem(id++, "telegram_members_groups", "أعضاء كروب (${f(q)}) - $${price(p)}", q, p))
-        }
-        listOf(500 to 5.00, 1000 to 10.00, 2000 to 19.00, 3000 to 27.00, 5000 to 42.00, 10000 to 80.00)
-            .forEach { (q, p) -> addTgGp(q, p) }
-
-        // ==== Ludo (22000+) ====
-        id = 22000
-        fun addLudo(q: Int, p: Double) {
-            add(ServiceItem(id++, "ludo", "لودو ${f(q)} ألماسة - $${price(p)}", q, p))
-        }
-        listOf(100 to 0.90, 200 to 1.70, 500 to 4.10, 810 to 6.20, 1000 to 8.00, 2000 to 15.50, 5000 to 38.00)
-            .forEach { (q, p) -> addLudo(q, p) }
-
-        // ==== TikTok Bank Score (23000+) ====
-        id = 23000
-        fun addScore(q: Int, p: Double) {
-            add(ServiceItem(id++, "bank_score", "رفع سكور تيكتوك (${f(q)}) - $${price(p)}", q, p))
-        }
-        listOf(500 to 1.20, 1000 to 2.00, 2000 to 3.80, 5000 to 8.80, 10000 to 16.50).forEach { (q, p) -> addScore(q, p) }
-
-        // ==== Mobile balance buy (أثير/آسيا/كورك) (24000+) ====
-        id = 24000
-        fun addMB(title: String, qUSD: Int, p: Double) {
-            add(ServiceItem(id++, "balance_buy", "$title (${qUSD}$) - $${price(p)}", qUSD, p))
-        }
-        val mb = listOf(2 to 3.50, 5 to 8.50, 10 to 16.50, 20 to 32.00, 40 to 62.00)
-        mb.forEach { (q, p) -> addMB("شراء رصيد أثير", q, p) }
-        mb.forEach { (q, p) -> addMB("شراء رصيد آسيا", q, p) }
-        mb.forEach { (q, p) -> addMB("شراء رصيد كورك", q, p) }
-    }
-
-    fun byCategory(cat: String) = items.filter { it.category == cat }
+    // عناصر قليلة كعَيّنة (سوف تُستبدل بالكامل عند الاستيراد)
+    val items: List<ServiceItem> = listOf(
+        ServiceItem(1000, "followers_tiktok", sectionTitles["followers_tiktok"]!!, "متابعين تيكتوك (1000) - $3.50", 1000, 3.50),
+        ServiceItem(1001, "likes_tiktok", sectionTitles["likes_tiktok"]!!, "لايكات تيكتوك (1000) - $0.80", 1000, 0.80),
+        ServiceItem(2000, "pubg", sectionTitles["pubg"]!!, "ببجي 60 UC - $1.90", 60, 1.90),
+        ServiceItem(3000, "itunes", sectionTitles["itunes"]!!, "بطاقة iTunes $10 - $9.70", 10, 9.70),
+        ServiceItem(4000, "mobile_balance", sectionTitles["mobile_balance"]!!, "شراء رصيد أثير (5$) - $8.50", 5, 8.50)
+    )
 }
 
-// -------------------------
-// التخزين المحلي (SharedPreferences + JSON)
-// -------------------------
+// ---------------------------------------------------------
+// تخزين محلي (SharedPreferences + JSON) + كتالوج مخصّص
+// ---------------------------------------------------------
 class LocalRepo(private val ctx: Context) {
     private val prefs = ctx.getSharedPreferences("smm_local", Context.MODE_PRIVATE)
     private fun getString(key: String) = prefs.getString(key, null)
     private fun putString(key: String, value: String?) = prefs.edit().putString(key, value).apply()
 
+    // --- المستخدم ---
     fun getOrCreateUser(): User {
         val raw = getString("user")
         if (raw != null) return userFromJson(JSONObject(raw))
@@ -257,23 +123,6 @@ class LocalRepo(private val ctx: Context) {
         saveUser(u); return u
     }
     fun saveUser(u: User) = putString("user", userToJson(u).toString())
-
-    fun loadOrders(): MutableList<Order> {
-        val arr = JSONArray(getString("orders") ?: "[]")
-        return MutableList(arr.length()) { i -> orderFromJson(arr.getJSONObject(i)) }
-    }
-    fun saveOrders(list: List<Order>) {
-        val arr = JSONArray(); list.forEach { arr.put(orderToJson(it)) }; putString("orders", arr.toString())
-    }
-
-    fun loadTopups(): MutableList<TopupRequest> {
-        val arr = JSONArray(getString("topups") ?: "[]")
-        return MutableList(arr.length()) { i -> topupFromJson(arr.getJSONObject(i)) }
-    }
-    fun saveTopups(list: List<TopupRequest>) {
-        val arr = JSONArray(); list.forEach { arr.put(topupToJson(it)) }; putString("topups", arr.toString())
-    }
-
     fun credit(userId: String, amount: Double) : User {
         val u = getOrCreateUser()
         if (u.id == userId) { u.balance += amount; saveUser(u) }
@@ -286,7 +135,44 @@ class LocalRepo(private val ctx: Context) {
         u.balance -= amount; saveUser(u); return true
     }
 
-    // JSON helpers
+    // --- الطلبات ---
+    fun loadOrders(): MutableList<Order> {
+        val arr = JSONArray(getString("orders") ?: "[]")
+        return MutableList(arr.length()) { i -> orderFromJson(arr.getJSONObject(i)) }
+    }
+    fun saveOrders(list: List<Order>) {
+        val arr = JSONArray(); list.forEach { arr.put(orderToJson(it)) }; putString("orders", arr.toString())
+    }
+
+    // --- شحن/كروت ---
+    fun loadTopups(): MutableList<TopupRequest> {
+        val arr = JSONArray(getString("topups") ?: "[]")
+        return MutableList(arr.length()) { i -> topupFromJson(arr.getJSONObject(i)) }
+    }
+    fun saveTopups(list: List<TopupRequest>) {
+        val arr = JSONArray(); list.forEach { arr.put(topupToJson(it)) }; putString("topups", arr.toString())
+    }
+
+    // --- الكتالوج المخصّص ---
+    fun hasCustomCatalog(): Boolean = getString("catalog_json") != null
+    fun loadCatalogOrDefault(): Pair<LinkedHashMap<String, String>, List<ServiceItem>> {
+        val raw = getString("catalog_json")
+        if (raw.isNullOrBlank()) return DefaultCatalog.sectionTitles to DefaultCatalog.items
+        return importFromJson(raw)
+    }
+    fun saveCustomCatalog(sectionTitles: LinkedHashMap<String,String>, items: List<ServiceItem>) {
+        val obj = JSONObject()
+        val titlesObj = JSONObject()
+        sectionTitles.forEach { (k,v) -> titlesObj.put(k, v) }
+        obj.put("titles", titlesObj)
+        val arr = JSONArray()
+        items.forEach { arr.put(serviceToJson(it)) }
+        obj.put("items", arr)
+        putString("catalog_json", obj.toString())
+    }
+    fun clearCustomCatalog() = putString("catalog_json", null)
+
+    // --- JSON Helpers ---
     private fun userToJson(u: User) = JSONObject().apply {
         put("id", u.id); put("createdAt", u.createdAt); put("balance", u.balance)
     }
@@ -319,15 +205,98 @@ class LocalRepo(private val ctx: Context) {
         approvedAmount= if (o.isNull("approvedAmount")) null else o.getDouble("approvedAmount"),
         note= if (o.isNull("note")) null else o.getString("note")
     )
+    private fun serviceToJson(s: ServiceItem) = JSONObject().apply {
+        put("id", s.id); put("categoryKey", s.categoryKey); put("categoryTitle", s.categoryTitle)
+        put("display", s.display); put("quantity", s.quantity); put("price", s.price)
+    }
+    private fun serviceFromJson(o: JSONObject) = ServiceItem(
+        id=o.getInt("id"),
+        categoryKey=o.getString("categoryKey"),
+        categoryTitle=o.getString("categoryTitle"),
+        display=o.getString("display"),
+        quantity=o.getInt("quantity"),
+        price=o.getDouble("price")
+    )
+    private fun importFromJson(raw: String): Pair<LinkedHashMap<String, String>, List<ServiceItem>> {
+        val obj = JSONObject(raw)
+        val titlesObj = obj.getJSONObject("titles")
+        val titles = LinkedHashMap<String,String>()
+        titlesObj.keys().forEach { k -> titles[k] = titlesObj.getString(k) }
+        val arr = obj.getJSONArray("items")
+        val items = MutableList(arr.length()) { i -> serviceFromJson(arr.getJSONObject(i)) }
+        return titles to items
+    }
 }
 
-// -------------------------
-// التنقّل
-// -------------------------
+// ---------------------------------------------------------
+// أدوات مساعدة للكتالوج: parsing من نص
+// ---------------------------------------------------------
+object CatalogImporter {
+    // تحويل اسم قسم عربي إلى مفتاح (slug)
+    private fun slugify(ar: String): String {
+        val base = ar.trim()
+            .replace("[^\\p{L}\\p{Nd}\\s]".toRegex(), "")
+            .replace("\\s+".toRegex(), "_")
+        return base.lowercase()
+    }
+
+    /**
+     * صيغة السطر الواحد (بدقّة):
+     * القسم | اسم الخدمة كما تريد أن يظهر | الكمية (رقم فقط) | السعر (بالدولار)
+     *
+     * مثال:
+     * قسم المتابعين (تيكتوك) | متابعين تيكتوك (1000) - $3.50 | 1000 | 3.50
+     *
+     * ملاحظات:
+     * - "display" هو النص الظاهر في الزر، اكتبه كما تحب (سوف نعرضه كما هو).
+     * - الكمية والسعر يجب أن يكونا أرقامًا قابلة للتحويل.
+     * - يمكن استخدام فاصلة عشرية بنقطة فقط.
+     */
+    fun parse(text: String): Pair<LinkedHashMap<String,String>, List<ServiceItem>> {
+        val titles = LinkedHashMap<String,String>()
+        val items = mutableListOf<ServiceItem>()
+        var autoId = 10000
+        text.lines().forEach { rawLine ->
+            val line = rawLine.trim()
+            if (line.isBlank()) return@forEach
+            // تجاهل التعليقات
+            if (line.startsWith("#")) return@forEach
+
+            val parts = line.split("|").map { it.trim() }
+            if (parts.size < 4) {
+                // سطر غير صالح — نتجاهله
+                return@forEach
+            }
+            val sectionTitle = parts[0]
+            val display = parts[1]
+            val qty = parts[2].replace("k","000", ignoreCase = true).trim().toIntOrNull()
+            val price = parts[3].trim().toDoubleOrNull()
+
+            if (qty == null || price == null) return@forEach
+
+            val key = slugify(sectionTitle)
+            if (!titles.containsKey(key)) titles[key] = sectionTitle
+
+            items += ServiceItem(
+                id = autoId++,
+                categoryKey = key,
+                categoryTitle = sectionTitle,
+                display = display,
+                quantity = qty,
+                price = price
+            )
+        }
+        return titles to items
+    }
+}
+
+// ---------------------------------------------------------
+// تنقّل الشاشات
+// ---------------------------------------------------------
 sealed class Screen {
     object HOME: Screen()
     object SERVICES: Screen()
-    data class SERVICE_LIST(val cat: String): Screen()
+    data class SERVICE_LIST(val catKey: String): Screen()
     data class ORDER_CREATE(val item: ServiceItem): Screen()
     object BALANCE: Screen()
     object TOPUP_METHODS: Screen()
@@ -338,11 +307,12 @@ sealed class Screen {
     object LEADERBOARD: Screen()
     object ADMIN_LOGIN: Screen()
     object ADMIN_PANEL: Screen()
+    object ADMIN_IMPORT: Screen()
 }
 
-// -------------------------
-// النشاط
-// -------------------------
+// ---------------------------------------------------------
+// النشاط الرئيسي
+// ---------------------------------------------------------
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -350,21 +320,30 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// ---------------------------------------------------------
+// الجذر
+// ---------------------------------------------------------
 @Composable
 fun AppRoot() {
     val ctx = LocalContext.current
     val repo = remember { LocalRepo(ctx) }
     val user by remember { mutableStateOf(repo.getOrCreateUser()) }
     var screen by remember { mutableStateOf<Screen>(Screen.HOME) }
+    var sectionTitles by remember { mutableStateOf(LinkedHashMap(DefaultCatalog.sectionTitles)) }
+    var allItems by remember { mutableStateOf(DefaultCatalog.items) }
+
+    // تحميل الكتالوج (مخصّص أو افتراضي)
+    LaunchedEffect(Unit) {
+        val (t, items) = repo.loadCatalogOrDefault()
+        sectionTitles = LinkedHashMap(t)
+        allItems = items
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             "خدمات راتلوزن",
                             modifier = Modifier.weight(1f),
@@ -389,12 +368,15 @@ fun AppRoot() {
                 )
 
                 Screen.SERVICES -> ServicesCategoriesScreen(
+                    sectionTitles = sectionTitles,
                     onBack = { screen = Screen.HOME },
                     onOpenCategory = { key -> screen = Screen.SERVICE_LIST(key) }
                 )
 
                 is Screen.SERVICE_LIST -> ServiceListScreen(
-                    cat = s.cat,
+                    sectionKey = s.catKey,
+                    sectionTitles = sectionTitles,
+                    allItems = allItems,
                     onBack = { screen = Screen.SERVICES },
                     onPick = { item -> screen = Screen.ORDER_CREATE(item) }
                 )
@@ -405,7 +387,7 @@ fun AppRoot() {
                         if (it) Toast.makeText(ctx,"تم إرسال الطلب وخصم الرصيد",Toast.LENGTH_SHORT).show()
                         screen = Screen.MY_ORDERS
                     },
-                    onBack = { screen = Screen.SERVICE_LIST(s.item.category) }
+                    onBack = { screen = Screen.SERVICE_LIST(s.item.categoryKey) }
                 )
 
                 Screen.BALANCE -> BalanceScreen(
@@ -452,16 +434,34 @@ fun AppRoot() {
 
                 Screen.ADMIN_PANEL -> AdminPanelScreen(
                     repo = repo,
-                    onBack = { screen = Screen.HOME }
+                    onBack = { screen = Screen.HOME },
+                    onOpenImport = { screen = Screen.ADMIN_IMPORT },
+                    onCatalogChanged = {
+                        val (t, items) = repo.loadCatalogOrDefault()
+                        sectionTitles = LinkedHashMap(t)
+                        allItems = items
+                    }
+                )
+
+                Screen.ADMIN_IMPORT -> ImportServicesScreen(
+                    repo = repo,
+                    onBack = { screen = Screen.ADMIN_PANEL },
+                    onSaved = {
+                        // إعادة تحميل الكتالوج
+                        val (t, items) = repo.loadCatalogOrDefault()
+                        sectionTitles = LinkedHashMap(t)
+                        allItems = items
+                        screen = Screen.ADMIN_PANEL
+                    }
                 )
             }
         }
     }
 }
 
-// -------------------------
-// الواجهة الرئيسية (نفس الشكل/الألوان)
-// -------------------------
+// ---------------------------------------------------------
+// الواجهة الرئيسية (يحافظ على الشكل/الألوان الحالية)
+// ---------------------------------------------------------
 @Composable
 fun HomeScreen(
     user: User,
@@ -486,18 +486,13 @@ fun HomeScreen(
                 Text("أهلًا وسهلًا بكم في تطبيق خدمات راتلوزن", fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "رصيدك الحالي:",
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Text("رصيدك الحالي:", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     Text("$${"%.2f".format(user.balance)}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
 
         Spacer(Modifier.height(14.dp))
-
         Text("القائمة الرئيسية", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         Spacer(Modifier.height(10.dp))
 
@@ -518,11 +513,12 @@ fun HomeScreen(
     }
 }
 
-// -------------------------
+// ---------------------------------------------------------
 // أقسام الخدمات
-// -------------------------
+// ---------------------------------------------------------
 @Composable
 fun ServicesCategoriesScreen(
+    sectionTitles: LinkedHashMap<String, String>,
     onBack: () -> Unit,
     onOpenCategory: (String) -> Unit
 ) {
@@ -531,38 +527,46 @@ fun ServicesCategoriesScreen(
         Text("الخدمات", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(Catalog.sections.entries.toList()) { (key, title) ->
+            items(sectionTitles.entries.toList()) { (key, title) ->
                 GreenItem(title) { onOpenCategory(key) }
             }
         }
     }
 }
 
-// -------------------------
+// ---------------------------------------------------------
 // خدمات قسم محدد
-// -------------------------
+// ---------------------------------------------------------
 @Composable
 fun ServiceListScreen(
-    cat: String,
+    sectionKey: String,
+    sectionTitles: LinkedHashMap<String, String>,
+    allItems: List<ServiceItem>,
     onBack: () -> Unit,
     onPick: (ServiceItem) -> Unit
 ) {
-    val title = Catalog.sections[cat] ?: "خدمات"
+    val title = sectionTitles[sectionKey] ?: "خدمات"
+    val itemsInSection = remember(sectionKey, allItems) { allItems.filter { it.categoryKey == sectionKey } }
+
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         BackButton(onBack)
         Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(Catalog.byCategory(cat)) { item ->
-                GreenItem(item.display) { onPick(item) }
+        if (itemsInSection.isEmpty()) {
+            Text("لا توجد خدمات في هذا القسم (أضفها من لوحة المالك > استيراد الخدمات).", color = Color.Gray)
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(itemsInSection) { item ->
+                    GreenItem(item.display) { onPick(item) }
+                }
             }
         }
     }
 }
 
-// -------------------------
+// ---------------------------------------------------------
 // إنشاء الطلب
-// -------------------------
+// ---------------------------------------------------------
 @Composable
 fun OrderCreateScreen(
     repo: LocalRepo,
@@ -611,9 +615,9 @@ fun OrderCreateScreen(
     }
 }
 
-// -------------------------
+// ---------------------------------------------------------
 // رصيدي وطرق الشحن
-// -------------------------
+// ---------------------------------------------------------
 @Composable
 fun BalanceScreen(
     repo: LocalRepo,
@@ -724,9 +728,9 @@ fun AsiacellCardScreen(
     }
 }
 
-// -------------------------
+// ---------------------------------------------------------
 // طلباتي
-// -------------------------
+// ---------------------------------------------------------
 @Composable
 fun MyOrdersScreen(repo: LocalRepo, userId: String, onBack: () -> Unit) {
     val orders = remember { mutableStateListOf<Order>() }
@@ -758,7 +762,7 @@ fun MyOrdersScreen(repo: LocalRepo, userId: String, onBack: () -> Unit) {
     }
 }
 
-// -------------------------
+// ---------------------------------------------------------
 // الإحالة (عرض مبسّط)
 @Composable
 fun ReferralScreen(onBack: () -> Unit) {
@@ -782,7 +786,7 @@ fun ReferralScreen(onBack: () -> Unit) {
     }
 }
 
-// -------------------------
+// ---------------------------------------------------------
 // المتصدرين (Placeholder)
 @Composable
 fun LeaderboardScreen(onBack: () -> Unit) {
@@ -794,15 +798,15 @@ fun LeaderboardScreen(onBack: () -> Unit) {
     }
 }
 
-// -------------------------
-// دخول المالك + لوحة التحكم
-// -------------------------
+// ---------------------------------------------------------
+// دخول المالك + لوحة التحكم + استيراد الخدمات
+// ---------------------------------------------------------
 @Composable
 fun AdminLoginScreen(onCancel: () -> Unit, onOk: (String) -> Unit) {
     var pass by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         BackButton(onCancel)
-        Text("تسجيل دخول المالك", style = MaterialTheme.typTypography.titleLarge, fontWeight = FontWeight.Bold)
+        Text("تسجيل دخول المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
         OutlinedTextField(
             value = pass, onValueChange = { pass = it },
@@ -816,7 +820,12 @@ fun AdminLoginScreen(onCancel: () -> Unit, onOk: (String) -> Unit) {
 }
 
 @Composable
-fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
+fun AdminPanelScreen(
+    repo: LocalRepo,
+    onBack: () -> Unit,
+    onOpenImport: () -> Unit,
+    onCatalogChanged: () -> Unit
+) {
     val ctx = LocalContext.current
     val topups = remember { mutableStateListOf<TopupRequest>() }
     val orders = remember { mutableStateListOf<Order>() }
@@ -837,7 +846,8 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
 
         AdminGrid(
             listOf(
-                "تعديل الاسعار والكميات",
+                "استيراد/تعديل الخدمات (نص)",
+                "حذف الخدمات المخصّصة",
                 "الطلبات المعلقه (الخدمات)",
                 "الكارتات المعلقه",
                 "طلبات شدات ببجي",
@@ -861,8 +871,12 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
             )
         ) { title ->
             when (title) {
-                "الكارتات المعلقه" -> Unit
-                "الطلبات المعلقه (الخدمات)" -> Unit
+                "استيراد/تعديل الخدمات (نص)" -> onOpenImport()
+                "حذف الخدمات المخصّصة" -> {
+                    repo.clearCustomCatalog()
+                    onCatalogChanged()
+                    Toast.makeText(ctx,"تم حذف الخدمات المخصصة والرجوع للافتراضي", Toast.LENGTH_LONG).show()
+                }
                 "اضافه رصيد" -> quickBalanceDialog(ctx, repo, add = true) { refreshAll() }
                 "خصم الرصيد" -> quickBalanceDialog(ctx, repo, add = false) { refreshAll() }
                 else -> Toast.makeText(ctx, "$title (قريبًا)", Toast.LENGTH_SHORT).show()
@@ -945,49 +959,80 @@ fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
                 }
             }
         }
+    }
+}
 
-        Spacer(Modifier.height(18.dp))
-        Text("الطلبات (قيد المراجعة/التنفيذ)", fontWeight = FontWeight.Bold)
+// شاشة استيراد الخدمات كنص
+@Composable
+fun ImportServicesScreen(
+    repo: LocalRepo,
+    onBack: () -> Unit,
+    onSaved: () -> Unit
+) {
+    val ctx = LocalContext.current
+    var text by remember { mutableStateOf("") }
+    var preview by remember { mutableStateOf<List<ServiceItem>>(emptyList()) }
+    var titles by remember { mutableStateOf(LinkedHashMap<String,String>()) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        BackButton(onBack)
+        Text("استيراد/تعديل الخدمات (لصق نص)", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "الصيغة: القسم | النص الظاهر (display) | الكمية | السعر\n" +
+            "مثال: قسم المتابعين (تيكتوك) | متابعين تيكتوك (1000) - \$3.50 | 1000 | 3.50",
+            fontSize = 12.sp, color = Color.Gray
+        )
         Spacer(Modifier.height(8.dp))
-        val reviewOrders = orders.filter { it.status==OrderStatus.PENDING || it.status==OrderStatus.IN_PROGRESS }
-        if (reviewOrders.isEmpty()) Text("لا توجد طلبات.")
-        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(reviewOrders) { o ->
-                Card {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(o.serviceDisplay, fontWeight = FontWeight.Bold)
-                        Text("السعر: $${o.price} | الحالة: ${o.status}")
-                        if (o.input.isNotBlank()) Text("بيانات: ${o.input}", fontSize = 12.sp, color = Color.Gray)
-                        Spacer(Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            GreenMini("بدء تنفيذ") {
-                                val list = repo.loadOrders().toMutableList()
-                                val idx = list.indexOfFirst { it.id==o.id }
-                                if (idx>=0) { list[idx] = list[idx].copy(status = OrderStatus.IN_PROGRESS); repo.saveOrders(list) }
-                            }
-                            GreenMini("اكتمال") {
-                                val list = repo.loadOrders().toMutableList()
-                                val idx = list.indexOfFirst { it.id==o.id }
-                                if (idx>=0) { list[idx] = list[idx].copy(status = OrderStatus.DONE); repo.saveOrders(list) }
-                            }
-                            GreenMini("رفض + استرجاع") {
-                                val list = repo.loadOrders().toMutableList()
-                                val idx = list.indexOfFirst { it.id==o.id }
-                                if (idx>=0) {
-                                    val cur = list[idx]; list[idx] = cur.copy(status = OrderStatus.REJECTED)
-                                    repo.saveOrders(list); repo.credit(cur.userId, cur.price)
-                                    Toast.makeText(ctx,"تم الرفض واسترجاع $${cur.price}",Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        }
-                    }
+        OutlinedTextField(
+            value = text,
+            onValueChange = { txt ->
+                text = txt
+                try {
+                    val (t, items) = CatalogImporter.parse(text)
+                    titles = LinkedHashMap(t)
+                    preview = items
+                    error = if (items.isEmpty()) "لا توجد أسطر صالحة" else null
+                } catch (e: Exception) {
+                    error = "خطأ في التحليل: ${e.message}"
+                    preview = emptyList()
+                }
+            },
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            placeholder = { Text("ألصق كل الخدمات هنا… سطر لكل خدمة") }
+        )
+        Spacer(Modifier.height(8.dp))
+        error?.let { Text(it, color = Color.Red) }
+
+        if (preview.isNotEmpty()) {
+            Text("معاينة: ${preview.size} خدمة", fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            Box(Modifier.height(140.dp)) {
+                LazyColumn {
+                    items(preview.take(6)) { s -> Text("• ${s.categoryTitle} | ${s.display}") }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            GreenButton("حفظ واستخدام") {
+                if (preview.isEmpty()) {
+                    Toast.makeText(ctx,"لا توجد بيانات صالحة",Toast.LENGTH_SHORT).show()
+                } else {
+                    repo.saveCustomCatalog(titles, preview)
+                    Toast.makeText(ctx,"تم حفظ الخدمات. سيتم استخدامها الآن.",Toast.LENGTH_LONG).show()
+                    onSaved()
                 }
             }
         }
     }
 }
 
+// ---------------------------------------------------------
 // حوار سريع لإضافة/خصم رصيد
+// ---------------------------------------------------------
 @Composable
 private fun quickBalanceDialog(
     ctx: Context,
@@ -1036,9 +1081,9 @@ private fun quickBalanceDialog(
     )
 }
 
-// -------------------------
-// عناصر واجهة مشتركة (نفس الألوان/الأشكال الحالية)
-// -------------------------
+// ---------------------------------------------------------
+// عناصر واجهة مشتركة (يحافظ على الألوان والشكل)
+// ---------------------------------------------------------
 @Composable fun BackButton(onBack: () -> Unit) { TextButton(onClick = onBack) { Text("رجوع") } }
 
 @Composable
@@ -1076,7 +1121,10 @@ fun GreenItem(text: String, onClick: () -> Unit) {
             .padding(vertical = 16.dp, horizontal = 16.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        Text(
+            text, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 

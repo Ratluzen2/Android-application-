@@ -1,143 +1,91 @@
 package com.zafer.smm.data.local
 
-// كتالوج محلي مُستخرج من كود البوت (الأسماء والأسعار كما هي)
-// يمكنك لاحقاً ربط زر "طلب الخدمة" بالباكند لإرسال الطلب الفعلي.
+data class LocalService(val id: Int, val name: String, val price: Double)
+data class LocalSection(val key: String, val title: String, val services: List<LocalService>)
 
-data class ServiceEntry(
-    val name: String,
-    val priceUSD: Double
-)
-
-enum class ServiceCategory(val title: String) {
-    Followers("قسم المتابعين"),
-    Likes("قسم الايكات"),
-    Views("قسم المشاهدات"),
-    LiveViews("قسم مشاهدات البث المباشر"),
-    TikTokScore("قسم رفع سكور تيكتوك"),
-    PUBG("قسم شحن شدات ببجي"),
-    ITunes("قسم شراء رصيد ايتونز"),
-    Telegram("قسم خدمات التليجرام"),
-    Ludo("قسم خدمات الودو"),
-    Mobile("قسم شراء رصيد الهاتف")
+object LocalCatalog {
+    val sections: List<LocalSection> = listOf(
+        LocalSection(key = "followers", title = "قسم المتابعين", services = listOf(
+            LocalService(id = 1, name = "متابعين تيكتوك 100", price = 1.0),
+            LocalService(id = 2, name = "متابعين تيكتوك 200", price = 2.0),
+            LocalService(id = 3, name = "متابعين تيكتوك 300", price = 3.0),
+            LocalService(id = 4, name = "متابعين تيكتوك 400", price = 4.0),
+            LocalService(id = 5, name = "متابعين تيكتوك 500", price = 5.0),
+            LocalService(id = 6, name = "متابعين تيكتوك 1000", price = 9.0),
+            LocalService(id = 7, name = "متابعين تيكتوك 2000", price = 18.0),
+            LocalService(id = 8, name = "متابعين تيكتوك 3000", price = 27.0),
+            LocalService(id = 9, name = "متابعين تيكتوك 4000", price = 36.0),
+            LocalService(id = 10, name = "متابعين تيكتوك 5000", price = 45.0)
+        )),
+        LocalSection(key = "likes", title = "قسم الإعجابات", services = listOf(
+            LocalService(id = 1, name = "لايكات 1k", price = 2.5),
+            LocalService(id = 2, name = "لايكات 2k", price = 5.0),
+            LocalService(id = 3, name = "لايكات 3k", price = 7.5),
+            LocalService(id = 4, name = "لايكات 4k", price = 10.0),
+            LocalService(id = 5, name = "لايكات 5k", price = 12.5)
+        )),
+        LocalSection(key = "views", title = "قسم المشاهدات", services = listOf(
+            LocalService(id = 1, name = "مشاهدات تيكتوك 1k", price = 0.5),
+            LocalService(id = 2, name = "مشاهدات تيكتوك 2k", price = 1.0),
+            LocalService(id = 3, name = "مشاهدات تيكتوك 3k", price = 1.5),
+            LocalService(id = 4, name = "مشاهدات تيكتوك 4k", price = 2.0),
+            LocalService(id = 5, name = "مشاهدات تيكتوك 5k", price = 2.5),
+            LocalService(id = 6, name = "مشاهدات تيكتوك 10k", price = 4.5)
+        )),
+        LocalSection(key = "live_views", title = "قسم مشاهدات البث المباشر", services = listOf(
+            LocalService(id = 1, name = "مشاهدات بث مباشر 1k", price = 3.0),
+            LocalService(id = 2, name = "مشاهدات بث مباشر 2k", price = 6.0),
+            LocalService(id = 3, name = "مشاهدات بث مباشر 3k", price = 9.0),
+            LocalService(id = 4, name = "مشاهدات بث مباشر 4k", price = 12.0),
+            LocalService(id = 5, name = "مشاهدات بث مباشر 5k", price = 15.0)
+        )),
+        LocalSection(key = "pubg", title = "قسم شحن شدات ببجي", services = listOf(
+            LocalService(id = 1, name = "ببجي 60 UC", price = 1.2),
+            LocalService(id = 2, name = "ببجي 120 UC", price = 2.3),
+            LocalService(id = 3, name = "ببجي 180 UC", price = 3.5),
+            LocalService(id = 4, name = "ببجي 240 UC", price = 4.7),
+            LocalService(id = 5, name = "ببجي 325 UC", price = 6.0),
+            LocalService(id = 6, name = "ببجي 660 UC", price = 11.5),
+            LocalService(id = 7, name = "ببجي 1800 UC", price = 30.0)
+        )),
+        LocalSection(key = "itunes", title = "قسم شراء رصيد ايتونز", services = listOf(
+            LocalService(id = 1, name = "بطاقة iTunes $5", price = 4.9),
+            LocalService(id = 2, name = "بطاقة iTunes $10", price = 9.7),
+            LocalService(id = 3, name = "بطاقة iTunes $15", price = 14.4),
+            LocalService(id = 4, name = "بطاقة iTunes $20", price = 19.0),
+            LocalService(id = 5, name = "بطاقة iTunes $25", price = 23.7),
+            LocalService(id = 6, name = "بطاقة iTunes $50", price = 47.0)
+        )),
+        LocalSection(key = "telegram", title = "قسم خدمات التليجرام", services = listOf(
+            LocalService(id = 1, name = "أعضاء قناة 1k", price = 9.0),
+            LocalService(id = 2, name = "أعضاء قناة 2k", price = 17.5),
+            LocalService(id = 3, name = "أعضاء قناة 3k", price = 25.0),
+            LocalService(id = 4, name = "أعضاء كروب 1k", price = 10.0),
+            LocalService(id = 5, name = "أعضاء كروب 2k", price = 19.0)
+        )),
+        LocalSection(key = "ludo", title = "قسم خدمات اللودو", services = listOf(
+            LocalService(id = 1, name = "لودو 100 ألماسة", price = 0.9),
+            LocalService(id = 2, name = "لودو 200 ألماسة", price = 1.7),
+            LocalService(id = 3, name = "لودو 500 ألماسة", price = 4.1),
+            LocalService(id = 4, name = "لودو 1000 ألماسة", price = 8.0),
+            LocalService(id = 5, name = "لودو 2000 ألماسة", price = 15.5)
+        )),
+        LocalSection(key = "mobile_recharge", title = "قسم شراء رصيد الهاتف", services = listOf(
+            LocalService(id = 1, name = "شراء رصيد 2دولار اثير", price = 2.0),
+            LocalService(id = 2, name = "شراء رصيد 5دولار اثير", price = 5.0),
+            LocalService(id = 3, name = "شراء رصيد 10دولار اثير", price = 10.0),
+            LocalService(id = 4, name = "شراء رصيد 20دولار اثير", price = 20.0),
+            LocalService(id = 5, name = "شراء رصيد 40دولار اثير", price = 40.0),
+            LocalService(id = 6, name = "شراء رصيد 2دولار اسيا", price = 2.0),
+            LocalService(id = 7, name = "شراء رصيد 5دولار اسيا", price = 5.0),
+            LocalService(id = 8, name = "شراء رصيد 10دولار اسيا", price = 10.0),
+            LocalService(id = 9, name = "شراء رصيد 20دولار اسيا", price = 20.0),
+            LocalService(id = 10, name = "شراء رصيد 40دولار اسيا", price = 40.0),
+            LocalService(id = 11, name = "شراء رصيد 2دولار كورك", price = 2.0),
+            LocalService(id = 12, name = "شراء رصيد 5دولار كورك", price = 5.0),
+            LocalService(id = 13, name = "شراء رصيد 10دولار كورك", price = 10.0),
+            LocalService(id = 14, name = "شراء رصيد 20دولار كورك", price = 20.0),
+            LocalService(id = 15, name = "شراء رصيد 40دولار كورك", price = 40.0)
+        )),
+    )
 }
-
-// ========== 1) من services_dict (متابعين/لايكات/مشاهدات/مشاهدات بث/رفع سكور) ==========
-private val followers = listOf(
-    ServiceEntry("متابعين تيكتوك 1k", 3.50),
-    ServiceEntry("متابعين تيكتوك 2k", 7.0),
-    ServiceEntry("متابعين تيكتوك 3k", 10.50),
-    ServiceEntry("متابعين تيكتوك 4k", 14.0),
-    ServiceEntry("متابعين انستغرام 1k", 3.0),
-    ServiceEntry("متابعين انستغرام 2k", 6.0),
-    ServiceEntry("متابعين انستغرام 3k", 9.0),
-    ServiceEntry("متابعين انستغرام 4k", 12.0)
-)
-
-private val likes = listOf(
-    ServiceEntry("لايكات تيكتوك 1k", 1.0),
-    ServiceEntry("لايكات تيكتوك 2k", 2.0),
-    ServiceEntry("لايكات تيكتوك 3k", 3.0),
-    ServiceEntry("لايكات تيكتوك 4k", 4.0),
-    ServiceEntry("لايكات انستغرام 1k", 1.0),
-    ServiceEntry("لايكات انستغرام 2k", 2.0),
-    ServiceEntry("لايكات انستغرام 3k", 3.0),
-    ServiceEntry("لايكات انستغرام 4k", 4.0)
-)
-
-private val views = listOf(
-    ServiceEntry("مشاهدات تيكتوك 1k", 0.10),
-    ServiceEntry("مشاهدات تيكتوك 10k", 0.80),
-    ServiceEntry("مشاهدات تيكتوك 20k", 1.60),
-    ServiceEntry("مشاهدات تيكتوك 30k", 2.40),
-    ServiceEntry("مشاهدات تيكتوك 50k", 3.20),
-    ServiceEntry("مشاهدات انستغرام 10k", 0.80),
-    ServiceEntry("مشاهدات انستغرام 20k", 1.60),
-    ServiceEntry("مشاهدات انستغرام 30k", 2.40),
-    ServiceEntry("مشاهدات انستغرام 50k", 3.20)
-)
-
-private val liveViews = listOf(
-    ServiceEntry("مشاهدات بث تيكتوك 1k", 2.0),
-    ServiceEntry("مشاهدات بث تيكتوك 2k", 4.0),
-    ServiceEntry("مشاهدات بث تيكتوك 3k", 6.0),
-    ServiceEntry("مشاهدات بث تيكتوك 4k", 8.0),
-    ServiceEntry("مشاهدات بث انستغرام 1k", 2.0),
-    ServiceEntry("مشاهدات بث انستغرام 2k", 4.0),
-    ServiceEntry("مشاهدات بث انستغرام 3k", 6.0),
-    ServiceEntry("مشاهدات بث انستغرام 4k", 8.0)
-)
-
-private val tikTokScore = listOf(
-    ServiceEntry("رفع سكور بثك1k", 2.0),
-    ServiceEntry("رفع سكور بثك2k", 4.0),
-    ServiceEntry("رفع سكور بثك3k", 6.0),
-    ServiceEntry("رفع سكور بثك10k", 20.0)
-)
-
-// ========== 2) من pubg_services ==========
-private val pubg = listOf(
-    ServiceEntry("ببجي 60 شدة", 2.0),
-    ServiceEntry("ببجي 120 شده", 4.0),
-    ServiceEntry("ببجي 180 شدة", 6.0),
-    ServiceEntry("ببجي 240 شدة", 8.0),
-    ServiceEntry("ببجي 325 شدة", 9.0),
-    ServiceEntry("ببجي 660 شدة", 15.0),
-    ServiceEntry("ببجي 1800 شدة", 40.0)
-)
-
-// ========== 3) من itunes_services ==========
-private val iTunes = listOf(
-    ServiceEntry("شراء رصيد 5 ايتونز", 9.0),
-    ServiceEntry("شراء رصيد 10 ايتونز", 18.0),
-    ServiceEntry("شراء رصيد 15 ايتونز", 27.0),
-    ServiceEntry("شراء رصيد 20 ايتونز", 36.0),
-    ServiceEntry("شراء رصيد 25 ايتونز", 45.0),
-    ServiceEntry("شراء رصيد 30 ايتونز", 54.0),
-    ServiceEntry("شراء رصيد 35 ايتونز", 63.0),
-    ServiceEntry("شراء رصيد 40 ايتونز", 72.0),
-    ServiceEntry("شراء رصيد 45 ايتونز", 81.0),
-    ServiceEntry("شراء رصيد 50 ايتونز", 90.0)
-)
-
-// ========== 4) من telegram_services ==========
-private val telegram = listOf(
-    ServiceEntry("اعضاء قنوات تلي 1k", 3.0),
-    ServiceEntry("اعضاء قنوات تلي 2k", 6.0),
-    ServiceEntry("اعضاء قنوات تلي 3k", 9.0),
-    ServiceEntry("اعضاء قنوات تلي 4k", 12.0),
-    ServiceEntry("اعضاء قنوات تلي 5k", 15.0),
-    ServiceEntry("اعضاء كروبات تلي 1k", 3.0),
-    ServiceEntry("اعضاء كروبات تلي 2k", 6.0),
-    ServiceEntry("اعضاء كروبات تلي 3k", 9.0),
-    ServiceEntry("اعضاء كروبات تلي 4k", 12.0),
-    ServiceEntry("اعضاء كروبات تلي 5k", 15.0)
-)
-
-// ========== 5) من ludo_services ==========
-private val ludo = listOf(
-    ServiceEntry("لودو 810 الماسة", 3.0),
-    ServiceEntry("لودو 2280 الماسة", 7.0),
-    ServiceEntry("لودو 5080 الماسة", 13.0),
-    ServiceEntry("لودو 12750 الماسة", 28.0),
-    ServiceEntry("لودو 66680 ذهب", 3.0),
-    ServiceEntry("لودو 219500 ذهب", 7.0),
-    ServiceEntry("لودو 1443000 ذهب", 13.0),
-    ServiceEntry("لودو 3627000 ذهب", 28.0)
-)
-
-// ========== 6) رصيد الهاتف ==========
-private val mobileRecharge = emptyList<ServiceEntry>() // لم تُذكر قوائم دقيقة داخل كود البوت
-
-// خريطة الكتالوج الكاملة
-val Catalog: Map<ServiceCategory, List<ServiceEntry>> = linkedMapOf(
-    ServiceCategory.Followers to followers,
-    ServiceCategory.Likes to likes,
-    ServiceCategory.Views to views,
-    ServiceCategory.LiveViews to liveViews,
-    ServiceCategory.TikTokScore to tikTokScore,
-    ServiceCategory.PUBG to pubg,
-    ServiceCategory.ITunes to iTunes,
-    ServiceCategory.Telegram to telegram,
-    ServiceCategory.Ludo to ludo,
-    ServiceCategory.Mobile to mobileRecharge
-)

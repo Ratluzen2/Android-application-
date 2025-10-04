@@ -1,10 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- ثيم التطبيق المخصص -->
+    <!-- ثيم التطبيق -->
     <style name="Theme.Smm" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- شريط الحالة شفاف -->
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <!-- أيقونات الحالة داكنة على خلفية فاتحة (يعمل من Android 6+) -->
         <item name="android:windowLightStatusBar">true</item>
     </style>
 </resources>

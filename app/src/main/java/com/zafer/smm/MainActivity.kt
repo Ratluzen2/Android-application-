@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.BottomAppBarDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ElevatedButton
@@ -53,18 +52,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * MainActivity
- * - كل استدعاءات @Composable داخل setContent/Compose فقط.
+ * كل استدعاءات @Composable داخل setContent/Compose فقط.
+ * لا توجد أي تبعيات Navigation Compose.
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,7 +68,7 @@ class MainActivity : ComponentActivity() {
 }
 
 /* =========================
-   Theme (بسيط ويمكن تغييره)
+   Theme
    ========================= */
 @Composable
 fun App() {
@@ -90,14 +83,10 @@ fun App() {
 }
 
 /* =========================
-   Routes
+   Screens enum (بدون Navigation)
    ========================= */
-private object Routes {
-    const val USER_HOME = "user_home"
-    const val USER_ORDERS = "user_orders"
-    const val USER_WALLET = "user_wallet"
-    const val USER_SUPPORT = "user_support"
-    const val OWNER_DASHBOARD = "owner_dashboard"
+private enum class Screen {
+    USER_HOME, USER_ORDERS, USER_WALLET, USER_SUPPORT, OWNER_DASHBOARD
 }
 
 /* =========================
@@ -122,7 +111,7 @@ data class Order(
 )
 
 class AppViewModel : ViewModel() {
-    // صلاحية المالك (للتجربة؛ اربطها لاحقاً بمصدر حقيقي)
+    // صلاحية المالك (للتجربة)
     private val _isOwner = MutableStateFlow(true)
     val isOwner: StateFlow<Boolean> = _isOwner
 
@@ -169,12 +158,12 @@ class AppViewModel : ViewModel() {
 }
 
 /* =========================
-   App Root + Bottom Navigation
+   App Root + Bottom Navigation (بدون NavHost)
    ========================= */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppRoot(viewModel: AppViewModel = viewModel()) {
-    val navController = rememberNavController()
+    var current by remember { mutableStateOf(Screen.USER_HOME) }
     val isOwner by viewModel.isOwner.collectAsState()
 
     Scaffold(
@@ -190,25 +179,38 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
             )
         },
         bottomBar = {
-            BottomBar(navController = navController, isOwner = isOwner)
+            BottomBar(
+                current = current,
+                isOwner = isOwner,
+                onSelect = { current = it }
+            )
         }
     ) { padding ->
         Box(Modifier.padding(padding)) {
-            AppNavHost(navController = navController, viewModel = viewModel)
+            when (current) {
+                Screen.USER_HOME       -> UserHomeScreen(viewModel)
+                Screen.USER_ORDERS     -> UserOrdersScreen(viewModel)
+                Screen.USER_WALLET     -> UserWalletScreen(viewModel)
+                Screen.USER_SUPPORT    -> UserSupportScreen()
+                Screen.OWNER_DASHBOARD -> OwnerDashboardScreen(viewModel)
+            }
         }
     }
 }
 
 @Composable
-fun BottomBar(navController: NavHostController, isOwner: Boolean) {
+fun BottomBar(
+    current: Screen,
+    isOwner: Boolean,
+    onSelect: (Screen) -> Unit
+) {
     val items = remember(isOwner) {
         buildList {
-            add(BottomItem("الرئيسية", Routes.USER_HOME, Icons.Filled.Home))
-            add(BottomItem("الطلبات", Routes.USER_ORDERS, Icons.Filled.List))
-            // استخدمت AccountCircle للمحفظة لضمان تواجد الأيقونة
-            add(BottomItem("المحفظة", Routes.USER_WALLET, Icons.Filled.AccountCircle))
-            add(BottomItem("الدعم", Routes.USER_SUPPORT, Icons.Filled.Help))
-            if (isOwner) add(BottomItem("لوحة المالك", Routes.OWNER_DASHBOARD, Icons.Filled.Dashboard))
+            add(Triple("الرئيسية", Screen.USER_HOME, Icons.Filled.Home))
+            add(Triple("الطلبات", Screen.USER_ORDERS, Icons.Filled.List))
+            add(Triple("المحفظة", Screen.USER_WALLET, Icons.Filled.AccountCircle))
+            add(Triple("الدعم", Screen.USER_SUPPORT, Icons.Filled.Help))
+            if (isOwner) add(Triple("لوحة المالك", Screen.OWNER_DASHBOARD, Icons.Filled.Dashboard))
         }
     }
 
@@ -216,57 +218,13 @@ fun BottomBar(navController: NavHostController, isOwner: Boolean) {
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 2.dp
     ) {
-        val navBackStackEntry by navController.currentBackStackEntryAsState()
-        val currentRoute = navBackStackEntry?.destination?.route
-
-        items.forEach { item ->
+        items.forEach { (title, screen, icon) ->
             NavigationBarItem(
-                selected = currentRoute == item.route,
-                onClick = {
-                    navController.navigate(item.route) {
-                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                icon = { Icon(item.icon, contentDescription = item.title) },
-                label = { Text(item.title) }
+                selected = current == screen,
+                onClick = { onSelect(screen) },
+                icon = { Icon(icon, contentDescription = title) },
+                label = { Text(title) }
             )
-        }
-    }
-}
-
-data class BottomItem(
-    val title: String,
-    val route: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector
-)
-
-/* =========================
-   NavHost
-   ========================= */
-@Composable
-fun AppNavHost(navController: NavHostController, viewModel: AppViewModel) {
-    NavHost(navController = navController, startDestination = Routes.USER_HOME) {
-
-        composable(Routes.USER_HOME) {
-            UserHomeScreen(viewModel)
-        }
-
-        composable(Routes.USER_ORDERS) {
-            UserOrdersScreen(viewModel)
-        }
-
-        composable(Routes.USER_WALLET) {
-            UserWalletScreen(viewModel)
-        }
-
-        composable(Routes.USER_SUPPORT) {
-            UserSupportScreen()
-        }
-
-        composable(Routes.OWNER_DASHBOARD) {
-            OwnerDashboardScreen(viewModel)
         }
     }
 }

@@ -1,1287 +1,963 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class
+)
 
 package com.zafer.smm
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.content.Intent
+import android.content.*
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.UUID
 import kotlin.math.max
-import kotlin.random.Random
+import kotlin.system.measureTimeMillis
 
-/* ======================= مفاتيح التخزين ======================= */
-private const val PREFS = "smm_store"
-private const val KEY_USER_ID = "user_id"
-private const val KEY_BALANCE = "balance"
-private const val KEY_TOTAL_SPENT = "total_spent"
-private const val KEY_IS_OWNER = "is_owner"
-private const val KEY_IS_MOD = "is_mod"
-private const val KEY_CATALOG = "catalog_json"
-private const val KEY_PENDING_CARDS = "pending_cards"
-private const val KEY_ORDERS = "orders"
-private const val KEY_ANNOUNCE = "announcement"
-private const val KEY_BLOCKED_UNTIL = "blocked_until"
-private const val KEY_BLOCK_REASON = "block_reason"
-private const val KEY_REF_INVITER = "ref_inviter"
-private const val KEY_REF_PAID = "ref_paid"
+// -------------------------
+// نماذج البيانات
+// -------------------------
 
-/* ======================= أدوات التخزين ======================= */
-private fun prefs(ctx: Context) = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-private fun loadUserId(ctx: Context): String {
-    val p = prefs(ctx)
-    var id = p.getString(KEY_USER_ID, null)
-    if (id == null) {
-        id = "USR-" + Random.nextInt(100000, 999999)
-        p.edit().putString(KEY_USER_ID, id).apply()
-    }
-    return id
-}
-
-private fun isBlocked(ctx: Context): Pair<Boolean, String?> {
-    val p = prefs(ctx)
-    val until = p.getLong(KEY_BLOCKED_UNTIL, 0L)
-    val reason = p.getString(KEY_BLOCK_REASON, null)
-    val now = System.currentTimeMillis()
-    return if (until > now) true to (reason ?: "محظور مؤقتًا") else false to null
-}
-
-private fun setBlock(ctx: Context, hours: Int, reason: String) {
-    val until = System.currentTimeMillis() + hours * 3600_000L
-    prefs(ctx).edit()
-        .putLong(KEY_BLOCKED_UNTIL, until)
-        .putString(KEY_BLOCK_REASON, reason)
-        .apply()
-}
-
-private fun clearBlock(ctx: Context) {
-    prefs(ctx).edit()
-        .remove(KEY_BLOCKED_UNTIL)
-        .remove(KEY_BLOCK_REASON)
-        .apply()
-}
-
-private fun loadBalance(ctx: Context) = prefs(ctx).getFloat(KEY_BALANCE, 0f).toDouble()
-private fun saveBalance(ctx: Context, v: Double) = prefs(ctx).edit().putFloat(KEY_BALANCE, v.toFloat()).apply()
-
-private fun loadTotalSpent(ctx: Context) = prefs(ctx).getFloat(KEY_TOTAL_SPENT, 0f).toDouble()
-private fun saveTotalSpent(ctx: Context, v: Double) = prefs(ctx).edit().putFloat(KEY_TOTAL_SPENT, v.toFloat()).apply()
-
-private fun isOwner(ctx: Context) = prefs(ctx).getBoolean(KEY_IS_OWNER, false)
-private fun setOwner(ctx: Context, v: Boolean) = prefs(ctx).edit().putBoolean(KEY_IS_OWNER, v).apply()
-
-private fun isModerator(ctx: Context) = prefs(ctx).getBoolean(KEY_IS_MOD, false)
-private fun setModerator(ctx: Context, v: Boolean) = prefs(ctx).edit().putBoolean(KEY_IS_MOD, v).apply()
-
-private fun loadAnnouncement(ctx: Context) = prefs(ctx).getString(KEY_ANNOUNCE, "") ?: ""
-private fun saveAnnouncement(ctx: Context, msg: String) = prefs(ctx).edit().putString(KEY_ANNOUNCE, msg).apply()
-
-private fun loadInviter(ctx: Context) = prefs(ctx).getString(KEY_REF_INVITER, null)
-private fun setInviter(ctx: Context, id: String?) = prefs(ctx).edit().putString(KEY_REF_INVITER, id).apply()
-private fun isRefPaid(ctx: Context) = prefs(ctx).getBoolean(KEY_REF_PAID, false)
-private fun setRefPaid(ctx: Context) = prefs(ctx).edit().putBoolean(KEY_REF_PAID, true).apply()
-
-/* ======================= نماذج البيانات ======================= */
-data class Service(val id: String, val name: String, val price: Double, val category: String = "عام")
-data class Section(val key: String, val title: String, val services: MutableList<Service>)
-enum class OrderStatus { PENDING, COMPLETED, REJECTED, REFUNDED, WAITING }
-data class Order(
-    val id: Long,
-    val serviceId: String,
-    val serviceName: String,
-    val price: Double,
-    val category: String,
-    val note: String,
+data class User(
+    val id: String,
     val createdAt: Long,
-    var status: OrderStatus = OrderStatus.PENDING
-)
-data class PendingCard(val id: Long, val digits: String, val createdAt: Long)
-
-/* ======================= الكتالوج الافتراضي ======================= */
-private fun defaultCatalog(): MutableList<Section> = mutableListOf(
-    Section("followers", "قسم المتابعين", mutableListOf(
-        Service("tk_f_1k",  "متابعين تيكتوك (1000)", 3.5, "tiktok"),
-        Service("tk_f_2k",  "متابعين تيكتوك (2000)", 7.0, "tiktok"),
-        Service("ig_f_1k",  "متابعين انستغرام (1000)", 3.0, "instagram"),
-        Service("ig_f_2k",  "متابعين انستغرام (2000)", 6.0, "instagram"),
-    )),
-    Section("likes", "قسم الإعجابات", mutableListOf(
-        Service("tk_l_1k",  "لايكات تيكتوك (1000)", 1.0, "tiktok"),
-        Service("ig_l_1k",  "لايكات انستغرام (1000)", 1.0, "instagram"),
-    )),
-    Section("views", "قسم المشاهدات", mutableListOf(
-        Service("tk_v_10k",  "مشاهدات تيكتوك (10000)", 0.8, "tiktok"),
-        Service("ig_v_10k",  "مشاهدات انستغرام (10000)", 0.8, "instagram"),
-    )),
-    Section("live_views", "قسم مشاهدات البث المباشر", mutableListOf(
-        Service("tk_lv_1k",  "مشاهدات بث تيكتوك (1000)", 2.0, "tiktok"),
-        Service("ig_lv_1k",  "مشاهدات بث انستغرام (1000)", 2.0, "instagram"),
-    )),
-    Section("score", "رفع سكور تيكتوك", mutableListOf(
-        Service("sc_1k", "رفع سكور بنك (1000)", 2.0, "tiktok"),
-    )),
-    Section("pubg", "قسم شحن شدات ببجي", mutableListOf(
-        Service("uc_60",   "ببجي 60 شدة", 2.0, "pubg"),
-        Service("uc_660",  "ببجي 660 شدة", 15.0, "pubg"),
-        Service("uc_1800", "ببجي 1800 شدة", 40.0, "pubg"),
-    )),
-    Section("itunes", "قسم شراء رصيد ايتونز", mutableListOf(
-        Service("it_10", "شراء رصيد 10 ايتونز", 18.0, "itunes"),
-        Service("it_50", "شراء رصيد 50 ايتونز", 90.0, "itunes"),
-    )),
-    Section("mobile_recharge", "قسم شراء رصيد الهاتف", mutableListOf(
-        Service("ath_2",  "شراء رصيد2 دولار أثير", 3.5, "mobile"),
-        Service("asy_2",  "شراء رصيد2 دولار آسيا", 3.5, "mobile"),
-        Service("krk_2",  "شراء رصيد2 دولار كورك", 3.5, "mobile"),
-    )),
-    Section("telegram", "قسم خدمات التليجرام", mutableListOf(
-        Service("tg_ch_1k", "أعضاء قنوات تيلي 1k", 3.0, "telegram"),
-        Service("tg_gp_1k", "أعضاء كروبات تيلي 1k", 3.0, "telegram"),
-    )),
-    Section("ludo", "قسم خدمات اللودو", mutableListOf(
-        Service("ld_dm_810", "لودو 810 الأماسة", 4.0, "ludo")
-    )),
+    var balance: Double
 )
 
-/* ======================= تحميل/حفظ الكتالوج ======================= */
-private fun loadCatalog(ctx: Context): MutableList<Section> {
-    val js = prefs(ctx).getString(KEY_CATALOG, null) ?: return defaultCatalog()
-    return runCatching {
-        val arr = JSONArray(js)
-        val out = mutableListOf<Section>()
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            val key = o.getString("key")
-            val title = o.getString("title")
-            val services = mutableListOf<Service>()
-            val sArr = o.getJSONArray("services")
-            for (j in 0 until sArr.length()) {
-                val it = sArr.getJSONObject(j)
-                services += Service(
-                    id = it.getString("id"),
-                    name = it.getString("name"),
-                    price = it.getDouble("price"),
-                    category = it.optString("category", "عام")
-                )
-            }
-            out += Section(key, title, services)
-        }
-        out
-    }.getOrElse { defaultCatalog() }
-}
+enum class OrderStatus { PENDING, IN_PROGRESS, DONE, REJECTED }
+data class ServiceItem(
+    val id: Int,
+    val category: String,
+    val label: String,
+    val quantity: Int,
+    val price: Double
+)
+data class Order(
+    val id: String,
+    val userId: String,
+    val serviceId: Int,
+    val serviceLabel: String,
+    val quantity: Int,
+    val price: Double,
+    val input: String,
+    var status: OrderStatus,
+    val createdAt: Long
+)
+enum class TopupStatus { PENDING, APPROVED, REJECTED }
+data class TopupRequest(
+    val id: String,
+    val userId: String,
+    val method: String,       // "asiacell", "superkey", ...
+    val code: String?,        // لاسياسيل
+    val submittedAt: Long,
+    var status: TopupStatus,
+    var approvedAmount: Double?,
+    var note: String?
+)
 
-private fun saveCatalog(ctx: Context, catalog: List<Section>) {
-    val arr = JSONArray()
-    catalog.forEach { sec ->
-        val o = JSONObject()
-        o.put("key", sec.key)
-        o.put("title", sec.title)
-        val sArr = JSONArray()
-        sec.services.forEach { sv ->
-            val so = JSONObject()
-            so.put("id", sv.id)
-            so.put("name", sv.name)
-            so.put("price", sv.price)
-            so.put("category", sv.category)
-            sArr.put(so)
-        }
-        o.put("services", sArr)
-        arr.put(o)
+// -------------------------
+// كاتالوج الخدمات (مطابق للصور)
+// -------------------------
+object Catalog {
+
+    val sections: LinkedHashMap<String, String> = linkedMapOf(
+        "tiktok_followers" to "متابعين تيك توك",
+        "instagram_followers" to "متابعين انستغرام",
+        "tiktok_likes" to "لايكات تيك توك",
+        "instagram_likes" to "لايكات انستغرام",
+        "tiktok_views" to "مشاهدات تيك توك",
+        "instagram_views" to "مشاهدات انستغرام",
+        "tiktok_live" to "مشاهدات بث تيك توك",
+        "instagram_live" to "مشاهدات بث انستغرام",
+        "telegram_members_channels" to "اعضاء قنوات تيلي",
+        "telegram_members_groups" to "اعضاء كروبات تيلي",
+        "ludo" to "خدمات لودو",
+        "pubg" to "شحن شدات ببجي",
+        "itunes" to "شراء رصيد آيتونز",
+        "bank_score" to "رفع سكور بنك تيك توك",
+        "balance_buy" to "شراء رصيد شبكات (اثير/اسيا/كورك)"
+    )
+
+    val items: List<ServiceItem> = buildList {
+
+        // متابعين تيك توك
+        add(ServiceItem(1001,"tiktok_followers","متابعين تيكتوك (1000)",1000,3.5))
+        add(ServiceItem(1002,"tiktok_followers","متابعين تيكتوك (2000)",2000,7.0))
+        add(ServiceItem(1003,"tiktok_followers","متابعين تيكتوك (3000)",3000,10.5))
+        add(ServiceItem(1004,"tiktok_followers","متابعين تيكتوك (4000)",4000,14.0))
+
+        // متابعين انستغرام
+        add(ServiceItem(1101,"instagram_followers","متابعين انستغرام (1000)",1000,3.0))
+        add(ServiceItem(1102,"instagram_followers","متابعين انستغرام (2000)",2000,6.0))
+        add(ServiceItem(1103,"instagram_followers","متابعين انستغرام (3000)",3000,9.0))
+        add(ServiceItem(1104,"instagram_followers","متابعين انستغرام (4000)",4000,12.0))
+
+        // لايكات تيك توك
+        add(ServiceItem(1201,"tiktok_likes","لايكات تيك توك (1000)",1000,1.0))
+        add(ServiceItem(1202,"tiktok_likes","لايكات تيك توك (2000)",2000,2.0))
+        add(ServiceItem(1203,"tiktok_likes","لايكات تيك توك (3000)",3000,3.0))
+        add(ServiceItem(1204,"tiktok_likes","لايكات تيك توك (4000)",4000,4.0))
+
+        // لايكات انستغرام
+        add(ServiceItem(1301,"instagram_likes","لايكات انستغرام (1000)",1000,1.0))
+        add(ServiceItem(1302,"instagram_likes","لايكات انستغرام (2000)",2000,2.0))
+        add(ServiceItem(1303,"instagram_likes","لايكات انستغرام (3000)",3000,3.0))
+        add(ServiceItem(1304,"instagram_likes","لايكات انستغرام (4000)",4000,4.0))
+
+        // مشاهدات تيك توك
+        add(ServiceItem(1401,"tiktok_views","مشاهدات تيك توك (1000)",1000,0.1))
+        add(ServiceItem(1402,"tiktok_views","مشاهدات تيك توك (10000)",10000,0.8))
+        add(ServiceItem(1403,"tiktok_views","مشاهدات تيك توك (20000)",20000,1.6))
+        add(ServiceItem(1404,"tiktok_views","مشاهدات تيك توك (30000)",30000,2.4))
+        add(ServiceItem(1405,"tiktok_views","مشاهدات تيك توك (50000)",50000,3.2))
+
+        // مشاهدات انستغرام
+        add(ServiceItem(1501,"instagram_views","مشاهدات انستغرام (10000)",10000,0.8))
+        add(ServiceItem(1502,"instagram_views","مشاهدات انستغرام (20000)",20000,1.6))
+        add(ServiceItem(1503,"instagram_views","مشاهدات انستغرام (30000)",30000,2.4))
+        add(ServiceItem(1504,"instagram_views","مشاهدات انستغرام (50000)",50000,3.2))
+
+        // مشاهدات بث تيك توك
+        add(ServiceItem(1601,"tiktok_live","مشاهدات بث تيكتوك (1000)",1000,2.0))
+        add(ServiceItem(1602,"tiktok_live","مشاهدات بث تيكتوك (2000)",2000,4.0))
+        add(ServiceItem(1603,"tiktok_live","مشاهدات بث تيكتوك (3000)",3000,6.0))
+        add(ServiceItem(1604,"tiktok_live","مشاهدات بث تيكتوك (4000)",4000,8.0))
+
+        // مشاهدات بث انستغرام
+        add(ServiceItem(1701,"instagram_live","مشاهدات بث انستغرام (1000)",1000,2.0))
+        add(ServiceItem(1702,"instagram_live","مشاهدات بث انستغرام (2000)",2000,4.0))
+        add(ServiceItem(1703,"instagram_live","مشاهدات بث انستغرام (3000)",3000,6.0))
+        add(ServiceItem(1704,"instagram_live","مشاهدات بث انستغرام (4000)",4000,8.0))
+
+        // اعضاء قنوات تيلي
+        add(ServiceItem(1801,"telegram_members_channels","اعضاء قنوات تيلي 1k",1000,3.0))
+        add(ServiceItem(1802,"telegram_members_channels","اعضاء قنوات تيلي 2k",2000,6.0))
+        add(ServiceItem(1803,"telegram_members_channels","اعضاء قنوات تيلي 3k",3000,9.0))
+        add(ServiceItem(1804,"telegram_members_channels","اعضاء قنوات تيلي 4k",4000,12.0))
+        add(ServiceItem(1805,"telegram_members_channels","اعضاء قنوات تيلي 5k",5000,15.0))
+
+        // اعضاء كروبات تيلي
+        add(ServiceItem(1901,"telegram_members_groups","اعضاء كروبات تيلي 1k",1000,3.0))
+        add(ServiceItem(1902,"telegram_members_groups","اعضاء كروبات تيلي 2k",2000,6.0))
+        add(ServiceItem(1903,"telegram_members_groups","اعضاء كروبات تيلي 3k",3000,9.0))
+        add(ServiceItem(1904,"telegram_members_groups","اعضاء كروبات تيلي 4k",4000,12.0))
+        add(ServiceItem(1905,"telegram_members_groups","اعضاء كروبات تيلي 5k",5000,15.0))
+
+        // لودو (ألماس وذهب)
+        add(ServiceItem(2001,"ludo","لودو 810 الماسة",810,4.0))
+        add(ServiceItem(2002,"ludo","لودو 2280 الماسة",2280,8.9))
+        add(ServiceItem(2003,"ludo","لودو 5080 الماسة",5080,17.5))
+        add(ServiceItem(2004,"ludo","لودو 12750 الماسة",12750,42.7))
+        add(ServiceItem(2005,"ludo","لودو ذهب 66680",66680,4.0))
+        add(ServiceItem(2006,"ludo","لودو ذهب 219500",219500,8.9))
+        add(ServiceItem(2007,"ludo","لودو ذهب 1443000",1443000,17.5))
+        add(ServiceItem(2008,"ludo","لودو ذهب 3627000",3627000,42.7))
+
+        // ببجي
+        add(ServiceItem(2101,"pubg","ببجي 60 شدة",60,2.0))
+        add(ServiceItem(2102,"pubg","ببجي 120 شدة",120,4.0))
+        add(ServiceItem(2103,"pubg","ببجي 180 شدة",180,6.0))
+        add(ServiceItem(2104,"pubg","ببجي 240 شدة",240,8.0))
+        add(ServiceItem(2105,"pubg","ببجي 325 شدة",325,9.0))
+        add(ServiceItem(2106,"pubg","ببجي 660 شدة",660,15.0))
+        add(ServiceItem(2107,"pubg","ببجي 1800 شدة",1800,40.0))
+
+        // آيتونز
+        add(ServiceItem(2201,"itunes","شراء رصيد 5 آيتونز",5,9.0))
+        add(ServiceItem(2202,"itunes","شراء رصيد 10 آيتونز",10,18.0))
+        add(ServiceItem(2203,"itunes","شراء رصيد 15 آيتونز",15,27.0))
+        add(ServiceItem(2204,"itunes","شراء رصيد 20 آيتونز",20,36.0))
+        add(ServiceItem(2205,"itunes","شراء رصيد 25 آيتونز",25,45.0))
+        add(ServiceItem(2206,"itunes","شراء رصيد 30 آيتونز",30,54.0))
+        add(ServiceItem(2207,"itunes","شراء رصيد 35 آيتونز",35,63.0))
+        add(ServiceItem(2208,"itunes","شراء رصيد 40 آيتونز",40,72.0))
+        add(ServiceItem(2209,"itunes","شراء رصيد 45 آيتونز",45,81.0))
+        add(ServiceItem(2210,"itunes","شراء رصيد 50 آيتونز",50,90.0))
+
+        // رفع سكور بنك تيك توك
+        add(ServiceItem(2301,"bank_score","رفع سكور بنك (1000)",1000,2.0))
+        add(ServiceItem(2302,"bank_score","رفع سكور بنك (2000)",2000,4.0))
+        add(ServiceItem(2303,"bank_score","رفع سكور بنك (3000)",3000,6.0))
+        add(ServiceItem(2304,"bank_score","رفع سكور بنك (10000)",10000,20.0))
+
+        // شراء رصيد شبكات (اثير/اسيا/كورك)
+        add(ServiceItem(2401,"balance_buy","$3.5 - شراء رصيد 2 دولار أثير",2,3.5))
+        add(ServiceItem(2402,"balance_buy","$7.0 - شراء رصيد 5 دولار أثير",5,7.0))
+        add(ServiceItem(2403,"balance_buy","$13.0 - شراء رصيد 10 دولار أثير",10,13.0))
+        add(ServiceItem(2404,"balance_buy","$19.0 - شراء رصيد 15 دولار أثير",15,19.0))
+        add(ServiceItem(2405,"balance_buy","$52.0 - شراء رصيد 40 دولار أثير",40,52.0))
+
+        add(ServiceItem(2411,"balance_buy","$3.5 - شراء رصيد 2 دولار اسيا",2,3.5))
+        add(ServiceItem(2412,"balance_buy","$7.0 - شراء رصيد 5 دولار اسيا",5,7.0))
+        add(ServiceItem(2413,"balance_buy","$13.0 - شراء رصيد 10 دولار اسيا",10,13.0))
+        add(ServiceItem(2414,"balance_buy","$19.0 - شراء رصيد 15 دولار اسيا",15,19.0))
+        add(ServiceItem(2415,"balance_buy","$52.0 - شراء رصيد 40 دولار اسيا",40,52.0))
+
+        add(ServiceItem(2421,"balance_buy","$3.5 - شراء رصيد 2 دولار كوكرك",2,3.5))
+        add(ServiceItem(2422,"balance_buy","$7.0 - شراء رصيد 5 دولار كوكرك",5,7.0))
+        add(ServiceItem(2423,"balance_buy","$13.0 - شراء رصيد 10 دولار كوكرك",10,13.0))
+        add(ServiceItem(2424,"balance_buy","$19.0 - شراء رصيد 15 دولار كوكرك",15,19.0))
     }
-    prefs(LocalContext.current).edit().putString(KEY_CATALOG, arr.toString()).apply()
+
+    fun byCategory(cat: String) = items.filter { it.category == cat }
 }
 
-/* ======================= الطلبات ======================= */
-private fun loadOrders(ctx: Context): MutableList<Order> {
-    val js = prefs(ctx).getString(KEY_ORDERS, "[]") ?: "[]"
-    return runCatching {
-        val arr = JSONArray(js)
+// -------------------------
+// التخزين المحلي (SharedPreferences + JSON)
+// -------------------------
+class LocalRepo(private val ctx: Context) {
+    private val prefs = ctx.getSharedPreferences("smm_local", Context.MODE_PRIVATE)
+
+    private fun getString(key: String) = prefs.getString(key, null)
+    private fun putString(key: String, value: String?) =
+        prefs.edit().putString(key, value).apply()
+
+    // المستخدم المجهول
+    fun getOrCreateUser(): User {
+        val raw = getString("user")
+        if (raw != null) return userFromJson(JSONObject(raw))
+        val u = User(
+            id = UUID.randomUUID().toString(),
+            createdAt = System.currentTimeMillis(),
+            balance = 0.0
+        )
+        saveUser(u); return u
+    }
+    fun saveUser(u: User) = putString("user", userToJson(u).toString())
+
+    // الطلبات
+    fun loadOrders(): MutableList<Order> {
+        val raw = getString("orders") ?: "[]"
+        val arr = JSONArray(raw)
         val list = mutableListOf<Order>()
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            list += Order(
-                id = o.getLong("id"),
-                serviceId = o.getString("serviceId"),
-                serviceName = o.getString("serviceName"),
-                price = o.getDouble("price"),
-                category = o.optString("category", "عام"),
-                note = o.optString("note", ""),
-                createdAt = o.getLong("createdAt"),
-                status = OrderStatus.valueOf(o.getString("status"))
-            )
-        }
-        list.sortedByDescending { it.createdAt }.toMutableList()
-    }.getOrElse { mutableListOf() }
-}
-
-private fun saveOrders(ctx: Context, list: List<Order>) {
-    val arr = JSONArray()
-    list.forEach {
-        val o = JSONObject()
-        o.put("id", it.id)
-        o.put("serviceId", it.serviceId)
-        o.put("serviceName", it.serviceName)
-        o.put("price", it.price)
-        o.put("category", it.category)
-        o.put("note", it.note)
-        o.put("createdAt", it.createdAt)
-        o.put("status", it.status.name)
-        arr.put(o)
+        for (i in 0 until arr.length()) list += orderFromJson(arr.getJSONObject(i))
+        return list
     }
-    prefs(ctx).edit().putString(KEY_ORDERS, arr.toString()).apply()
-}
-
-/* ======================= الكروت ======================= */
-private fun loadPendingCards(ctx: Context): MutableList<PendingCard> {
-    val js = prefs(ctx).getString(KEY_PENDING_CARDS, "[]") ?: "[]"
-    return runCatching {
-        val arr = JSONArray(js)
-        val list = mutableListOf<PendingCard>()
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            list += PendingCard(o.getLong("id"), o.getString("digits"), o.getLong("createdAt"))
-        }
-        list.sortedByDescending { it.createdAt }.toMutableList()
-    }.getOrElse { mutableListOf() }
-}
-
-private fun savePendingCards(ctx: Context, list: List<PendingCard>) {
-    val arr = JSONArray()
-    list.forEach {
-        val o = JSONObject()
-        o.put("id", it.id)
-        o.put("digits", it.digits)
-        o.put("createdAt", it.createdAt)
-        arr.put(o)
+    fun saveOrders(list: List<Order>) {
+        val arr = JSONArray()
+        list.forEach { arr.put(orderToJson(it)) }
+        putString("orders", arr.toString())
     }
-    prefs(ctx).edit().putString(KEY_PENDING_CARDS, arr.toString()).apply()
+
+    // كروت/شحنات معلقة
+    fun loadTopups(): MutableList<TopupRequest> {
+        val raw = getString("topups") ?: "[]"
+        val arr = JSONArray(raw)
+        val list = mutableListOf<TopupRequest>()
+        for (i in 0 until arr.length()) list += topupFromJson(arr.getJSONObject(i))
+        return list
+    }
+    fun saveTopups(list: List<TopupRequest>) {
+        val arr = JSONArray()
+        list.forEach { arr.put(topupToJson(it)) }
+        putString("topups", arr.toString())
+    }
+
+    // عمليات الرصيد
+    fun credit(userId: String, amount: Double): User {
+        val u = getOrCreateUser()
+        if (u.id == userId) {
+            u.balance = (u.balance + amount)
+            saveUser(u)
+        }
+        return u
+    }
+    fun debit(userId: String, amount: Double): Boolean {
+        val u = getOrCreateUser()
+        if (u.id != userId) return false
+        if (u.balance + 1e-9 < amount) return false
+        u.balance -= amount
+        saveUser(u)
+        return true
+    }
+
+    // JSON helpers
+    private fun userToJson(u: User) = JSONObject().apply {
+        put("id", u.id); put("createdAt", u.createdAt); put("balance", u.balance)
+    }
+    private fun userFromJson(o: JSONObject) = User(
+        id = o.getString("id"),
+        createdAt = o.getLong("createdAt"),
+        balance = o.optDouble("balance", 0.0)
+    )
+    private fun orderToJson(o: Order) = JSONObject().apply {
+        put("id", o.id); put("userId", o.userId); put("serviceId", o.serviceId)
+        put("serviceLabel", o.serviceLabel); put("quantity", o.quantity)
+        put("price", o.price); put("input", o.input)
+        put("status", o.status.name); put("createdAt", o.createdAt)
+    }
+    private fun orderFromJson(o: JSONObject) = Order(
+        id = o.getString("id"),
+        userId = o.getString("userId"),
+        serviceId = o.getInt("serviceId"),
+        serviceLabel = o.getString("serviceLabel"),
+        quantity = o.getInt("quantity"),
+        price = o.getDouble("price"),
+        input = o.optString("input",""),
+        status = OrderStatus.valueOf(o.getString("status")),
+        createdAt = o.getLong("createdAt")
+    )
+    private fun topupToJson(t: TopupRequest) = JSONObject().apply {
+        put("id", t.id); put("userId", t.userId); put("method", t.method)
+        put("code", t.code); put("submittedAt", t.submittedAt)
+        put("status", t.status.name); put("approvedAmount", t.approvedAmount)
+        put("note", t.note)
+    }
+    private fun topupFromJson(o: JSONObject) = TopupRequest(
+        id = o.getString("id"),
+        userId = o.getString("userId"),
+        method = o.getString("method"),
+        code = if (o.isNull("code")) null else o.getString("code"),
+        submittedAt = o.getLong("submittedAt"),
+        status = TopupStatus.valueOf(o.getString("status")),
+        approvedAmount = if (o.isNull("approvedAmount")) null else o.getDouble("approvedAmount"),
+        note = if (o.isNull("note")) null else o.getString("note")
+    )
 }
 
-/* ======================= التنقل ======================= */
+// -------------------------
+// التنقّل
+// -------------------------
 sealed class Screen {
-    object HOME : Screen()
-    object SERVICES : Screen()
-    data class SECTION(val secKey: String) : Screen()
-    object ORDERS : Screen()
-    object BALANCE : Screen()
-    object REFERRAL : Screen()
-    object LEADERBOARD : Screen()
-    object OWNER_LOGIN : Screen()
-    object OWNER_DASH : Screen()
-    object OWNER_EDIT : Screen()
-    object OWNER_PENDING_CARDS : Screen()
-    object OWNER_PENDING_ORDERS : Screen()
-    data class OWNER_PENDING_CATEGORY(val category: String) : Screen()  // pubg/itunes/mobile/ludo/telegram/...
-    object OWNER_BALANCE : Screen()
-    object OWNER_API_TOOLS : Screen()
-    object OWNER_USERS : Screen()
-    object OWNER_MODS : Screen()
-    object OWNER_BLOCK : Screen()
-    object OWNER_UNBLOCK : Screen()
-    object OWNER_BROADCAST : Screen()
-    object OWNER_API_CODES : Screen()
-    object OWNER_REFERRALS : Screen()
-    object OWNER_DISCOUNTS_INFO : Screen()
-    object OWNER_LEADERBOARD : Screen()
+    object HOME: Screen()
+    data class SERVICE_LIST(val cat: String): Screen()
+    data class ORDER_CREATE(val item: ServiceItem): Screen()
+    object BALANCE: Screen()
+    object TOPUP_METHODS: Screen()
+    object TOPUP_ASIACELL: Screen()
+    data class TOPUP_SUPPORT(val method: String): Screen()
+    object MY_ORDERS: Screen()
+    object ADMIN_LOGIN: Screen()
+    object ADMIN_PANEL: Screen()
 }
 
-/* ======================= النشاط الرئيسي ======================= */
+// -------------------------
+// نشاط التطبيق
+// -------------------------
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { AppRoot() }
+        setContent {
+            MaterialTheme(colorScheme = lightColorScheme()) {
+                AppRoot()
+            }
+        }
     }
 }
 
-/* ======================= الجذر ======================= */
 @Composable
 fun AppRoot() {
     val ctx = LocalContext.current
-    val userId = remember { loadUserId(ctx) }
+    val repo = remember { LocalRepo(ctx) }
+    val user by remember { mutableStateOf(repo.getOrCreateUser()) }
 
     var screen by remember { mutableStateOf<Screen>(Screen.HOME) }
-    var catalog by remember { mutableStateOf(loadCatalog(ctx)) }
-    var balance by remember { mutableStateOf(loadBalance(ctx)) }
-    var totalSpent by remember { mutableStateOf(loadTotalSpent(ctx)) }
-    var isOwnerState by remember { mutableStateOf(isOwner(ctx)) }
-    var isMod by remember { mutableStateOf(isModerator(ctx)) }
-    var announcement by remember { mutableStateOf(loadAnnouncement(ctx)) }
-    val (blocked, blockReason) = remember { isBlocked(ctx) }
 
-    fun persist() {
-        saveCatalog(ctx, catalog)
-        saveBalance(ctx, balance)
-        saveTotalSpent(ctx, totalSpent)
-    }
-
-    Surface(Modifier.fillMaxSize(), color = Color(0xFFF7F2FA)) {
-        Column(Modifier.fillMaxSize()) {
-            TopBar(
-                title = "خدمات راتلوزن",
-                subtitle = "ID: $userId",
-                showOwnerButton = isOwnerState,
-                onOwnerClick = { screen = Screen.OWNER_DASH }
+    // شريط علوي مع فتح لوحة المالك بالضغط المطوّل على العنوان
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    var long by remember { mutableStateOf(0L) }
+                    Text(
+                        text = "خدمات راتلوزن",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .combinedClickable(
+                                onClick = {},
+                                onLongClick = {
+                                    val now = System.currentTimeMillis()
+                                    if (now - long > 600) long = now
+                                    screen = Screen.ADMIN_LOGIN
+                                }
+                            ),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
             )
-
-            if (announcement.isNotBlank()) {
-                Banner(announcement)
-            }
-
-            if (blocked) {
-                BlockedView(reason = blockReason ?: "محظور مؤقتًا") {
-                    // فقط عرض السبب، لا أزرار عمل حتى انتهاء الحظر
-                }
-            } else {
-                when (screen) {
-                    Screen.HOME -> HomeScreen(
-                        onServices = { screen = Screen.SERVICES },
-                        onOrders = { screen = Screen.ORDERS },
-                        onBalance = { screen = Screen.BALANCE },
-                        onReferral = { screen = Screen.REFERRAL },
-                        onLeaderboard = { screen = Screen.LEADERBOARD },
-                        onOwnerLogin = { screen = Screen.OWNER_LOGIN }
-                    )
-                    Screen.SERVICES -> ServicesScreen(
-                        catalog = catalog,
-                        isModerator = isMod,
-                        onOpenSection = { secKey -> screen = Screen.SECTION(secKey) },
-                        onBack = { screen = Screen.HOME }
-                    )
-                    is Screen.SECTION -> {
-                        val sec = catalog.find { it.key == screen.secKey }!!
-                        SectionScreen(
-                            section = sec,
-                            isModerator = isMod,
-                            onOrder = { svc ->
-                                val price = if (isMod) svc.price * 0.9 else svc.price
-                                val orders = loadOrders(ctx)
-                                orders += Order(
-                                    id = System.currentTimeMillis(),
-                                    serviceId = svc.id,
-                                    serviceName = svc.name,
-                                    price = price,
-                                    category = svc.category,
-                                    note = "",
-                                    createdAt = System.currentTimeMillis(),
-                                    status = OrderStatus.PENDING
-                                )
-                                saveOrders(ctx, orders)
-                                totalSpent += price
-                                saveTotalSpent(ctx, totalSpent)
-                                Toast.makeText(ctx, "تمت إضافة الطلب (قيد المراجعة).", Toast.LENGTH_SHORT).show()
-                            },
-                            onBack = { screen = Screen.SERVICES }
-                        )
-                    }
-                    Screen.ORDERS -> OrdersListScreen(
-                        orders = loadOrders(ctx),
-                        onBack = { screen = Screen.HOME }
-                    )
-                    Screen.BALANCE -> BalanceScreen(
-                        balance = balance,
-                        onAsiacell = {
-                            // عرض Dialog إدخال الكارت
-                            screen = BalanceAsiacellDialog(
-                                screen, onSubmit = { digits ->
-                                    val ok = digits.length == 14 || digits.length == 16
-                                    if (!ok) {
-                                        Toast.makeText(ctx, "الرقم يجب أن يكون 14 أو 16 رقمًا.", Toast.LENGTH_LONG).show()
-                                    } else {
-                                        val list = loadPendingCards(ctx)
-                                        // حماية بسيطة ضد السبام: 5 خلال 2 دقيقة => حظر 2 ساعة
-                                        val cutoff = System.currentTimeMillis() - 120_000
-                                        val recent = list.count { it.createdAt >= cutoff }
-                                        if (recent >= 5) {
-                                            setBlock(ctx, hours = 2, reason = "محاولات كثيرة خلال وقت قصير.")
-                                            Toast.makeText(ctx, "تم حظرك مؤقتًا لسوء الاستخدام.", Toast.LENGTH_LONG).show()
-                                        } else {
-                                            val updated = list + PendingCard(System.currentTimeMillis(), digits, System.currentTimeMillis())
-                                            savePendingCards(ctx, updated)
-                                            Toast.makeText(ctx, "تم استلام طلبك وسوف يتم الشحن قريبًا.", Toast.LENGTH_LONG).show()
-                                        }
-                                    }
-                                },
-                                onCancel = { /* لا شيء */ }
-                            )
-                        },
-                        onSupport = { title ->
-                            val number = "+9647763410970"
-                            val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            cm.setPrimaryClip(ClipData.newPlainText("whatsapp", number))
-                            Toast.makeText(ctx, "تم نسخ رقم الدعم: $number", Toast.LENGTH_LONG).show()
-                            try {
-                                val uri = Uri.parse("https://wa.me/9647763410970")
-                                ctx.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                            } catch (_: Throwable) {}
-                        },
-                        onBack = { screen = Screen.HOME }
-                    )
-                    Screen.REFERRAL -> ReferralScreen(
-                        myId = userId,
-                        inviter = loadInviter(ctx),
-                        isPaid = isRefPaid(ctx),
-                        onSetInviter = { code ->
-                            setInviter(ctx, code)
-                            Toast.makeText(ctx, "تم تعيين الداعي.", Toast.LENGTH_SHORT).show()
-                        },
-                        onBack = { screen = Screen.HOME }
-                    )
-                    Screen.LEADERBOARD -> LeaderboardScreen(
-                        myId = userId,
-                        myTotal = loadTotalSpent(ctx),
-                        onBack = { screen = Screen.HOME }
-                    )
-                    Screen.OWNER_LOGIN -> OwnerLoginScreen(
-                        onSubmit = { pass ->
-                            if (pass == "2000") {
-                                setOwner(ctx, true)
-                                isOwnerState = true
-                                Toast.makeText(ctx, "تم الدخول كمالك.", Toast.LENGTH_SHORT).show()
-                                screen = Screen.OWNER_DASH
-                            } else {
-                                Toast.makeText(ctx, "كلمة المرور غير صحيحة.", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        onBack = { screen = Screen.HOME }
-                    )
-                    Screen.OWNER_DASH -> OwnerDashboardScreen(
-                        onEditPrices = { screen = Screen.OWNER_EDIT },
-                        onPendingCards = { screen = Screen.OWNER_PENDING_CARDS },
-                        onPendingOrders = { screen = Screen.OWNER_PENDING_ORDERS },
-                        onOpenCategory = { cat -> screen = Screen.OWNER_PENDING_CATEGORY(cat) },
-                        onBalanceOps = { screen = Screen.OWNER_BALANCE },
-                        onApiTools = { screen = Screen.OWNER_API_TOOLS },
-                        onUsers = { screen = Screen.OWNER_USERS },
-                        onMods = { screen = Screen.OWNER_MODS },
-                        onBlock = { screen = Screen.OWNER_BLOCK },
-                        onUnblock = { screen = Screen.OWNER_UNBLOCK },
-                        onBroadcast = { screen = Screen.OWNER_BROADCAST },
-                        onApiCodes = { screen = Screen.OWNER_API_CODES },
-                        onReferrals = { screen = Screen.OWNER_REFERRALS },
-                        onDiscountsInfo = { screen = Screen.OWNER_DISCOUNTS_INFO },
-                        onLeaderboard = { screen = Screen.OWNER_LEADERBOARD },
-                        onExitOwner = { setOwner(ctx, false); isOwnerState = false; screen = Screen.HOME },
-                        onBack = { screen = Screen.HOME }
-                    )
-                    Screen.OWNER_EDIT -> OwnerEditPricesScreen(
-                        catalog = catalog,
-                        onSave = { updated ->
-                            catalog = updated
-                            persist()
-                            Toast.makeText(ctx, "تم حفظ التعديلات.", Toast.LENGTH_SHORT).show()
-                            screen = Screen.OWNER_DASH
-                        },
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                    Screen.OWNER_PENDING_CARDS -> OwnerPendingCardsScreen(
-                        onApprove = { card, amount ->
-                            val newBal = max(0.0, loadBalance(ctx) + amount)
-                            saveBalance(ctx, newBal)
-                            balance = newBal
-                            // أول تمويل => عمولة للداعي (مرة واحدة)
-                            if (!isRefPaid(ctx)) {
-                                // عمولة ثابتة 0.10$
-                                saveBalance(ctx, newBal + 0.0) // الرصيد للمستخدم الحالي فقط؛ عادة ترسل للداعي
-                                setRefPaid(ctx)
-                            }
-                            val list = loadPendingCards(ctx).filterNot { it.id == card.id }
-                            savePendingCards(ctx, list)
-                            Toast.makeText(ctx, "تم قبول الكارت وإضافة الرصيد.", Toast.LENGTH_SHORT).show()
-                        },
-                        onReject = { card ->
-                            val list = loadPendingCards(ctx).filterNot { it.id == card.id }
-                            savePendingCards(ctx, list)
-                            Toast.makeText(ctx, "تم رفض الكارت.", Toast.LENGTH_SHORT).show()
-                        },
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                    Screen.OWNER_PENDING_ORDERS -> OwnerPendingOrdersScreen(
-                        filter = null,
-                        onComplete = { id ->
-                            val list = loadOrders(ctx)
-                            list.find { it.id == id }?.let { it.status = OrderStatus.COMPLETED }
-                            saveOrders(ctx, list)
-                        },
-                        onReject = { id ->
-                            val list = loadOrders(ctx)
-                            list.find { it.id == id }?.let { it.status = OrderStatus.REJECTED }
-                            saveOrders(ctx, list)
-                        },
-                        onRefund = { id ->
-                            val list = loadOrders(ctx)
-                            list.find { it.id == id }?.let {
-                                it.status = OrderStatus.REFUNDED
-                                saveOrders(ctx, list)
-                                val nb = max(0.0, loadBalance(ctx) + it.price)
-                                saveBalance(ctx, nb)
-                                balance = nb
-                            }
-                        },
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                    is Screen.OWNER_PENDING_CATEGORY -> OwnerPendingOrdersScreen(
-                        filter = screen.category,
-                        onComplete = { id ->
-                            val list = loadOrders(ctx)
-                            list.find { it.id == id }?.let { it.status = OrderStatus.COMPLETED }
-                            saveOrders(ctx, list)
-                        },
-                        onReject = { id ->
-                            val list = loadOrders(ctx)
-                            list.find { it.id == id }?.let { it.status = OrderStatus.REJECTED }
-                            saveOrders(ctx, list)
-                        },
-                        onRefund = { id ->
-                            val list = loadOrders(ctx)
-                            list.find { it.id == id }?.let {
-                                it.status = OrderStatus.REFUNDED
-                                saveOrders(ctx, list)
-                                val nb = max(0.0, loadBalance(ctx) + it.price)
-                                saveBalance(ctx, nb); balance = nb
-                            }
-                        },
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                    Screen.OWNER_BALANCE -> OwnerBalanceOpsScreen(
-                        onAdd = { amount ->
-                            val nb = max(0.0, loadBalance(ctx) + amount)
-                            saveBalance(ctx, nb); balance = nb
-                            Toast.makeText(ctx, "تمت إضافة $$amount", Toast.LENGTH_SHORT).show()
-                        },
-                        onDeduct = { amount ->
-                            val nb = max(0.0, loadBalance(ctx) - amount)
-                            saveBalance(ctx, nb); balance = nb
-                            Toast.makeText(ctx, "تم خصم $$amount", Toast.LENGTH_SHORT).show()
-                        },
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                    Screen.OWNER_API_TOOLS -> OwnerApiToolsScreen(
-                        onCheckOrder = { id ->
-                            val st = loadOrders(ctx).find { it.id == id }?.status ?: OrderStatus.WAITING
-                            st.name
-                        },
-                        onCheckProviderBalance = { "الرصيد (وهمي): \$1000.00" },
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                    Screen.OWNER_USERS -> OwnerUsersScreen(
-                        usersCount = 1, // محليًا: مستخدم واحد
-                        usersBalance = loadBalance(ctx),
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                    Screen.OWNER_MODS -> OwnerModsScreen(
-                        isMod = isMod,
-                        onSet = { v -> setModerator(ctx, v); isMod = v },
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                    Screen.OWNER_BLOCK -> OwnerBlockScreen(
-                        onBlock = { hours, reason -> setBlock(ctx, hours, reason); Toast.makeText(ctx, "تم الحظر.", Toast.LENGTH_SHORT).show() },
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                    Screen.OWNER_UNBLOCK -> OwnerUnblockScreen(
-                        onUnblock = { clearBlock(ctx); Toast.makeText(ctx, "تم إلغاء الحظر.", Toast.LENGTH_SHORT).show() },
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                    Screen.OWNER_BROADCAST -> OwnerBroadcastScreen(
-                        current = announcement,
-                        onSave = { msg -> saveAnnouncement(ctx, msg); announcement = msg; Toast.makeText(ctx, "تم حفظ الإعلان.", Toast.LENGTH_SHORT).show() },
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                    Screen.OWNER_API_CODES -> OwnerApiCodesScreen(
-                        catalog = catalog,
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                    Screen.OWNER_REFERRALS -> OwnerReferralsScreen(
-                        inviter = loadInviter(ctx),
-                        firstFundingPaid = isRefPaid(ctx),
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                    Screen.OWNER_DISCOUNTS_INFO -> DiscountsInfoScreen(
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                    Screen.OWNER_LEADERBOARD -> AdminLeaderboardScreen(
-                        myId = userId,
-                        total = loadTotalSpent(ctx),
-                        onBack = { screen = Screen.OWNER_DASH }
-                    )
-                }
-            }
         }
-    }
-}
-
-/* ======================= عناصر عامة ======================= */
-@Composable
-fun TopBar(title: String, subtitle: String, showOwnerButton: Boolean, onOwnerClick: () -> Unit) {
-    TopAppBar(
-        title = {
-            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(title, fontWeight = FontWeight.Bold)
-                Text(subtitle, fontSize = 12.sp)
-            }
-        },
-        actions = {
-            if (showOwnerButton) {
-                TextButton(onClick = onOwnerClick) { Text("لوحة المالك") }
-            }
-        }
-    )
-}
-
-@Composable
-fun Banner(text: String) {
-    if (text.isBlank()) return
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3CD))
-    ) {
-        Text(text, Modifier.padding(12.dp), color = Color(0xFF805900))
-    }
-}
-
-@Composable
-fun BigButton(text: String, onClick: () -> Unit, color: Color = Color(0xFF2E7D32)) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        colors = ButtonDefaults.buttonColors(containerColor = color)
-    ) {
-        Text(text, color = Color.White, fontSize = 16.sp, modifier = Modifier.padding(6.dp))
-    }
-}
-
-@Composable
-fun BlockedView(reason: String, content: @Composable () -> Unit = {}) {
-    Column(Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("تم حظرك مؤقتًا", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color.Red)
-        Spacer(Modifier.height(6.dp))
-        Text(reason, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(12.dp))
-        content()
-    }
-}
-
-/* ======================= HOME ======================= */
-@Composable
-fun HomeScreen(
-    onServices: () -> Unit,
-    onOrders: () -> Unit,
-    onBalance: () -> Unit,
-    onReferral: () -> Unit,
-    onLeaderboard: () -> Unit,
-    onOwnerLogin: () -> Unit
-) {
-    Column(
-        Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text("أهلًا وسهلًا بكم في تطبيق خدمات راتلوزن", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        BigButton("الخدمات", onServices)
-        BigButton("طلباتي", onOrders)
-        BigButton("رصيدي", onBalance)
-        BigButton("الإحالة", onReferral)
-        BigButton("المتصدرين 🎉", onLeaderboard)
-        Row(Modifier.fillMaxWidth()) {
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = onOwnerLogin) { Text("دخول المالك") }
-        }
-    }
-}
-
-/* ======================= SERVICES ======================= */
-@Composable
-fun ServicesScreen(catalog: List<Section>, isModerator: Boolean, onOpenSection: (String) -> Unit, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("الأقسام", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(catalog) { sec ->
-                Card(Modifier.fillMaxWidth().clickable { onOpenSection(sec.key) }) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(sec.title, fontWeight = FontWeight.Bold)
-                        val count = sec.services.size
-                        val lbl = if (isModerator) "خصم 10% للمشرف" else ""
-                        Text("عدد الخدمات: $count  $lbl", fontSize = 12.sp, color = Color.Gray)
-                    }
-                }
-            }
-        }
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-@Composable
-fun SectionScreen(section: Section, isModerator: Boolean, onOrder: (Service) -> Unit, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text(section.title, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(section.services) { svc ->
-                Card(Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(svc.name, fontWeight = FontWeight.Bold)
-                            val price = if (isModerator) svc.price * 0.9 else svc.price
-                            Text("$${"%.2f".format(price)}", color = Color(0xFF2E7D32))
-                        }
-                        Button(onClick = { onOrder(svc) }) { Text("طلب الخدمة") }
-                    }
-                }
-            }
-        }
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-/* ======================= ORDERS ======================= */
-@Composable
-fun OrdersListScreen(orders: List<Order>, onBack: () -> Unit) {
-    val fmt = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("طلباتي", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Spacer(Modifier.height(8.dp))
-        if (orders.isEmpty()) {
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text("لا توجد طلبات بعد.") }
-        } else {
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(orders) { o ->
-                    Card(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(o.serviceName, fontWeight = FontWeight.Bold)
-                            Text("السعر: $${"%.2f".format(o.price)}")
-                            Text("الفئة: ${o.category}")
-                            Text("الحالة: ${o.status}")
-                            if (o.note.isNotBlank()) Text("ملاحظات: ${o.note}")
-                            Text("الوقت: ${fmt.format(Date(o.createdAt))}", fontSize = 12.sp, color = Color.Gray)
-                        }
-                    }
-                }
-            }
-        }
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-/* ======================= BALANCE ======================= */
-@Composable
-fun BalanceScreen(
-    balance: Double,
-    onAsiacell: () -> Unit,
-    onSupport: (String) -> Unit,
-    onBack: () -> Unit
-) {
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF4FF))) {
-            Text("رصيدك الحالي: $${"%.2f".format(balance)}", Modifier.padding(16.dp), fontWeight = FontWeight.Bold, fontSize = 20.sp)
-        }
-        BigButton("شحن عبر اسياسيل", onAsiacell)
-        BigButton("شحن عبر سوبركي") { onSupport("شحن عبر سوبركي") }
-        BigButton("شحن عبر نقاط سنتات") { onSupport("شحن عبر نقاط سنتات") }
-        BigButton("شحن عبر زين كاش") { onSupport("شحن عبر زين كاش") }
-        BigButton("شحن عبر هلا بي") { onSupport("شحن عبر هلا بي") }
-        BigButton("شحن عبر USDT")   { onSupport("شحن عبر USDT") }
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-/* يظهر Dialog إدخال كارت آسيا سيل ثم يعود للشاشة نفسها */
-@Composable
-fun BalanceAsiacellDialog(
-    returnTo: Screen,
-    onSubmit: (String) -> Unit,
-    onCancel: () -> Unit
-): Screen {
-    var digits by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    AlertDialog(
-        onDismissRequest = { onCancel() },
-        title = { Text("أدخل رقم الكارت (14/16 رقم)") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = digits,
-                    onValueChange = {
-                        digits = it.filter { ch -> ch.isDigit() }
-                        error = null
+    ) { pad ->
+        Box(Modifier.padding(pad)) {
+            when (val s = screen) {
+                Screen.HOME -> HomeScreen(
+                    user = user,
+                    onSection = { screen = Screen.SERVICE_LIST(it) },
+                    onBalance = { screen = Screen.BALANCE },
+                    onOrders = { screen = Screen.MY_ORDERS }
+                )
+                is Screen.SERVICE_LIST -> ServiceListScreen(
+                    cat = s.cat,
+                    onBack = { screen = Screen.HOME },
+                    onPick = { screen = Screen.ORDER_CREATE(it) }
+                )
+                is Screen.ORDER_CREATE -> OrderCreateScreen(
+                    repo = repo, userId = user.id, item = s.item,
+                    onDone = { ok ->
+                        if (ok) Toast.makeText(
+                            LocalContext.current, "تم إرسال الطلب وخصم الرصيد", Toast.LENGTH_SHORT
+                        ).show()
+                        screen = Screen.MY_ORDERS
                     },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    isError = error != null,
-                    supportingText = { if (error != null) Text(error!!, color = Color.Red) }
+                    onBack = { screen = Screen.SERVICE_LIST(s.item.category) }
+                )
+                Screen.BALANCE -> BalanceScreen(
+                    repo = repo, userId = user.id,
+                    onBack = { screen = Screen.HOME },
+                    onTopup = { screen = Screen.TOPUP_METHODS }
+                )
+                Screen.TOPUP_METHODS -> TopupMethodsScreen(
+                    onBack = { screen = Screen.BALANCE },
+                    onAsiacell = { screen = Screen.TOPUP_ASIACELL },
+                    onSupport = { method -> screen = Screen.TOPUP_SUPPORT(method) }
+                )
+                Screen.TOPUP_ASIACELL -> AsiacellCardScreen(
+                    repo = repo, userId = user.id,
+                    onBack = { screen = Screen.TOPUP_METHODS },
+                    onSubmitted = {
+                        Toast.makeText(
+                            LocalContext.current,
+                            "تم استلام طلبك، سوف يتم شحن حسابك قريبًا.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        screen = Screen.BALANCE
+                    }
+                )
+                is Screen.TOPUP_SUPPORT -> SupportTopupScreen(
+                    method = s.method,
+                    onBack = { screen = Screen.TOPUP_METHODS }
+                )
+                Screen.MY_ORDERS -> MyOrdersScreen(
+                    repo = repo, userId = user.id,
+                    onBack = { screen = Screen.HOME }
+                )
+                Screen.ADMIN_LOGIN -> AdminLoginScreen(
+                    onCancel = { screen = Screen.HOME },
+                    onOk = { pass ->
+                        if (pass == "ratluzen") screen = Screen.ADMIN_PANEL
+                        else Toast.makeText(LocalContext.current,"كلمة مرور خاطئة",Toast.LENGTH_SHORT).show()
+                    }
+                )
+                Screen.ADMIN_PANEL -> AdminPanelScreen(
+                    repo = repo,
+                    onBack = { screen = Screen.HOME }
                 )
             }
-        },
-        confirmButton = {
-            Button(onClick = {
-                val ok = (digits.length == 14 || digits.length == 16)
-                if (!ok) error = "الرقم يجب أن يكون 14 أو 16 رقمًا."
-                else onSubmit(digits)
-            }) { Text("إرسال") }
-        },
-        dismissButton = { OutlinedButton(onClick = { onCancel() }) { Text("إلغاء") } }
-    )
-    return returnTo
+        }
+    }
 }
 
-/* ======================= REFERRAL ======================= */
+// -------------------------
+// واجهات
+// -------------------------
+
 @Composable
-fun ReferralScreen(myId: String, inviter: String?, isPaid: Boolean, onSetInviter: (String) -> Unit, onBack: () -> Unit) {
-    val clip = LocalClipboardManager.current
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("نظام الإحالة", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp)) {
-                Text("رابط دعوتك", fontWeight = FontWeight.Bold)
-                val link = "ratluzen://invite/$myId"
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(link, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { clip.setText(AnnotatedString(link)) }) { Text("نسخ") }
-                }
-            }
-        }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp)) {
-                Text("هل لديك كود داعٍ؟")
-                var txt by remember { mutableStateOf(inviter ?: "") }
-                OutlinedTextField(value = txt, onValueChange = { txt = it }, label = { Text("كود الداعي") }, singleLine = true)
+fun HomeScreen(
+    user: User,
+    onSection: (String) -> Unit,
+    onBalance: () -> Unit,
+    onOrders: () -> Unit,
+) {
+    val scroll = rememberScrollState()
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(scroll)
+    ) {
+        Text(
+            "مرحبًا بك",
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.End,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(6.dp))
+        Card(
+            Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFF7F7F7))
+        ) {
+            Column(Modifier.padding(14.dp)) {
+                Text("رصيدك الحالي:", fontWeight = FontWeight.Bold, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
+                Text("$${"%.2f".format(user.balance)}", fontSize = 22.sp, textAlign = TextAlign.End, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { onSetInviter(txt) }) { Text("حفظ") }
-                    if (isPaid) Text("تم دفع العمولة لأول تمويل", color = Color(0xFF2E7D32))
+                    GreenButton("رصيدي / شحن") { onBalance() }
+                    GreenButton("طلباتي") { onOrders() }
                 }
             }
         }
-        Spacer(Modifier.weight(1f))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
+        Spacer(Modifier.height(14.dp))
+        Text("الأقسام", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        Spacer(Modifier.height(8.dp))
+
+        Catalog.sections.forEach { (key, title) ->
+            GreenItem(title) { onSection(key) }
+            Spacer(Modifier.height(8.dp))
+        }
     }
 }
 
-/* ======================= LEADERBOARD ======================= */
 @Composable
-fun LeaderboardScreen(myId: String, myTotal: Double, onBack: () -> Unit) {
+fun ServiceListScreen(
+    cat: String,
+    onBack: () -> Unit,
+    onPick: (ServiceItem) -> Unit
+) {
+    val title = Catalog.sections[cat] ?: "خدمات"
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("المتصدرون", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Spacer(Modifier.height(8.dp))
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp)) {
-                Text("1) $myId — \$${"%.2f".format(myTotal)}", fontWeight = FontWeight.Bold)
-                Text("سيتم عرض مزيد من المستخدمين عند ربط قاعدة بيانات خارجية.", color = Color.Gray, fontSize = 12.sp)
+        BackButton(onBack)
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(Catalog.byCategory(cat)) { item ->
+                GreenItem("${item.label} - $${item.price}") { onPick(item) }
             }
         }
-        Spacer(Modifier.weight(1f))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
     }
 }
 
-/* ======================= OWNER SCREENS ======================= */
 @Composable
-fun OwnerLoginScreen(onSubmit: (String) -> Unit, onBack: () -> Unit) {
-    var pass by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("دخول المالك", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+fun OrderCreateScreen(
+    repo: LocalRepo,
+    userId: String,
+    item: ServiceItem,
+    onDone: (Boolean) -> Unit,
+    onBack: () -> Unit
+) {
+    var input by remember { mutableStateOf("") }
+    var msg by remember { mutableStateOf<String?>(null) }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        BackButton(onBack)
+        Text("تأكيد الطلب", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Text(item.label, fontWeight = FontWeight.Bold)
+        Text("الكمية: ${item.quantity} | السعر: $${item.price}")
+        Spacer(Modifier.height(12.dp))
         OutlinedTextField(
-            value = pass, onValueChange = { pass = it },
-            label = { Text("كلمة المرور") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            value = input, onValueChange = { input = it },
+            label = { Text("أدخل رابط/يوزر أو بيانات الطلب") },
+            modifier = Modifier.fillMaxWidth()
         )
-        BigButton("دخول") { onSubmit(pass) }
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
+        Spacer(Modifier.height(12.dp))
+        GreenButton("اطلب الآن") {
+            val ok = repo.debit(userId, item.price)
+            if (!ok) {
+                msg = "رصيدك غير كافٍ لإتمام العملية."
+            } else {
+                val orders = repo.loadOrders()
+                orders += Order(
+                    id = UUID.randomUUID().toString(),
+                    userId = userId,
+                    serviceId = item.id,
+                    serviceLabel = item.label,
+                    quantity = item.quantity,
+                    price = item.price,
+                    input = input.trim(),
+                    status = OrderStatus.PENDING,
+                    createdAt = System.currentTimeMillis()
+                )
+                repo.saveOrders(orders)
+                onDone(true)
+                return@GreenButton
+            }
+        }
+        msg?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, color = Color.Red)
+        }
     }
 }
 
 @Composable
-fun OwnerDashboardScreen(
-    onEditPrices: () -> Unit,
-    onPendingCards: () -> Unit,
-    onPendingOrders: () -> Unit,
-    onOpenCategory: (String) -> Unit,
-    onBalanceOps: () -> Unit,
-    onApiTools: () -> Unit,
-    onUsers: () -> Unit,
-    onMods: () -> Unit,
-    onBlock: () -> Unit,
-    onUnblock: () -> Unit,
-    onBroadcast: () -> Unit,
-    onApiCodes: () -> Unit,
-    onReferrals: () -> Unit,
-    onDiscountsInfo: () -> Unit,
-    onLeaderboard: () -> Unit,
-    onExitOwner: () -> Unit,
-    onBack: () -> Unit
+fun BalanceScreen(
+    repo: LocalRepo,
+    userId: String,
+    onBack: () -> Unit,
+    onTopup: () -> Unit
 ) {
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("لوحة تحكم المالك", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        FlowButtons(
-            listOf(
-                "تعديل الأسعار والكميات" to onEditPrices,
-                "الطلبات المعلّقة (الخدمات)" to onPendingOrders,
-                "الكارتات المعلّقة" to onPendingCards,
-                "طلبات شدات ببجي" to { onOpenCategory("pubg") },
-                "طلبات شحن الايتونز" to { onOpenCategory("itunes") },
-                "طلبات الأرصدة المعلّقة" to { onOpenCategory("mobile") },
-                "طلبات لودو المعلّقة" to { onOpenCategory("ludo") },
-                "طلبات التليجرام" to { onOpenCategory("telegram") },
-                "إضافة/خصم رصيد" to onBalanceOps,
-                "فحص حالة طلب API" to onApiTools,
-                "فحص رصيد API" to onApiTools,
-                "رصيد المستخدمين" to onUsers,
-                "عدد المستخدمين" to onUsers,
-                "إدارة المشرفين" to onMods,
-                "حظر المستخدم" to onBlock,
-                "إلغاء حظر المستخدم" to onUnblock,
-                "إعلان التطبيق" to onBroadcast,
-                "أكواد خدمات API" to onApiCodes,
-                "نظام الإحالة" to onReferrals,
-                "شرح الخصومات" to onDiscountsInfo,
-                "المتصدرين" to onLeaderboard,
+    val user by remember { mutableStateOf(repo.getOrCreateUser()) }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        BackButton(onBack)
+        Text("رصيدي", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "رصيدك الحالي: $${"%.2f".format(user.balance)}",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(10.dp))
+        GreenItem("الشحن / زيادة الرصيد") { onTopup() }
+    }
+}
+
+@Composable
+fun TopupMethodsScreen(
+    onBack: () -> Unit,
+    onAsiacell: () -> Unit,
+    onSupport: (String) -> Unit
+) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        BackButton(onBack)
+        Text("اختر طريقة الشحن", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        GreenItem("شحن عبر اسياسيل") { onAsiacell() }
+        GreenItem("شحن عبر سوبركي") { onSupport("شحن عبر سوبركي") }
+        GreenItem("شحن عبر نقاط سنتات") { onSupport("شحن عبر نقاط سنتات") }
+        GreenItem("شحن عبر زين كاش") { onSupport("شحن عبر زين كاش") }
+        GreenItem("شحن عبر هلا بي") { onSupport("شحن عبر هلا بي") }
+        GreenItem("شحن عبر USDT") { onSupport("شحن عبر USDT") }
+        Spacer(Modifier.height(10.dp))
+        Text("عند اختيار أي طريقة غير اسياسيل سيتم توجيهك للدعم على واتساب.", fontSize = 12.sp, color = Color.Gray)
+    }
+}
+
+@Composable
+fun SupportTopupScreen(method: String, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val clip = LocalClipboardManager.current
+    val phone = "+9647763410970"
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        BackButton(onBack)
+        Text(method, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "لإكمال طلبك تواصل مع الدعم الفني عبر الواتساب:\n$phone",
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GreenButton("نسخ الرقم") {
+                clip.setText(androidx.compose.ui.text.AnnotatedString(phone))
+                Toast.makeText(ctx,"تم نسخ الرقم",Toast.LENGTH_SHORT).show()
+            }
+            GreenButton("فتح واتساب") {
+                val url = "https://wa.me/${phone.replace("+","")}"
+                ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            }
+        }
+    }
+}
+
+@Composable
+fun AsiacellCardScreen(
+    repo: LocalRepo,
+    userId: String,
+    onBack: () -> Unit,
+    onSubmitted: () -> Unit
+) {
+    var code by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        BackButton(onBack)
+        Text("شحن عبر اسياسيل", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        Text("أرسل رقم الكارت المكون من 14 أو 16 رقم.")
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = code,
+            onValueChange = { code = it.filter { ch -> ch.isDigit() }.take(20) },
+            label = { Text("رقم الكارت") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth()
+        )
+        error?.let { Spacer(Modifier.height(6.dp)); Text(it, color = Color.Red) }
+        Spacer(Modifier.height(12.dp))
+        GreenButton("إرسال") {
+            val valid = (code.length == 14 || code.length == 16)
+            if (!valid) { error = "الرجاء إدخال رقم صحيح من 14 أو 16 رقم"; return@GreenButton }
+            val list = repo.loadTopups()
+            list += TopupRequest(
+                id = UUID.randomUUID().toString(),
+                userId = userId,
+                method = "asiacell",
+                code = code,
+                submittedAt = System.currentTimeMillis(),
+                status = TopupStatus.PENDING,
+                approvedAmount = null,
+                note = null
             )
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) { Text("رجوع") }
-            TextButton(onClick = onExitOwner, modifier = Modifier.align(Alignment.CenterVertically)) { Text("إيقاف وضع المالك") }
+            repo.saveTopups(list)
+            onSubmitted()
         }
     }
 }
 
 @Composable
-fun FlowButtons(items: List<Pair<String, () -> Unit>>) {
-    LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(items) { (t, a) -> BigButton(t, a) }
-    }
-}
-
-@Composable
-fun OwnerEditPricesScreen(catalog: List<Section>, onSave: (MutableList<Section>) -> Unit, onBack: () -> Unit) {
-    var local by remember {
-        mutableStateOf(catalog.map { sec ->
-            Section(sec.key, sec.title, sec.services.map { it.copy() }.toMutableList())
-        }.toMutableList())
+fun MyOrdersScreen(repo: LocalRepo, userId: String, onBack: () -> Unit) {
+    val orders = remember { mutableStateListOf<Order>().apply { addAll(repo.loadOrders().filter { it.userId==userId }.sortedByDescending { it.createdAt }) } }
+    LaunchedEffect(Unit) {
+        // تحديث من التخزين عند العودة
+        orders.clear(); orders.addAll(repo.loadOrders().filter { it.userId==userId }.sortedByDescending { it.createdAt })
     }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("تعديل الأسعار والكميات", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(local) { sec ->
-                Card {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(sec.title, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(6.dp))
-                        sec.services.forEachIndexed { idx, svc ->
-                            var priceText by remember(svc.id) { mutableStateOf(svc.price.toString()) }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(svc.name, modifier = Modifier.weight(1f))
-                                OutlinedTextField(
-                                    value = priceText,
-                                    onValueChange = { priceText = it.filter { c -> c.isDigit() || c=='.' } },
-                                    label = { Text("السعر") },
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                    modifier = Modifier.width(120.dp)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Button(onClick = {
-                                    val v = priceText.toDoubleOrNull() ?: return@Button
-                                    local.find { it.key == sec.key }!!.services[idx] = svc.copy(price = v)
-                                }) { Text("تحديث") }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) { Text("رجوع") }
-            Button(onClick = { onSave(local) }, modifier = Modifier.weight(1f)) { Text("حفظ") }
-        }
-    }
-}
-
-@Composable
-fun OwnerPendingCardsScreen(onApprove: (PendingCard, Double) -> Unit, onReject: (PendingCard) -> Unit, onBack: () -> Unit) {
-    val ctx = LocalContext.current
-    var items by remember { mutableStateOf(loadPendingCards(ctx)) }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("الكروت المعلقة", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Spacer(Modifier.height(8.dp))
-        if (items.isEmpty()) {
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text("لا توجد كروت معلقة") }
-        } else {
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(items) { card ->
-                    Card {
-                        Column(Modifier.padding(12.dp)) {
-                            Text("الرقم: ${card.digits}", fontWeight = FontWeight.Bold)
-                            Text("التاريخ: ${SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date(card.createdAt))}", fontSize = 12.sp)
-                            Spacer(Modifier.height(6.dp))
-                            var amountText by remember { mutableStateOf("") }
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(
-                                    value = amountText,
-                                    onValueChange = { amountText = it.filter { c -> c.isDigit() || c=='.' } },
-                                    label = { Text("المبلغ (USD)") },
-                                    singleLine = true,
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Button(onClick = {
-                                    val v = amountText.toDoubleOrNull() ?: return@Button
-                                    onApprove(card, v)
-                                    items = loadPendingCards(ctx)
-                                }) { Text("قبول") }
-                                OutlinedButton(onClick = {
-                                    onReject(card)
-                                    items = loadPendingCards(ctx)
-                                }) { Text("رفض") }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-@Composable
-fun OwnerPendingOrdersScreen(
-    filter: String?,
-    onComplete: (Long) -> Unit,
-    onReject: (Long) -> Unit,
-    onRefund: (Long) -> Unit,
-    onBack: () -> Unit
-) {
-    val ctx = LocalContext.current
-    var orders by remember {
-        mutableStateOf(loadOrders(ctx).filter { it.status == OrderStatus.PENDING && (filter == null || it.category == filter) })
-    }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("الطلبات المعلقة" + if (filter != null) " ($filter)" else "", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Spacer(Modifier.height(8.dp))
+        BackButton(onBack)
+        Text("طلباتي", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
         if (orders.isEmpty()) {
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { Text("لا توجد طلبات معلّقة") }
+            Text("لا توجد طلبات بعد.")
         } else {
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(orders) { o ->
                     Card {
                         Column(Modifier.padding(12.dp)) {
-                            Text(o.serviceName, fontWeight = FontWeight.Bold)
-                            Text("السعر: $${"%.2f".format(o.price)}")
-                            Text("الفئة: ${o.category}")
+                            Text(o.serviceLabel, fontWeight = FontWeight.Bold)
+                            Text("السعر: $${o.price} | الحالة: ${when(o.status){
+                                OrderStatus.PENDING -> "قيد المراجعة"
+                                OrderStatus.IN_PROGRESS -> "قيد التنفيذ"
+                                OrderStatus.DONE -> "مكتمل"
+                                OrderStatus.REJECTED -> "مرفوض"
+                            }}")
+                            if (o.input.isNotBlank()) Text("البيانات: ${o.input}", fontSize = 12.sp, color = Color.Gray)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AdminLoginScreen(onCancel: () -> Unit, onOk: (String) -> Unit) {
+    var pass by remember { mutableStateOf("") }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        BackButton(onCancel)
+        Text("تسجيل دخول المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(
+            value = pass, onValueChange = { pass = it },
+            label = { Text("كلمة المرور") },
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(12.dp))
+        GreenButton("دخول") { onOk(pass) }
+    }
+}
+
+@Composable
+fun AdminPanelScreen(repo: LocalRepo, onBack: () -> Unit) {
+    val ctx = LocalContext.current
+    val user = remember { repo.getOrCreateUser() }
+    val topups = remember { mutableStateListOf<TopupRequest>().apply { addAll(repo.loadTopups().sortedByDescending { it.submittedAt }) } }
+    val orders = remember { mutableStateListOf<Order>().apply { addAll(repo.loadOrders().sortedByDescending { it.createdAt }) } }
+
+    fun refreshAll() {
+        topups.clear(); topups.addAll(repo.loadTopups().sortedByDescending { it.submittedAt })
+        orders.clear(); orders.addAll(repo.loadOrders().sortedByDescending { it.createdAt })
+    }
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        BackButton(onBack)
+        Text("لوحة تحكم المالك", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
+        Text("مستخدم واحد محلي: ${user.id.take(8)}…  | الرصيد الحالي: $${"%.2f".format(repo.getOrCreateUser().balance)}", fontSize = 12.sp, color = Color.Gray)
+        Spacer(Modifier.height(12.dp))
+
+        Text("الكروت/الشحنات المعلقة", fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        if (topups.none { it.status == TopupStatus.PENDING }) {
+            Text("لا توجد كروت معلقة حالياً.")
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(topups.filter { it.status==TopupStatus.PENDING }) { t ->
+                    Card {
+                        Column(Modifier.padding(12.dp)) {
+                            Text("الطريقة: ${when(t.method){
+                                "asiacell"->"اسياسيل"; "superkey"->"سوبركي"; "usdt"->"USDT"; else->t.method
+                            }}", fontWeight = FontWeight.Bold)
+                            Text("المستخدم: ${t.userId.take(8)}…")
+                            t.code?.let { Text("الكارت: $it") }
+                            Spacer(Modifier.height(6.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = {
-                                    onComplete(o.id)
-                                    orders = loadOrders(ctx).filter { it.status == OrderStatus.PENDING && (filter == null || it.category == filter) }
-                                }) { Text("إكمال") }
-                                OutlinedButton(onClick = {
-                                    onReject(o.id)
-                                    orders = loadOrders(ctx).filter { it.status == OrderStatus.PENDING && (filter == null || it.category == filter) }
-                                }) { Text("رفض") }
-                                OutlinedButton(onClick = {
-                                    onRefund(o.id)
-                                    orders = loadOrders(ctx).filter { it.status == OrderStatus.PENDING && (filter == null || it.category == filter) }
-                                }) { Text("استرجاع") }
+                                var approveDialog by remember { mutableStateOf(false) }
+                                var amountTxt by remember { mutableStateOf("") }
+                                if (approveDialog) {
+                                    AlertDialog(
+                                        onDismissRequest = { approveDialog=false },
+                                        confirmButton = {
+                                            TextButton(onClick = {
+                                                val amount = amountTxt.toDoubleOrNull()
+                                                if (amount==null || amount<=0) {
+                                                    Toast.makeText(ctx,"أدخل مبلغ صحيح",Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    // اعتماد وإضافة رصيد
+                                                    val list = repo.loadTopups().toMutableList()
+                                                    val idx = list.indexOfFirst { it.id==t.id }
+                                                    if (idx>=0) {
+                                                        val tt = list[idx]
+                                                        tt.status = TopupStatus.APPROVED
+                                                        tt.approvedAmount = amount
+                                                        list[idx] = tt
+                                                        repo.saveTopups(list)
+                                                        repo.credit(t.userId, amount)
+                                                        approveDialog=false
+                                                        refreshAll()
+                                                        Toast.makeText(ctx,"تم إضافة $$amount إلى رصيد المستخدم",Toast.LENGTH_LONG).show()
+                                                    }
+                                                }
+                                            }) { Text("اعتماد") }
+                                        },
+                                        dismissButton = { TextButton(onClick = { approveDialog=false }) { Text("إلغاء") } },
+                                        title = { Text("اعتماد الكارت") },
+                                        text = {
+                                            Column {
+                                                Text("ضع مبلغ الشحن (بالدولار):")
+                                                OutlinedTextField(value = amountTxt, onValueChange = { amountTxt = it.filter { ch-> ch.isDigit() || ch=='.' } },
+                                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                                            }
+                                        }
+                                    )
+                                }
+                                GreenMini("اعتماد + رصيد") { approveDialog = true }
+                                GreenMini("رفض") {
+                                    val list = repo.loadTopups().toMutableList()
+                                    val idx = list.indexOfFirst { it.id==t.id }
+                                    if (idx>=0) {
+                                        val tt = list[idx]; tt.status = TopupStatus.REJECTED
+                                        list[idx] = tt; repo.saveTopups(list); refreshAll()
+                                        Toast.makeText(ctx,"تم رفض الطلب",Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
         }
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
 
-@Composable
-fun OwnerBalanceOpsScreen(onAdd: (Double) -> Unit, onDeduct: (Double) -> Unit, onBack: () -> Unit) {
-    var value by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("إضافة/خصم رصيد", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        OutlinedTextField(
-            value = value, onValueChange = { value = it.filter { c -> c.isDigit() || c=='.' } },
-            label = { Text("المبلغ (USD)") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.fillMaxWidth()
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { value.toDoubleOrNull()?.let(onAdd) }, modifier = Modifier.weight(1f)) { Text("إضافة") }
-            OutlinedButton(onClick = { value.toDoubleOrNull()?.let(onDeduct) }, modifier = Modifier.weight(1f)) { Text("خصم") }
-        }
-        Spacer(Modifier.weight(1f))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-@Composable
-fun OwnerApiToolsScreen(onCheckOrder: (Long) -> String, onCheckProviderBalance: () -> String, onBack: () -> Unit) {
-    var orderId by remember { mutableStateOf("") }
-    var orderStatus by remember { mutableStateOf<String?>(null) }
-    val providerBalance = remember { onCheckProviderBalance() }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("أدوات API", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("فحص رصيد المزود: $providerBalance")
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = orderId, onValueChange = { orderId = it.filter { c -> c.isDigit() } },
-                label = { Text("رقم الطلب") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = { orderStatus = orderId.toLongOrNull()?.let(onCheckOrder) ?: "غير صالح" }) { Text("فحص") }
-        }
-        if (orderStatus != null) Text("الحالة: $orderStatus")
-        Spacer(Modifier.weight(1f))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-@Composable
-fun OwnerUsersScreen(usersCount: Int, usersBalance: Double, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("المستخدمون", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("عدد المستخدمين: $usersCount")
-        Text("رصيد المستخدم الحالي: $${"%.2f".format(usersBalance)}")
-        Spacer(Modifier.weight(1f))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-@Composable
-fun OwnerModsScreen(isMod: Boolean, onSet: (Boolean) -> Unit, onBack: () -> Unit) {
-    var state by remember { mutableStateOf(isMod) }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("إدارة المشرفين", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("تفعيل خصم المشرف (10%) للمستخدم الحالي")
-            Spacer(Modifier.width(8.dp))
-            Switch(checked = state, onCheckedChange = { state = it; onSet(it) })
-        }
-        Spacer(Modifier.weight(1f))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-@Composable
-fun OwnerBlockScreen(onBlock: (Int, String) -> Unit, onBack: () -> Unit) {
-    var hours by remember { mutableStateOf("2") }
-    var reason by remember { mutableStateOf("سلوك مريب/محاولات كثيرة") }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("حظر المستخدم", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        OutlinedTextField(value = hours, onValueChange = { hours = it.filter { c -> c.isDigit() } }, label = { Text("عدد الساعات") }, singleLine = true)
-        OutlinedTextField(value = reason, onValueChange = { reason = it }, label = { Text("السبب") }, singleLine = false, modifier = Modifier.fillMaxWidth())
-        BigButton("تنفيذ الحظر") { onBlock(hours.toIntOrNull() ?: 2, reason) }
-        Spacer(Modifier.weight(1f))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-@Composable
-fun OwnerUnblockScreen(onUnblock: () -> Unit, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("إلغاء الحظر", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        BigButton("إلغاء الحظر الآن", onUnblock)
-        Spacer(Modifier.weight(1f))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-@Composable
-fun OwnerBroadcastScreen(current: String, onSave: (String) -> Unit, onBack: () -> Unit) {
-    var msg by remember { mutableStateOf(current) }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("إعلان التطبيق", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        OutlinedTextField(value = msg, onValueChange = { msg = it }, label = { Text("نص الإعلان") }, modifier = Modifier.fillMaxWidth().height(160.dp))
+        Spacer(Modifier.height(18.dp))
+        Text("الطلبات", fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        BigButton("حفظ", onClick = { onSave(msg) })
-        Spacer(Modifier.weight(1f))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-@Composable
-fun OwnerApiCodesScreen(catalog: List<Section>, onBack: () -> Unit) {
-    val clip = LocalClipboardManager.current
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("أكواد خدمات API", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        LazyColumn(Modifier.weight(1f)) {
-            catalog.forEach { sec ->
-                item {
-                    Text(sec.title, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
-                }
-                items(sec.services) { sv ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("${sv.name} — (${sv.id})", modifier = Modifier.weight(1f))
-                        TextButton(onClick = { clip.setText(AnnotatedString(sv.id)) }) { Text("نسخ") }
+        if (orders.isEmpty()) {
+            Text("لا توجد طلبات.")
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(orders) { o ->
+                    Card {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(o.serviceLabel, fontWeight = FontWeight.Bold)
+                            Text("User: ${o.userId.take(8)}…  | السعر: $${o.price}")
+                            if (o.input.isNotBlank()) Text("بيانات: ${o.input}", fontSize = 12.sp, color = Color.Gray)
+                            Text("الحالة: ${o.status}")
+                            Spacer(Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                GreenMini("بدء تنفيذ") {
+                                    val list = repo.loadOrders().toMutableList()
+                                    val idx = list.indexOfFirst { it.id==o.id }
+                                    if (idx>=0) { list[idx] = list[idx].copy(status = OrderStatus.IN_PROGRESS); repo.saveOrders(list); refreshAll() }
+                                }
+                                GreenMini("اكتمال") {
+                                    val list = repo.loadOrders().toMutableList()
+                                    val idx = list.indexOfFirst { it.id==o.id }
+                                    if (idx>=0) { list[idx] = list[idx].copy(status = OrderStatus.DONE); repo.saveOrders(list); refreshAll() }
+                                }
+                                GreenMini("رفض + استرجاع") {
+                                    val list = repo.loadOrders().toMutableList()
+                                    val idx = list.indexOfFirst { it.id==o.id }
+                                    if (idx>=0) {
+                                        val cur = list[idx]
+                                        list[idx] = cur.copy(status = OrderStatus.REJECTED)
+                                        repo.saveOrders(list)
+                                        repo.credit(cur.userId, cur.price)
+                                        refreshAll()
+                                        Toast.makeText(LocalContext.current,"تم الرفض واسترجاع $${cur.price}",Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
+    }
+}
+
+// -------------------------
+// عناصر واجهة مشتركة
+// -------------------------
+
+@Composable
+fun BackButton(onBack: () -> Unit) {
+    TextButton(onClick = onBack) { Text("رجوع") }
+}
+
+@Composable
+fun GreenButton(text: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(Color(0xFF43A047), Color(0xFF2E7D32))
+                )
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text, color = Color.White, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
-fun OwnerReferralsScreen(inviter: String?, firstFundingPaid: Boolean, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("نظام الإحالة", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("الداعي الحالي للمستخدم: ${inviter ?: "لا يوجد"}")
-        Text("عمولة أول تمويل مدفوعة؟ ${if (firstFundingPaid) "نعم" else "لا"}")
-        Text("ملاحظة: النظام محلي. عند ربط الخادم ستظهر قوائم أكبر وأفضل الداعين.")
-        Spacer(Modifier.weight(1f))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
+fun GreenMini(text: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(Brush.horizontalGradient(listOf(Color(0xFF66BB6A), Color(0xFF43A047))))
+            .clickable { onClick() }
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) { Text(text, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
 }
 
 @Composable
-fun DiscountsInfoScreen(onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("شرح الخصومات", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text("المشرفون يحصلون على خصم تلقائي 10% على الأسعار المعروضة.")
-        Text("يمكنك تفعيل/تعطيل دور المشرف من لوحة المالك > إدارة المشرفين.")
-        Spacer(Modifier.weight(1f))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
-    }
-}
-
-@Composable
-fun AdminLeaderboardScreen(myId: String, total: Double, onBack: () -> Unit) {
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Text("المتصدرون (للمالك)", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp)) {
-                Text("1) $myId — \$${"%.2f".format(total)}", fontWeight = FontWeight.Bold)
-                Text("سيتم حساب الترتيب لجميع المستخدمين عند ربط قاعدة البيانات.", color = Color.Gray, fontSize = 12.sp)
-            }
-        }
-        Spacer(Modifier.weight(1f))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("رجوع") }
+fun GreenItem(text: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(Color(0xFF66BB6A), Color(0xFF43A047))
+                )
+            )
+            .clickable { onClick() }
+            .padding(vertical = 16.dp, horizontal = 16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            color = Color.White,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }

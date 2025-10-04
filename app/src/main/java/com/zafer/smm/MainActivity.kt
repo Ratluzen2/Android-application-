@@ -25,7 +25,6 @@ import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
@@ -56,16 +55,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.round
-import com.zafer.smm.BuildConfig
 
-/**
- * تطبيق SMM Mobile — كل الميزات ضمن ملف واحد.
- * بدون Navigation Compose — لا حاجة لأي تبعيات إضافية.
- *
- * ملاحظة أمنية: لوحة المالك مخفية افتراضياً (isOwner=false).
- * لا تُعرض إلا بعد إدخال PIN صحيح في بيئة Debug فقط (زر 🔒).
- * في Release لن يظهر زر الـPIN، فتظل اللوحة مخفية للمستخدمين العاديين.
- */
+/** تطبيق SMM Mobile — ملف واحد، بدون Navigation Compose. */
 
 // PIN للمالك — غيّره قبل الإصدار
 private const val OWNER_PIN = "123456"
@@ -145,7 +136,7 @@ class AppViewModel : ViewModel() {
     val servicesTikIgViewsLikesScore = linkedMapOf(
         "متابعين تيكتوك 1k" to 3.50,
         "متابعين تيكتوك 2k" to 7.0,
-        "متابعين تيكتوك 3k" to 10.50,
+               "متابعين تيكتوك 3k" to 10.50,
         "متابعين تيكتوك 4k" to 14.0,
         "مشاهدات تيكتوك 1k" to 0.10,
         "مشاهدات تيكتوك 10k" to 0.80,
@@ -343,7 +334,7 @@ private fun cleanedTitleWithoutQty(name: String): String {
         "\\s*\\d+k\\b",
         "\\s*\\d+\\s*شدة",
         "\\s*\\d+\\s*ايتونز",
-        "\\s*\\d+\\s*دولار\\s*(?:اثير|اسيا|كورك)",
+        "\\س*\\d+\\s*دولار\\s*(?:اثير|اسيا|كورك)",
         "\\s*\\d+\\s*(?:الماسة|ذهب)",
         "بثك\\s*\\d+\\s*k\\b",
     )
@@ -387,7 +378,7 @@ private fun stepFor(serviceName: String): Int {
 }
 
 /* =========================
-   App Root + Drawer + BottomBar + PIN
+   App Root + Drawer + BottomBar + PIN (بالنقر 5 مرات على العنوان)
    ========================= */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -397,6 +388,10 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var showPinDialog by remember { mutableStateOf(false) }
+
+    // عداد نقرات العنوان السرّي
+    var taps by remember { mutableStateOf(0) }
+    var lastTapTs by remember { mutableStateOf(0L) }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -423,16 +418,28 @@ fun AppRoot(viewModel: AppViewModel = viewModel()) {
                                 .clickable { scope.launch { drawerState.open() } }
                         )
                     },
-                    title = { Text("SMM App", fontWeight = FontWeight.SemiBold) },
-                    actions = {
-                        // زر PIN يظهر في Debug فقط أو إذا كان المالك مفعّل
-                        if (BuildConfig.DEBUG || isOwner) {
-                            IconButton(onClick = { showPinDialog = true }) {
-                                Icon(
-                                    imageVector = if (isOwner) Icons.Filled.LockOpen else Icons.Filled.Lock,
-                                    contentDescription = "مالك PIN"
-                                )
+                    title = {
+                        Text(
+                            "SMM App",
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable {
+                                val now = System.currentTimeMillis()
+                                if (now - lastTapTs > 2000) { // إعادة ضبط إذا مرّ وقت طويل
+                                    taps = 0
+                                }
+                                taps += 1
+                                lastTapTs = now
+                                if (taps >= 5) {
+                                    taps = 0
+                                    showPinDialog = true
+                                }
                             }
+                        )
+                    },
+                    actions = {
+                        // لا نعرض أيقونة للمالك هنا (كل شيء عبر الحركة السرّية)
+                        if (isOwner) {
+                            Icon(imageVector = Icons.Filled.LockOpen, contentDescription = null, modifier = Modifier.padding(end = 12.dp))
                         }
                     }
                 )
@@ -496,9 +503,7 @@ private fun OwnerPinDialog(
         confirmButton = {
             if (!isOwner) {
                 TextButton(onClick = {
-                    if (pin.isBlank()) {
-                        err = "أدخل PIN"; return@TextButton
-                    }
+                    if (pin.isBlank()) return@TextButton
                     onEnable(pin)
                     onDismiss()
                 }) { Text("تفعيل") }
@@ -602,10 +607,10 @@ fun UserHomeScreen(viewModel: AppViewModel, onOpen: (Screen) -> Unit) {
         Text("مرحباً 👋", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            QuickAction("قوائم الخدمات", Icons.Filled.List) { onOpen(Screen.USER_SERVICES) }
-            QuickAction("طلباتي", Icons.Filled.ShoppingCart) { onOpen(Screen.USER_ORDERS) }
-            QuickAction("المحفظة", Icons.Filled.AccountBalanceWallet) { onOpen(Screen.USER_WALLET) }
-            QuickAction("الدعم", Icons.Filled.Help) { onOpen(Screen.USER_SUPPORT) }
+            QuickAction(modifier = Modifier.weight(1f), title = "قوائم الخدمات", icon = Icons.Filled.List) { onOpen(Screen.USER_SERVICES) }
+            QuickAction(modifier = Modifier.weight(1f), title = "طلباتي", icon = Icons.Filled.ShoppingCart) { onOpen(Screen.USER_ORDERS) }
+            QuickAction(modifier = Modifier.weight(1f), title = "المحفظة", icon = Icons.Filled.AccountBalanceWallet) { onOpen(Screen.USER_WALLET) }
+            QuickAction(modifier = Modifier.weight(1f), title = "الدعم", icon = Icons.Filled.Help) { onOpen(Screen.USER_SUPPORT) }
         }
         Spacer(Modifier.height(16.dp))
         Text("أبرز الخدمات", fontWeight = FontWeight.SemiBold)
@@ -624,10 +629,14 @@ fun UserHomeScreen(viewModel: AppViewModel, onOpen: (Screen) -> Unit) {
 }
 
 @Composable
-private fun QuickAction(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+private fun QuickAction(
+    modifier: Modifier = Modifier,
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit
+) {
     ElevatedCard(
-        Modifier
-            .weight(1f)
+        modifier
             .clip(RoundedCornerShape(16.dp))
             .clickable { onClick() }
     ) {
@@ -656,6 +665,8 @@ private fun ServiceCardPreview(name: String, price: Double) {
 /* =========================
    Services — بحث/فلترة/سعر/كمية/شراء/تعديل
    ========================= */
+data class BuyInfo(val service: String, val qty: Int, val price: Double)
+
 @Composable
 fun UserServicesScreen(viewModel: AppViewModel) {
     val qtyOverrides by viewModel.qtyOverrides.collectAsState()
@@ -665,6 +676,9 @@ fun UserServicesScreen(viewModel: AppViewModel) {
     val categories = listOf("TikTok/Instagram/Views/Likes/Score", "Telegram", "PUBG", "iTunes", "Mobile", "Ludo")
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var showPriceEditor by remember { mutableStateOf<String?>(null) }
+
+    // حالة حوار الشراء
+    var buyInfo by remember { mutableStateOf<BuyInfo?>(null) }
 
     // حفظ كميات لكل خدمة
     val qtyMap = rememberSaveable { mutableStateMapOf<String, Int>() }
@@ -722,21 +736,7 @@ fun UserServicesScreen(viewModel: AppViewModel) {
                         onDec = { qtyMap[svc] = max(step, selectedQty - step) },
                         onInc = { qtyMap[svc] = selectedQty + step },
                         onBuy = {
-                            showBuyDialog(
-                                service = svc,
-                                qty = selectedQty,
-                                price = currentPrice,
-                                onConfirm = { link ->
-                                    viewModel.addOrder(
-                                        userId = viewModel.currentUserId,
-                                        category = groupName,
-                                        serviceName = svc,
-                                        qty = selectedQty,
-                                        price = currentPrice,
-                                        link = link
-                                    )
-                                }
-                            )
+                            buyInfo = BuyInfo(svc, selectedQty, currentPrice) // <-- نفتح الحوار عبر الحالة
                         },
                         onEditPrice = { showPriceEditor = svc }
                     )
@@ -768,6 +768,40 @@ fun UserServicesScreen(viewModel: AppViewModel) {
             },
             dismissButton = { TextButton(onClick = { showPriceEditor = null }) { Text("إلغاء") } }
         )
+    }
+
+    // حوار الشراء
+    buyInfo?.let { info ->
+        var open by remember { mutableStateOf(true) }
+        var link by remember { mutableStateOf("") }
+        if (open) {
+            AlertDialog(
+                onDismissRequest = { open = false; buyInfo = null },
+                title = { Text("شراء: ${info.service}") },
+                text = {
+                    Column {
+                        Text("الكمية: ${info.qty} — السعر: ${"%.2f".format(info.price)} $")
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(value = link, onValueChange = { link = it }, label = { Text("الرابط/المعرف") })
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.addOrder(
+                            userId = viewModel.currentUserId,
+                            category = categories.firstOrNull { info.service.contains("تيكتوك") || info.service.contains("انستغرام") } ?: "smm",
+                            serviceName = info.service,
+                            qty = info.qty,
+                            price = info.price,
+                            link = link
+                        )
+                        open = false
+                        buyInfo = null
+                    }) { Text("تأكيد") }
+                },
+                dismissButton = { TextButton(onClick = { open = false; buyInfo = null }) { Text("إلغاء") } }
+            )
+        }
     }
 }
 
@@ -818,36 +852,6 @@ private fun QuantityStepper(
         Text("$value", fontWeight = FontWeight.Bold)
         OutlinedButton(onClick = onInc) { Text("+$stepLabel") }
     }
-}
-
-@Composable
-private fun showBuyDialog(
-    service: String,
-    qty: Int,
-    price: Double,
-    onConfirm: (String) -> Unit
-) {
-    var open by remember { mutableStateOf(true) }
-    var link by remember { mutableStateOf("") }
-    if (!open) return
-    AlertDialog(
-        onDismissRequest = { open = false },
-        title = { Text("شراء: $service") },
-        text = {
-            Column {
-                Text("الكمية: $qty — السعر: ${"%.2f".format(price)} $")
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = link, onValueChange = { link = it }, label = { Text("الرابط/المعرف") })
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                onConfirm(link)
-                open = false
-            }) { Text("تأكيد") }
-        },
-        dismissButton = { TextButton(onClick = { open = false }) { Text("إلغاء") } }
-    )
 }
 
 /* =========================

@@ -1,7 +1,6 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
-    // id 'kotlin-kapt' // فعّلها فقط إذا استخدمت Room لاحقًا
 }
 
 android {
@@ -27,15 +26,26 @@ android {
         }
     }
 
+    // توحيد نسخة الـ JVM للـ Java و Kotlin على 17
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+    // (اختياري لكنه مفيد في CI) إجبار تولتشين جافا 17
+    kotlin {
+        jvmToolchain(17)
+    }
+
     buildFeatures {
         compose true
     }
     composeOptions {
         kotlinCompilerExtensionVersion '1.5.14'
     }
-    kotlinOptions {
-        jvmTarget = '17'
-    }
+
     packagingOptions {
         resources {
             excludes += ['/META-INF/{AL2.0,LGPL2.1}']
@@ -44,7 +54,7 @@ android {
 }
 
 dependencies {
-    // BOM للـ Compose
+    // Compose BOM
     implementation platform('androidx.compose:compose-bom:2024.06.00')
     androidTestImplementation platform('androidx.compose:compose-bom:2024.06.00')
 
@@ -60,7 +70,7 @@ dependencies {
 
     // أدوات تطوير
     debugImplementation 'androidx.compose.ui:ui-tooling'
-    debugImplementation 'androidx.compose.ui:ui-test-manifest'   // الصحيح
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
 
     // اختبارات
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
@@ -68,10 +78,10 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
     testImplementation 'junit:junit:4.13.2'
 
-    // Material (عناصر View عادية إذا احتجتها)
+    // Material (لعناصر View إن لزم)
     implementation 'com.google.android.material:material:1.12.0'
 
-    // شبكة (إن كنت تستدعي باكند هيروكو)
+    // شبكة (باكند هيروكو)
     implementation 'com.squareup.retrofit2:retrofit:2.11.0'
     implementation 'com.squareup.retrofit2:converter-moshi:2.11.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'

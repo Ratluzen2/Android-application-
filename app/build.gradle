@@ -1,6 +1,9 @@
+# app/build.gradle  (Groovy)
+
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    // id 'kotlin-kapt' // فعّلها فقط إذا كنت تستخدم Room لاحقًا
 }
 
 android {
@@ -13,10 +16,7 @@ android {
         targetSdk 34
         versionCode 1
         versionName "1.0"
-
-        vectorDrawables {
-            useSupportLibrary true
-        }
+        vectorDrawables { useSupportLibrary true }
     }
 
     buildTypes {
@@ -25,56 +25,61 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
-            // اختياري
+            debuggable true
         }
     }
 
     buildFeatures {
         compose true
     }
-
     composeOptions {
+        // متوافق مع Compose BOM أدناه
         kotlinCompilerExtensionVersion '1.5.14'
     }
-
     kotlinOptions {
         jvmTarget = '17'
     }
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
-    }
-
-    packaging {
+    packagingOptions {
         resources {
-            excludes += ["/META-INF/{AL2.0,LGPL2.1}"]
+            excludes += ['/META-INF/{AL2.0,LGPL2.1}']
         }
     }
 }
 
 dependencies {
-    // Compose BOM
-    implementation platform("androidx.compose:compose-bom:2024.09.00")
+    // استخدم BOM حتى لا نكتب أرقام نسخ لكل مكتبة Compose
+    implementation platform('androidx.compose:compose-bom:2024.06.00')
+    androidTestImplementation platform('androidx.compose:compose-bom:2024.06.00')
 
-    // أساسيات أندرويد
-    implementation "androidx.core:core-ktx:1.13.1"
-    implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.8.4"
-    implementation "androidx.activity:activity-compose:1.9.2"
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.2'
+    implementation 'androidx.activity:activity-compose:1.9.0'
 
-    // Compose UI
-    implementation "androidx.compose.ui:ui"
-    implementation "androidx.compose.ui:ui-graphics"
-    implementation "androidx.compose.foundation:foundation"
-    implementation "androidx.compose.ui:ui-tooling-preview"
+    // Compose UI / Material3
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
 
-    // Material 3 (Compose)
-    implementation "androidx.compose.material3:material3"
+    // أدوات تطوير
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'   // ← هذا الصحيح
 
-    // ✅ مهم: Material Components (للثيم XML Theme.Material3.*)
-    implementation "com.google.android.material:material:1.12.0"
+    // اختبارات
+    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
+    testImplementation 'junit:junit:4.13.2'
 
-    // أدوات ديبج
-    debugImplementation "androidx.compose.ui:ui-tooling"
-    debugImplementation "androidx.compose.ui:test-manifest"
+    // Material (عناصر View عادية إذا احتجتها)
+    implementation 'com.google.android.material:material:1.12.0'
+
+    // شبكة (لو بتستدعي باكند هيروكو)
+    implementation 'com.squareup.retrofit2:retrofit:2.11.0'
+    implementation 'com.squareup.retrofit2:converter-moshi:2.11.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
+    implementation 'com.squareup.moshi:moshi-kotlin:1.15.1'
+
+    // DataStore لحفظ جلسة المالك
+    implementation 'androidx.datastore:datastore-preferences:1.1.1'
 }

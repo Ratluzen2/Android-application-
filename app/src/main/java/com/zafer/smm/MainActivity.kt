@@ -1,176 +1,241 @@
 package com.zafer.smm
 
 import android.os.Bundle
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.zafer.smm.data.remote.ApiConfig
-import com.zafer.smm.ui.MainViewModel
 
 class MainActivity : ComponentActivity() {
-
-    private val vm: MainViewModel by viewModels()
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // معرّف الجهاز ليكون الـ device_id
-        val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
-        vm.setDeviceId(deviceId)
-        vm.loadServices()
-
         setContent {
             MaterialTheme(colorScheme = lightColorScheme()) {
                 Surface(Modifier.fillMaxSize()) {
-                    MainScreen(vm, deviceId)
+                    AppRoot()
                 }
             }
         }
     }
 }
 
+/** الشاشات المتاحة داخل التطبيق */
+private enum class Screen {
+    HOME, SERVICES, BALANCE, LEADERS, TIKTOK, INSTAGRAM
+}
+
 @Composable
-private fun MainScreen(vm: MainViewModel, deviceId: String) {
-    val loading by vm.loading.collectAsState()
-    val error by vm.error.collectAsState()
-    val services by vm.services.collectAsState()
-    val balance by vm.balance.collectAsState()
-    val lastOrderId by vm.lastOrderId.collectAsState()
-    val lastStatus by vm.lastStatus.collectAsState()
+private fun AppRoot() {
+    var current by remember { mutableStateOf(Screen.HOME) }
 
-    var serviceIdText by remember { mutableStateOf("") }
-    var link by remember { mutableStateOf("https://example.com") }
-    var quantityText by remember { mutableStateOf("100") }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = when (current) {
+                            Screen.HOME -> "الرئيسية"
+                            Screen.SERVICES -> "الخدمات"
+                            Screen.BALANCE -> "رصيدي"
+                            Screen.LEADERS -> "المتصدرون"
+                            Screen.TIKTOK -> "خدمات تيكتوك"
+                            Screen.INSTAGRAM -> "خدمات إنستغرام"
+                        }
+                    )
+                },
+                navigationIcon = {
+                    if (current != Screen.HOME) {
+                        TextButton(onClick = { current = Screen.HOME }) {
+                            Text("رجوع")
+                        }
+                    }
+                }
+            )
+        }
+    ) { inner ->
+        Box(Modifier.padding(inner)) {
+            when (current) {
+                Screen.HOME -> HomeScreen(
+                    onOpenServices = { current = Screen.SERVICES },
+                    onOpenBalance = { current = Screen.BALANCE },
+                    onOpenLeaders = { current = Screen.LEADERS },
+                )
+                Screen.SERVICES -> ServicesScreen(
+                    onOpenTikTok = { current = Screen.TIKTOK },
+                    onOpenInstagram = { current = Screen.INSTAGRAM }
+                )
+                Screen.BALANCE -> BalanceScreen()
+                Screen.LEADERS -> LeadersScreen()
+                Screen.TIKTOK -> TikTokServicesScreen()
+                Screen.INSTAGRAM -> InstagramServicesScreen()
+            }
+        }
+    }
+}
 
+/** الشاشة الرئيسية: ثلاث أزرار كبيرة */
+@Composable
+private fun HomeScreen(
+    onOpenServices: () -> Unit,
+    onOpenBalance: () -> Unit,
+    onOpenLeaders: () -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("مرحبًا بك 👋", style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = onOpenServices,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("الخدمات") }
+
+        Button(
+            onClick = onOpenBalance,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("رصيدي") }
+
+        Button(
+            onClick = onOpenLeaders,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("المتصدرين") }
+    }
+}
+
+/** شاشة اختيار قسم الخدمات */
+@Composable
+private fun ServicesScreen(
+    onOpenTikTok: () -> Unit,
+    onOpenInstagram: () -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text("اختر القسم:", style = MaterialTheme.typography.titleLarge)
+        Button(
+            onClick = onOpenTikTok,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("خدمات تيكتوك") }
+
+        Button(
+            onClick = onOpenInstagram,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("خدمات إنستغرام") }
+    }
+}
+
+/** شاشة الرصيد (مكان مبدئي – لاحقًا تربطها بالباكند) */
+@Composable
+private fun BalanceScreen() {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("رصيدك سيظهر هنا لاحقًا", style = MaterialTheme.typography.titleMedium)
+        Text("اربط الشاشة مع الباكند لعرض الرصيد الحقيقي.")
+    }
+}
+
+/** شاشة المتصدّرين (مكان مبدئي) */
+@Composable
+private fun LeadersScreen() {
+    val dummy = remember {
+        listOf(
+            "المستخدم 1 – 120$",
+            "المستخدم 2 – 95$",
+            "المستخدم 3 – 80$"
+        )
+    }
     Column(
         Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text("SMM App", style = MaterialTheme.typography.headlineMedium)
-        Spacer(Modifier.height(6.dp))
-        Text("Backend: ${ApiConfig.BASE_URL}", style = MaterialTheme.typography.bodyMedium)
-        Text("API KEY (اختباري): ${ApiConfig.API_KEY}", style = MaterialTheme.typography.bodySmall)
-
-        Spacer(Modifier.height(12.dp))
-
-        if (loading) {
-            LinearProgressIndicator(Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-        }
-
-        if (error != null) {
-            Text("خطأ: $error", color = MaterialTheme.colorScheme.error)
-            Spacer(Modifier.height(8.dp))
-        }
-
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Button(onClick = { vm.loadServices() }) { Text("تحديث الخدمات") }
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = { vm.fetchBalance() }) { Text("الرصيد") }
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = { vm.checkOrderStatus() }, enabled = lastOrderId != null) {
-                Text("حالة آخر طلب")
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        OutlinedTextField(
-            value = serviceIdText,
-            onValueChange = { serviceIdText = it },
-            label = { Text("Service ID") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth()
-        )
+        Text("أعلى المنفقين", style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = link,
-            onValueChange = { link = it },
-            label = { Text("Link / ID") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = quantityText,
-            onValueChange = { quantityText = it },
-            label = { Text("Quantity") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(8.dp))
-        Button(
-            onClick = {
-                val sid = serviceIdText.toIntOrNull()
-                val qty = quantityText.toIntOrNull()
-                if (sid != null && qty != null && link.isNotBlank()) {
-                    vm.placeOrder(sid, link, qty)
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(dummy) { row ->
+                Card(Modifier.fillMaxWidth()) {
+                    Text(
+                        row, Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
                 }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("إنشاء طلب") }
-
-        Spacer(Modifier.height(12.dp))
-
-        if (balance != null) {
-            Text("الرصيد: ${balance?.balance} ${balance?.currency}")
-            Spacer(Modifier.height(8.dp))
-        }
-
-        if (lastOrderId != null) {
-            Text("آخر Order ID: $lastOrderId")
-            Spacer(Modifier.height(8.dp))
-        }
-
-        if (lastStatus != null) {
-            val st = lastStatus!!
-            Text("الحالة: ${st.status ?: "-"} / المتبقي: ${st.remains ?: "-"} / التكلفة: ${st.charge ?: "-"}")
-            Spacer(Modifier.height(8.dp))
-        }
-
-        Text("قائمة الخدمات (${services.size})", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(6.dp))
-
-        LazyColumn(
-            modifier = Modifier.weight(1f)
-        ) {
-            items(services) { s ->
-                ServiceRow(s.service, s.name, s.rate, s.min, s.max, s.category)
             }
         }
     }
 }
 
+/** قائمة مبدئية لخدمات تيكتوك */
 @Composable
-private fun ServiceRow(
-    id: Int?, name: String?, rate: Double?, min: Int?, max: Int?, category: String?
-) {
-    Card(
+private fun TikTokServicesScreen() {
+    val items = remember {
+        listOf(
+            "متابعين تيكتوك (1000) – 3.50$",
+            "لايكات تيكتوك (1000) – 2.20$",
+            "مشاهدات تيكتوك (10k) – 1.80$",
+            "رفع سكور تيكتوك – 4.00$"
+        )
+    }
+    ServicesList(items)
+}
+
+/** قائمة مبدئية لخدمات إنستغرام */
+@Composable
+private fun InstagramServicesScreen() {
+    val items = remember {
+        listOf(
+            "متابعين إنستغرام (1000) – 4.00$",
+            "لايكات إنستغرام (1000) – 2.50$",
+            "مشاهدات ريلز (10k) – 2.10$"
+        )
+    }
+    ServicesList(items)
+}
+
+@Composable
+private fun ServicesList(items: List<String>) {
+    Column(
         Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .fillMaxSize()
+            .padding(16.dp)
     ) {
-        Column(Modifier.padding(12.dp)) {
-            Text("ID: ${id ?: "-"}  |  ${name ?: "-"}")
-            Text("Category: ${category ?: "-"}")
-            Text("Rate: ${rate ?: "-"}  |  Min: ${min ?: "-"}  |  Max: ${max ?: "-"}")
+        Text("اختر الخدمة:", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(8.dp))
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(items) { label ->
+                Card(Modifier.fillMaxWidth()) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(label, style = MaterialTheme.typography.bodyLarge)
+                        Button(onClick = { /* لاحقًا: افتح تفاصيل الطلب */ }) {
+                            Text("اطلب")
+                        }
+                    }
+                }
+            }
         }
     }
 }

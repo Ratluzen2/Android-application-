@@ -230,7 +230,7 @@ fun MainApp(prefs: Prefs) {
 
                 Screen.ADMIN_DASHBOARD -> AdminDashboardScreen(
                     onBackToHome = { prefs.setAdmin(false); isAdmin.value = false; current = Screen.HOME },
-                    onOpen = { /* تنقل تجريبي مؤقت */ current = Screen.REFERRAL }
+                    onOpen = { /* تنقل تجريبي مؤقت */ }
                 )
             }
         }

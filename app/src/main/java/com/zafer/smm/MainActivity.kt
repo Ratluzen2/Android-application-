@@ -12,7 +12,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -51,16 +50,15 @@ import kotlin.math.max
 import kotlin.math.round
 
 /* =========================
-   إعدادات أساسية + API
+   ثابتات أساسية
    ========================= */
-
 private const val OWNER_PIN = "123456"
 private const val SERVER_URL = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
 
-/* شبكة خفيفة بدون تبعيات */
+/* =========================
+   عميل HTTP خفيف
+   ========================= */
 object Api {
-    private const val TAG = "Api"
-
     private fun httpGet(path: String, timeout: Int = 8000): Pair<Int, String?> {
         val url = URL("$SERVER_URL$path")
         val c = (url.openConnection() as HttpURLConnection).apply {
@@ -71,7 +69,7 @@ object Api {
         }
         return try {
             val code = c.responseCode
-            val stream = (if (code in 200..299) c.inputStream else c.errorStream)
+            val stream = if (code in 200..299) c.inputStream else c.errorStream
             val body = stream?.bufferedReader(Charset.forName("UTF-8"))?.use(BufferedReader::readText)
             code to body
         } finally {
@@ -93,7 +91,7 @@ object Api {
         return try {
             c.outputStream.use { it.write(bytes) }
             val code = c.responseCode
-            val stream = (if (code in 200..299) c.inputStream else c.errorStream)
+            val stream = if (code in 200..299) c.inputStream else c.errorStream
             val body = stream?.bufferedReader(Charset.forName("UTF-8"))?.use(BufferedReader::readText)
             code to body
         } finally {
@@ -102,8 +100,8 @@ object Api {
     }
 
     suspend fun health(): Boolean = runCatching {
-        val checks = listOf("/api/health", "/healthz", "/")
-        for (p in checks) {
+        val candidates = listOf("/api/health", "/healthz", "/")
+        for (p in candidates) {
             val (code, body) = httpGet(p)
             if (code in 200..299) return true
             if (body?.contains("OK", true) == true) return true
@@ -115,7 +113,7 @@ object Api {
         val payload = JSONObject().put("uid", uid)
         val (code, _) = httpPost("/api/users/upsert", payload)
         code in 200..299
-    }.onFailure { Log.e(TAG, "upsertUser error", it) }.getOrDefault(false)
+    }.getOrDefault(false)
 
     suspend fun createOrder(uid: String, service: String, qty: Int, price: Double, link: String): Boolean =
         runCatching {
@@ -127,11 +125,11 @@ object Api {
                 .put("link", link)
             val (code, _) = httpPost("/api/orders", payload)
             code in 200..299
-        }.onFailure { Log.e(TAG, "createOrder error", it) }.getOrDefault(false)
+        }.getOrDefault(false)
 }
 
 /* =========================
-   Theme — داكن احترافي
+   الثيم
    ========================= */
 private val Bg       = Color(0xFF0F1115)
 private val Surface1 = Color(0xFF151821)
@@ -160,7 +158,7 @@ fun AppTheme(content: @Composable () -> Unit) {
 }
 
 /* =========================
-   تخزين UID محليًا
+   تفضيلات UID المحلية
    ========================= */
 object Prefs {
     private const val PREF = "app_prefs"
@@ -176,14 +174,9 @@ object Prefs {
     fun ensureUid(ctx: Context): String {
         val e = getUid(ctx)
         if (!e.isNullOrBlank()) return e
-        val n = generateUid()
+        val n = "U" + (100000..999999).random()
         saveUid(ctx, n)
         return n
-    }
-
-    private fun generateUid(): String {
-        val num = (100000..999999).random()
-        return "U$num"
     }
 }
 
@@ -199,12 +192,12 @@ class MainActivity : ComponentActivity() {
 }
 
 /* =========================
-   Screens
+   الشاشات
    ========================= */
 enum class Screen { HOME, SERVICES, ORDERS, WALLET, SUPPORT, OWNER }
 
 /* =========================
-   Models
+   النماذج
    ========================= */
 data class Order(
     val id: Int,
@@ -237,7 +230,7 @@ class AppViewModel : ViewModel() {
     private val _balance = MutableStateFlow(15.75)
     val balance: StateFlow<Double> = _balance
 
-    // === الخدمات
+    // الخدمات
     val servicesTikIgViewsLikesScore = linkedMapOf(
         "متابعين تيكتوك 1k" to 3.50,
         "متابعين تيكتوك 2k" to 7.0,
@@ -396,9 +389,8 @@ private fun priceFor(serviceName: String, qty: Int, basePrice: Double): Double {
 }
 
 /* =========================
-   Root — بدون شريط علوي
+   الجذر (بدون شريط علوي)
    ========================= */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppRoot(vm: AppViewModel = viewModel()) {
     val ctx = LocalContext.current
@@ -407,7 +399,6 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
     var current by rememberSaveable { mutableStateOf(Screen.HOME) }
     val isOwner by vm.isOwner.collectAsState()
 
-    // بدون Drawer وبدون TopBar
     Scaffold(
         containerColor = Bg,
         bottomBar = { BottomNav(current, isOwner) { current = it } },
@@ -461,15 +452,14 @@ private fun BottomNav(current: Screen, isOwner: Boolean, onSelect: (Screen) -> U
 }
 
 /* =========================
-   HOME — فقط أقسام الخدمات والخدمات
+   HOME & SERVICES — شارات عليا + قائمة الخدمات
    ========================= */
 data class BuyInfo(val category: String, val service: String, val qty: Int, val price: Double)
 
 @Composable
 fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
-    // نفس واجهة الخدمات تمامًا + شارة حالة السيرفر بالأعلى
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        ServerStatusChip(vm)
+        TopChipsRow(vm, onWallet = { open(Screen.WALLET) })
         Spacer(Modifier.height(8.dp))
         ServicesBody(vm)
     }
@@ -478,13 +468,42 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
 @Composable
 fun ServicesScreen(vm: AppViewModel) {
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        ServerStatusChip(vm)
+        TopChipsRow(vm, onWallet = { /* فتح المحفظة من مكان آخر إن أردت */ })
         Spacer(Modifier.height(8.dp))
         ServicesBody(vm)
     }
 }
 
-/* جسم واجهة الخدمات: تبويبات + بحث + قائمة خدمات */
+@Composable
+private fun TopChipsRow(vm: AppViewModel, onWallet: () -> Unit) {
+    val balance by vm.balance.collectAsState()
+    val ok by vm.serverOk.collectAsState()
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        AssistChip(
+            onClick = onWallet,
+            leadingIcon = { Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null) },
+            label = { Text("رصيدي: ${"%.2f".format(balance)} $") }
+        )
+        AssistChip(
+            onClick = {},
+            leadingIcon = {
+                Box(
+                    Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(if (ok) Color(0xFF2ECC71) else Color(0xFFE74C3C))
+                )
+            },
+            label = { Text(if (ok) "الخادم: متصل" else "الخادم: غير متصل") }
+        )
+    }
+}
+
 @Composable
 private fun ServicesBody(vm: AppViewModel) {
     val ctx = LocalContext.current
@@ -503,9 +522,14 @@ private fun ServicesBody(vm: AppViewModel) {
     val qtyMap = remember { mutableStateMapOf<String, Int>() }
     var buy by remember { mutableStateOf<BuyInfo?>(null) }
 
+    // Tabs بسيطة بدون weight
     ScrollableTabRow(selectedTabIndex = selectedCat, edgePadding = 0.dp, containerColor = Surface1) {
         categories.forEachIndexed { i, (name, _) ->
-            Tab(selected = selectedCat == i, onClick = { selectedCat = i }, text = { Text(name) })
+            Tab(
+                selected = selectedCat == i,
+                onClick = { selectedCat = i },
+                text = { Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            )
         }
     }
     Spacer(Modifier.height(8.dp))
@@ -571,30 +595,6 @@ private fun ServicesBody(vm: AppViewModel) {
 }
 
 @Composable
-private fun ServerStatusChip(vm: AppViewModel) {
-    val ok by vm.serverOk.collectAsState()
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        AssistChip(
-            onClick = {},
-            label = { Text(if (ok) "الخادم: متصل" else "الخادم: غير متصل") },
-            leadingIcon = {
-                Box(
-                    Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(if (ok) Color(0xFF2ECC71) else Color(0xFFE74C3C))
-                )
-            }
-        )
-    }
-}
-
-@Composable
 private fun ServiceRow(
     service: String,
     qty: Int,
@@ -621,7 +621,8 @@ private fun ServiceRow(
             OutlinedButton(onClick = onDec) { Text("-${stepFor(service)}") }
             Text("$qty", fontWeight = FontWeight.Bold)
             OutlinedButton(onClick = onInc) { Text("+${stepFor(service)}") }
-            Spacer(Modifier.weight(1f))
+            // بدون weight لتفادي مشاكل البناء
+            Spacer(Modifier.width(8.dp))
             ElevatedButton(onClick = onBuy) { Text("شراء") }
         }
     }
@@ -687,15 +688,9 @@ fun WalletScreen(vm: AppViewModel) {
         OutlinedTextField(value = digits, onValueChange = { digits = it }, label = { Text("رقم الكارت") }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(6.dp))
         ElevatedButton(onClick = {
-            val (ok, m) = vm.run {
-                // حماية تكرار وسبام بقيت كما هي داخل VM، نستخدم UID المخزن تلقائيًا
-                val ctx = LocalContext.current
-                val nowUid = uid.value ?: Prefs.ensureUid(ctx)
-                // محاكاة التحقق محلياً فقط لعرض رسالة
-                val success = digits.isNotBlank()
-                success to if (success) "تم إرسال الكارت للمراجعة" else "يرجى إدخال رقم صالح"
-            }
-            msg = m; if (ok) digits = ""
+            val success = digits.isNotBlank()
+            msg = if (success) "تم إرسال الكارت للمراجعة" else "يرجى إدخال رقم صالح"
+            if (success) digits = ""
         }) { Text("إرسال الكارت") }
         msg?.let { Text(it, modifier = Modifier.padding(top = 6.dp)) }
     }
@@ -747,7 +742,7 @@ fun SupportScreen() {
 }
 
 /* =========================
-   Owner Dashboard (بسيطة)
+   Owner Dashboard
    ========================= */
 @Composable
 fun OwnerDashboard(vm: AppViewModel) {
@@ -770,16 +765,20 @@ fun OwnerDashboard(vm: AppViewModel) {
             Column(Modifier.padding(12.dp)) {
                 Text("حالة الخادم", fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(if (ok) Color(0xFF2ECC71) else Color(0xFFE74C3C))
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (ok) "متصل" else "غير متصل")
-                    Spacer(Modifier.weight(1f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(
+                            Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(if (ok) Color(0xFF2ECC71) else Color(0xFFE74C3C))
+                        )
+                        Text(if (ok) "متصل" else "غير متصل")
+                    }
                     TextButton(onClick = { vm.onAppStart(ctx) }) { Text("إعادة فحص") }
                 }
             }
@@ -791,8 +790,12 @@ fun OwnerDashboard(vm: AppViewModel) {
             Column(Modifier.padding(12.dp)) {
                 Text("المستخدم", fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("UID: ${uid ?: "-"}", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("UID: ${uid ?: "-"}", fontWeight = FontWeight.Bold)
                     IconButton(onClick = {
                         val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         cm.setPrimaryClip(ClipData.newPlainText("uid", uid ?: ""))
@@ -817,7 +820,7 @@ fun OwnerDashboard(vm: AppViewModel) {
 }
 
 /* =========================
-   PIN Dialog (موجود ويمكن تفعيله لاحقاً)
+   PIN Dialog (غير مستخدم حاليًا)
    ========================= */
 @Composable
 private fun OwnerPinDialog(isOwner: Boolean, onDismiss: () -> Unit, onEnable: (String) -> Unit, onDisable: () -> Unit) {

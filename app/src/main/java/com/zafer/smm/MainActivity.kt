@@ -14,7 +14,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-/* لا تستورد androidx.compose.foundation.layout.weight هنا */
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -326,7 +325,7 @@ class AppViewModel : ViewModel() {
         "شراء رصيد 2دولار اسيا" to 3.5,
         "شراء رصيد 5دولار اسيا" to 7.0,
         "شراء رصيد 10دولار اسيا" to 13.0,
-        "شراء رصيد 15دولار اسيا" to 19.0,   // <-- كان هنا "إلى" وتم استبدالها بـ to
+        "شراء رصيد 15دولار اسيا" to 19.0,
         "شراء رصيد 40دولار اسيا" to 52.0,
         "شراء رصيد 2دولار كورك" to 3.5,
         "شراء رصيد 5دولار كورك" to 7.0,
@@ -431,7 +430,7 @@ private fun priceFor(serviceName: String, qty: Int, basePrice: Double): Double {
 }
 
 /* =========================
-   Root + PIN + مزامنة UID
+   Root — بدون شريط علوي
    ========================= */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -459,20 +458,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
     ) {
         Scaffold(
             containerColor = Bg,
-            topBar = {
-                TopBar(
-                    balanceFlow = vm.balance,
-                    serverOkFlow = vm.serverOk,
-                    onMenu = { scope.launch { drawer.open() } },
-                    onLogoTapped = {
-                        val now = System.currentTimeMillis()
-                        if (now - lastTap > 2000) taps = 0
-                        taps++; lastTap = now
-                        if (taps >= 5) { taps = 0; showPin = true }
-                    },
-                    onSearch = { current = Screen.SERVICES }
-                )
-            },
+            // تم حذف topBar نهائياً لتجنب التداخل
             bottomBar = { BottomNav(current, isOwner) { current = it } },
             floatingActionButton = {
                 ExtendedFloatingActionButton(
@@ -506,78 +492,6 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
             onDisable = { vm.disableOwner() }
         )
     }
-}
-
-/* =========================
-   Top Bar — اسم التطبيق + حالة السيرفر
-   ========================= */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TopBar(
-    balanceFlow: StateFlow<Double>,
-    serverOkFlow: StateFlow<Boolean>,
-    onMenu: () -> Unit,
-    onLogoTapped: () -> Unit,
-    onSearch: () -> Unit
-) {
-    val balance by balanceFlow.collectAsState()
-    val serverOk by serverOkFlow.collectAsState()
-    CenterAlignedTopAppBar(
-        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-            containerColor = Bg,
-            titleContentColor = OnBg
-        ),
-        navigationIcon = {
-            Icon(
-                Icons.Filled.Menu,
-                contentDescription = "القائمة",
-                modifier = Modifier
-                    .padding(start = 8.dp)
-                    .clip(CircleShape)
-                    .clickable { onMenu() }
-                    .padding(8.dp)
-            )
-        },
-        title = {
-            Text(
-                text = "خدمات راتلوزن",
-                color = OnBg,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier.clickable { onLogoTapped() }
-            )
-        },
-        actions = {
-            Icon(
-                imageVector = if (serverOk) Icons.Filled.CheckCircle else Icons.Filled.Cancel,
-                contentDescription = null,
-                tint = if (serverOk) Mint else MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(end = 6.dp)
-            )
-            Box(
-                Modifier
-                    .padding(end = 10.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Surface2)
-                    .clickable { }
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("د.ع ${"%.2f".format(balance)}", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                    Spacer(Modifier.width(6.dp))
-                    Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = Accent)
-                }
-            }
-            Icon(
-                Icons.Filled.Search, contentDescription = "بحث",
-                modifier = Modifier
-                    .padding(end = 8.dp)
-                    .clip(CircleShape)
-                    .clickable { onSearch() }
-                    .padding(8.dp)
-            )
-        }
-    )
 }
 
 /* =========================
@@ -730,7 +644,7 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
         LoginDialog(
             onDismiss = { showLogin = false },
             onLogin = { input ->
-                vm.loginWithUid(ctx, input)
+                vm.loginWithUid(LocalContext.current, input)
                 showLogin = false
             }
         )

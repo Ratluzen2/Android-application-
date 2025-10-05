@@ -14,7 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-/* ملاحظة مهمة: لا تستورد androidx.compose.foundation.layout.weight هنا */
+/* لا تستورد androidx.compose.foundation.layout.weight هنا */
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -58,7 +58,6 @@ import kotlin.math.round
    ========================= */
 
 private const val OWNER_PIN = "123456"
-// عدّل الرابط لو كان مختلفًا:
 private const val SERVER_URL = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
 
 /* شبكة بدون تبعيات خارجية */
@@ -105,7 +104,6 @@ object Api {
         }
     }
 
-    /** يفحص عدة مسارات للصحّة حتى لا تفشل الواجهة */
     suspend fun health(): Boolean = runCatching {
         val candidates = listOf("/api/health", "/healthz", "/")
         for (p in candidates) {
@@ -116,14 +114,12 @@ object Api {
         false
     }.getOrDefault(false)
 
-    /** upsert مستخدم حسب uid */
     suspend fun upsertUser(uid: String): Boolean = runCatching {
         val payload = JSONObject().put("uid", uid)
         val (code, _) = httpPost("/api/users/upsert", payload)
         code in 200..299
     }.onFailure { Log.e(TAG, "upsertUser error", it) }.getOrDefault(false)
 
-    /** إنشاء طلب خدمة على السيرفر (اختياري؛ لا يوقف الواجهة إن فشل) */
     suspend fun createOrder(uid: String, service: String, qty: Int, price: Double, link: String): Boolean =
         runCatching {
             val payload = JSONObject()
@@ -248,7 +244,7 @@ class AppViewModel : ViewModel() {
     private val _moderators = MutableStateFlow<Set<Int>>(emptySet())
     val moderators: StateFlow<Set<Int>> = _moderators
 
-    // === الخدمات (كما أرسلت سابقًا) ===
+    // === الخدمات
     val servicesTikIgViewsLikesScore = linkedMapOf(
         "متابعين تيكتوك 1k" to 3.50,
         "متابعين تيكتوك 2k" to 7.0,
@@ -330,7 +326,7 @@ class AppViewModel : ViewModel() {
         "شراء رصيد 2دولار اسيا" to 3.5,
         "شراء رصيد 5دولار اسيا" to 7.0,
         "شراء رصيد 10دولار اسيا" to 13.0,
-        "شراء رصيد 15دولار اسيا" إلى 19.0,
+        "شراء رصيد 15دولار اسيا" to 19.0,   // <-- كان هنا "إلى" وتم استبدالها بـ to
         "شراء رصيد 40دولار اسيا" to 52.0,
         "شراء رصيد 2دولار كورك" to 3.5,
         "شراء رصيد 5دولار كورك" to 7.0,
@@ -391,7 +387,6 @@ class AppViewModel : ViewModel() {
         val uidNow = _uid.value ?: Prefs.ensureUid(ctx)
         val o = Order(++orderAutoId, uidNow, category, service, qty, round2(price), "pending", link)
         _orders.value = listOf(o) + _orders.value
-        // أرسل الطلب للسيرفر بشكل غير حاجز:
         viewModelScope.launch(Dispatchers.IO) {
             if (Api.health()) {
                 Api.createOrder(uidNow, service, qty, price, link)
@@ -553,7 +548,6 @@ private fun TopBar(
             )
         },
         actions = {
-            // حالة السيرفر
             Icon(
                 imageVector = if (serverOk) Icons.Filled.CheckCircle else Icons.Filled.Cancel,
                 contentDescription = null,
@@ -644,7 +638,6 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
     var bannerIndex by remember { mutableStateOf(0) }
 
     Column(Modifier.fillMaxSize().background(Bg)) {
-        // صف علوي: زر تسجيل الدخول + بطاقة UID
         Row(
             Modifier
                 .fillMaxWidth()
@@ -653,14 +646,16 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
         ) {
             LoginButton(onClick = { showLogin = true })
             Spacer(Modifier.width(12.dp))
-            UidCard(uid = uid ?: "-") {
-                // نسخ إلى الحافظة
-                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                cm.setPrimaryClip(ClipData.newPlainText("uid", uid ?: ""))
-            }
+            UidCard(
+                modifier = Modifier.weight(1f),
+                uid = uid ?: "-",
+                onCopy = {
+                    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    cm.setPrimaryClip(ClipData.newPlainText("uid", uid ?: ""))
+                }
+            )
         }
 
-        // بانرات زخرفية
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
@@ -688,7 +683,6 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
         }
         Spacer(Modifier.height(6.dp))
 
-        // أقسام عامة
         Row(
             Modifier
                 .fillMaxWidth()
@@ -705,7 +699,6 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
 
         Spacer(Modifier.height(10.dp))
 
-        // بطاقات عامة
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 120.dp, start = 12.dp, end = 12.dp),
@@ -733,7 +726,6 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
         }
     }
 
-    // حوار تسجيل الدخول (ضمن السياق المركب)
     if (showLogin) {
         LoginDialog(
             onDismiss = { showLogin = false },
@@ -772,10 +764,9 @@ private fun LoginDialog(onDismiss: () -> Unit = {}, onLogin: (String) -> Unit) {
 }
 
 @Composable
-private fun UidCard(uid: String, onCopy: () -> Unit) {
+private fun UidCard(modifier: Modifier = Modifier, uid: String, onCopy: () -> Unit) {
     Box(
-        Modifier
-            .weight(1f) // يعمل بدون أي import، بشرط أن UidCard يُستدعى كطفل داخل Row
+        modifier
             .clip(RoundedCornerShape(16.dp))
             .background(Surface2)
             .clickable { onCopy() }
@@ -900,7 +891,6 @@ fun ServicesScreen(vm: AppViewModel) {
     var buy by remember { mutableStateOf<BuyInfo?>(null) }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        // تبويبات الأقسام
         ScrollableTabRow(selectedTabIndex = selectedCat, edgePadding = 0.dp, containerColor = Surface1) {
             categories.forEachIndexed { i, (name, _) ->
                 Tab(selected = selectedCat == i, onClick = { selectedCat = i }, text = { Text(name) })
@@ -1116,7 +1106,7 @@ fun SupportScreen() {
 }
 
 /* =========================
-   Owner Dashboard (بدون تعديل أسعار/كميات)
+   Owner Dashboard
    ========================= */
 @Composable
 fun OwnerDashboard(vm: AppViewModel) {

@@ -125,7 +125,8 @@ fun AppRoot() {
             onOpenSettings = { settingsOpen = true },
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(top = 10.dp, end = 10.dp)
+                .statusBarsPadding()  // <<< يمنع التداخل مع شريط الحالة
+                .padding(top = 6.dp, end = 10.dp)
         )
 
         // الشريط السفلي

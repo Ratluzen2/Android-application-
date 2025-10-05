@@ -1,9 +1,15 @@
+@file:Suppress("UnusedImport", "UNCHECKED_CAST")
+
 package com.zafer.smm
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -27,19 +33,110 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
+import java.nio.charset.Charset
+import java.util.Locale
 import kotlin.math.max
 import kotlin.math.round
-import kotlin.random.Random
+
+/* =========================
+   Constants / API
+   ========================= */
+
+private const val OWNER_PIN = "123456"
+// عدّل الرابط لو كان مختلفًا:
+private const val SERVER_URL = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
+
+/* شبكة بدون تبعيات خارجية */
+object Api {
+    private const val TAG = "Api"
+
+    private fun httpGet(path: String, timeout: Int = 8000): Pair<Int, String?> {
+        val url = URL("$SERVER_URL$path")
+        val c = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = timeout
+            readTimeout = timeout
+            setRequestProperty("Accept", "application/json")
+        }
+        return try {
+            val code = c.responseCode
+            val stream = (if (code in 200..299) c.inputStream else c.errorStream)
+            val body = stream?.bufferedReader(Charset.forName("UTF-8"))?.use(BufferedReader::readText)
+            code to body
+        } finally {
+            c.disconnect()
+        }
+    }
+
+    private fun httpPost(path: String, json: JSONObject, timeout: Int = 8000): Pair<Int, String?> {
+        val url = URL("$SERVER_URL$path")
+        val c = (url.openConnection() as HttpURLConnection).apply {
+            doOutput = true
+            requestMethod = "POST"
+            connectTimeout = timeout
+            readTimeout = timeout
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            setRequestProperty("Accept", "application/json")
+        }
+        val bytes = json.toString().toByteArray(Charset.forName("UTF-8"))
+        return try {
+            c.outputStream.use { it.write(bytes) }
+            val code = c.responseCode
+            val stream = (if (code in 200..299) c.inputStream else c.errorStream)
+            val body = stream?.bufferedReader(Charset.forName("UTF-8"))?.use(BufferedReader::readText)
+            code to body
+        } finally {
+            c.disconnect()
+        }
+    }
+
+    /** يفحص عدة مسارات للصحّة حتى لا تفشل الواجهة */
+    suspend fun health(): Boolean = runCatching {
+        val candidates = listOf("/api/health", "/healthz", "/")
+        for (p in candidates) {
+            val (code, body) = httpGet(p)
+            if (code in 200..299) return true
+            if (body?.contains("OK", true) == true) return true
+        }
+        false
+    }.getOrDefault(false)
+
+    /** upsert مستخدم حسب uid */
+    suspend fun upsertUser(uid: String): Boolean = runCatching {
+        val payload = JSONObject().put("uid", uid)
+        val (code, _) = httpPost("/api/users/upsert", payload)
+        code in 200..299
+    }.onFailure { Log.e(TAG, "upsertUser error", it) }.getOrDefault(false)
+
+    /** إنشاء طلب خدمة على السيرفر (اختياري؛ لا يوقف الواجهة إن فشل) */
+    suspend fun createOrder(uid: String, service: String, qty: Int, price: Double, link: String): Boolean =
+        runCatching {
+            val payload = JSONObject()
+                .put("uid", uid)
+                .put("service_name", service)
+                .put("quantity", qty)
+                .put("price", price)
+                .put("link", link)
+            val (code, _) = httpPost("/api/orders", payload)
+            code in 200..299
+        }.onFailure { Log.e(TAG, "createOrder error", it) }.getOrDefault(false)
+}
 
 /* =========================
    Theme — داكن احترافي
@@ -48,8 +145,8 @@ private val Bg       = Color(0xFF0F1115)
 private val Surface1 = Color(0xFF151821)
 private val Surface2 = Color(0xFF1E2230)
 private val OnBg     = Color(0xFFE9EAEE)
-private val Accent   = Color(0xFFFFD54F) // أصفر بارز
-private val Mint     = Color(0xFF4CD964) // أخضر للأزرار البارزة
+private val Accent   = Color(0xFFFFD54F)
+private val Mint     = Color(0xFF4CD964)
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
@@ -71,12 +168,40 @@ fun AppTheme(content: @Composable () -> Unit) {
 }
 
 /* =========================
+   Prefs (UID محلي + توليد)
+   ========================= */
+object Prefs {
+    private const val PREF = "app_prefs"
+    private const val KEY_UID = "uid"
+
+    fun getUid(ctx: Context): String? =
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString(KEY_UID, null)
+
+    fun saveUid(ctx: Context, uid: String) {
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putString(KEY_UID, uid).apply()
+    }
+
+    fun ensureUid(ctx: Context): String {
+        val e = getUid(ctx)
+        if (!e.isNullOrBlank()) return e
+        val n = generateUid()
+        saveUid(ctx, n)
+        return n
+    }
+
+    private fun generateUid(): String {
+        val num = (100000..999999).random()
+        return "U$num"
+    }
+}
+
+/* =========================
    MainActivity
    ========================= */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // تم إلغاء edge-to-edge لتجنب تداخل الشريط العلوي
+        enableEdgeToEdge()
         setContent { AppTheme { AppRoot() } }
     }
 }
@@ -91,7 +216,7 @@ enum class Screen { HOME, SERVICES, ORDERS, WALLET, SUPPORT, OWNER }
    ========================= */
 data class Order(
     val id: Int,
-    val userId: Int,
+    val userUid: String,
     val category: String,
     val serviceName: String,
     val qty: Int,
@@ -100,36 +225,18 @@ data class Order(
     val link: String,
     val ts: Long = System.currentTimeMillis()
 )
-data class CardSubmission(val userId: Int, val digits: String, val ts: Long = System.currentTimeMillis())
+data class CardSubmission(val userUid: String, val digits: String, val ts: Long = System.currentTimeMillis())
 
 /* =========================
-   Prefs (UID)
+   ViewModel
    ========================= */
-private object Prefs {
-    private const val FILE = "app_prefs"
-    private const val KEY_UID = "uid"
-    fun getUid(ctx: Context): String? =
-        ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(KEY_UID, null)
-
-    fun saveUid(ctx: Context, uid: String) {
-        ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putString(KEY_UID, uid).apply()
-    }
-    fun ensureUid(ctx: Context): String {
-        val cur = getUid(ctx)
-        if (cur != null) return cur
-        val gen = "U" + (100000..999999).random()
-        saveUid(ctx, gen)
-        return gen
-    }
-}
-
-/* =========================
-   ViewModel (نفس الميزات)
-   ========================= */
-private const val OWNER_PIN = "123456"
-
 class AppViewModel : ViewModel() {
-    val currentUserId = 1
+
+    private val _uid = MutableStateFlow<String?>(null)
+    val uid: StateFlow<String?> = _uid
+
+    private val _serverOk = MutableStateFlow(false)
+    val serverOk: StateFlow<Boolean> = _serverOk
 
     private val _isOwner = MutableStateFlow(false)
     val isOwner: StateFlow<Boolean> = _isOwner
@@ -142,7 +249,7 @@ class AppViewModel : ViewModel() {
     private val _moderators = MutableStateFlow<Set<Int>>(emptySet())
     val moderators: StateFlow<Set<Int>> = _moderators
 
-    // الخرائط كما هي
+    // === الخدمات (كما أرسلت سابقًا) ===
     val servicesTikIgViewsLikesScore = linkedMapOf(
         "متابعين تيكتوك 1k" to 3.50,
         "متابعين تيكتوك 2k" to 7.0,
@@ -216,37 +323,32 @@ class AppViewModel : ViewModel() {
         "شراء رصيد 50 ايتونز" to 90.0,
     )
     val servicesMobile = linkedMapOf(
-        "شراء رصيد 2دولار اثير" to 2.0,
-        "شراء رصيد 5دولار اثير" to 5.0,
-        "شراء رصيد 10دولار اثير" to 10.0,
-        "شراء رصيد 15دولار اثير" to 15.0,
-        "شراء رصيد 40دولار اثير" to 40.0,
-        "شراء رصيد 2دولار اسيا" to 2.0,
-        "شراء رصيد 5دولار اسيا" to 5.0,
-        "شراء رصيد 10دولار اسيا" to 10.0,
-        "شراء رصيد 15دولار اسيا" to 15.0,
-        "شراء رصيد 40دولار اسيا" to 40.0,
-        "شراء رصيد 2دولار كورك" to 2.0,
-        "شراء رصيد 5دولار كورك" to 5.0,
-        "شراء رصيد 10دولار كورك" to 10.0,
-        "شراء رصيد 15دولار كورك" to 15.0,
-        "شراء رصيد 40دولار كورك" to 40.0,
+        "شراء رصيد 2دولار اثير" to 3.5,
+        "شراء رصيد 5دولار اثير" to 7.0,
+        "شراء رصيد 10دولار اثير" to 13.0,
+        "شراء رصيد 15دولار اثير" to 19.0,
+        "شراء رصيد 40دولار اثير" to 52.0,
+        "شراء رصيد 2دولار اسيا" to 3.5,
+        "شراء رصيد 5دولار اسيا" to 7.0,
+        "شراء رصيد 10دولار اسيا" to 13.0,
+        "شراء رصيد 15دولار اسيا" to 19.0,
+        "شراء رصيد 40دولار اسيا" to 52.0,
+        "شراء رصيد 2دولار كورك" to 3.5,
+        "شراء رصيد 5دولار كورك" to 7.0,
+        "شراء رصيد 10دولار كورك" to 13.0,
+        "شراء رصيد 15دولار كورك" to 19.0,
+        "شراء رصيد 40دولار كورك" to 52.0,
     )
     val servicesLudo = linkedMapOf(
-        "لودو 810 الماسة" to 3.0,
-        "لودو 2280 الماسة" to 7.0,
-        "لودو 5080 الماسة" to 13.0,
-        "لودو 12750 الماسة" to 28.0,
-        "لودو 66680 ذهب" to 3.0,
-        "لودو 219500 ذهب" to 7.0,
-        "لودو 1443000 ذهب" to 13.0,
-        "لودو 3627000 ذهب" to 28.0,
+        "لودو 810 الماسة" to 4.0,
+        "لودو 2280 الماسة" to 8.9,
+        "لودو 5080 الماسة" to 17.5,
+        "لودو 12750 الماسة" to 42.7,
+        "لودو 66680 ذهب" to 4.0,
+        "لودو 219500 ذهب" to 8.9,
+        "لودو 1443000 ذهب" to 17.5,
+        "لودو 3627000 ذهب" to 42.7,
     )
-
-    private val _priceOverrides = MutableStateFlow<Map<String, Double>>(emptyMap())
-    val priceOverrides: StateFlow<Map<String, Double>> = _priceOverrides
-    private val _qtyOverrides = MutableStateFlow<Map<String, Int>>(emptyMap())
-    val qtyOverrides: StateFlow<Map<String, Int>> = _qtyOverrides
 
     private val _orders = MutableStateFlow<List<Order>>(emptyList())
     val orders: StateFlow<List<Order>> = _orders
@@ -257,37 +359,58 @@ class AppViewModel : ViewModel() {
     private val CARD_SPAM_COUNT = 5
     private val CARD_SPAM_WINDOW_MS = 120_000L
 
+    fun onAppStart(ctx: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ensured = Prefs.ensureUid(ctx)
+            _uid.value = ensured
+            _serverOk.value = Api.health()
+            if (_serverOk.value) {
+                Api.upsertUser(ensured)
+            }
+        }
+    }
+
+    fun loginWithUid(ctx: Context, uid: String) {
+        val clean = uid.trim().uppercase(Locale.ROOT)
+        if (clean.isNotBlank()) {
+            Prefs.saveUid(ctx, clean)
+            _uid.value = clean
+            viewModelScope.launch(Dispatchers.IO) {
+                _serverOk.value = Api.health()
+                if (_serverOk.value) Api.upsertUser(clean)
+            }
+        }
+    }
+
     fun isModerator(userId: Int) = _moderators.value.contains(userId)
     fun addModerator(userId: Int) { _moderators.value = _moderators.value + userId }
     fun removeModerator(userId: Int) { _moderators.value = _moderators.value - userId }
 
-    fun setPriceOverride(service: String, price: Double) {
-        _priceOverrides.value = _priceOverrides.value.toMutableMap().apply { this[service] = price }
-    }
-    fun setQtyOverride(service: String, qty: Int) {
-        _qtyOverrides.value = _qtyOverrides.value.toMutableMap().apply { this[service] = qty }
-    }
+    fun effectiveBasePrice(service: String, default: Double): Double = default
 
-    fun effectiveBasePrice(userId: Int, service: String, default: Double): Double {
-        val base = _priceOverrides.value[service] ?: default
-        return if (isModerator(userId)) round2(base * 0.9) else base
-    }
-
-    fun addOrder(userId: Int, category: String, service: String, qty: Int, price: Double, link: String) {
-        val o = Order(++orderAutoId, userId, category, service, qty, round2(price), "pending", link)
+    fun addOrder(ctx: Context, category: String, service: String, qty: Int, price: Double, link: String) {
+        val uidNow = _uid.value ?: Prefs.ensureUid(ctx)
+        val o = Order(++orderAutoId, uidNow, category, service, qty, round2(price), "pending", link)
         _orders.value = listOf(o) + _orders.value
+        // أرسل الطلب للسيرفر بشكل غير حاجز:
+        viewModelScope.launch(Dispatchers.IO) {
+            if (Api.health()) {
+                Api.createOrder(uidNow, service, qty, price, link)
+            }
+        }
     }
 
     fun addBalance(a: Double) { _balance.value = (_balance.value + a).coerceAtLeast(0.0) }
     fun withdrawBalance(a: Double): Boolean = if (a <= _balance.value) { _balance.value -= a; true } else false
 
-    fun submitCard(userId: Int, digits: String): Pair<Boolean, String> {
+    fun submitCard(ctx: Context, digits: String): Pair<Boolean, String> {
+        val uidNow = _uid.value ?: Prefs.ensureUid(ctx)
         val now = System.currentTimeMillis()
-        val dup = cardSubmissions.count { it.userId == userId && it.digits == digits }
+        val dup = cardSubmissions.count { it.userUid == uidNow && it.digits == digits }
         if (dup > CARD_DUP_LIMIT) return false to "مرفوض: تكرار لنفس رقم الكارت"
-        val recent = cardSubmissions.count { it.userId == userId && it.ts >= now - CARD_SPAM_WINDOW_MS }
+        val recent = cardSubmissions.count { it.userUid == uidNow && it.ts >= now - CARD_SPAM_WINDOW_MS }
         if (recent > CARD_SPAM_COUNT) return false to "مرفوض: محاولات كثيرة خلال وقت قصير"
-        cardSubmissions += CardSubmission(userId, digits, now)
+        cardSubmissions += CardSubmission(uidNow, digits, now)
         return true to "تم إرسال الكارت للمراجعة"
     }
 
@@ -314,11 +437,14 @@ private fun priceFor(serviceName: String, qty: Int, basePrice: Double): Double {
 }
 
 /* =========================
-   Root + PIN
+   Root + PIN + مزامنة UID
    ========================= */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppRoot(vm: AppViewModel = viewModel()) {
+    val ctx = LocalContext.current
+    LaunchedEffect(Unit) { vm.onAppStart(ctx) }
+
     var current by rememberSaveable { mutableStateOf(Screen.HOME) }
     val isOwner by vm.isOwner.collectAsState()
     val drawer = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -342,6 +468,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
             topBar = {
                 TopBar(
                     balanceFlow = vm.balance,
+                    serverOkFlow = vm.serverOk,
                     onMenu = { scope.launch { drawer.open() } },
                     onLogoTapped = {
                         val now = System.currentTimeMillis()
@@ -388,17 +515,19 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
 }
 
 /* =========================
-   Top Bar — اسم التطبيق “خدمات راتلوزن”
+   Top Bar — اسم التطبيق + حالة السيرفر
    ========================= */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TopBar(
     balanceFlow: StateFlow<Double>,
+    serverOkFlow: StateFlow<Boolean>,
     onMenu: () -> Unit,
     onLogoTapped: () -> Unit,
     onSearch: () -> Unit
 ) {
     val balance by balanceFlow.collectAsState()
+    val serverOk by serverOkFlow.collectAsState()
     CenterAlignedTopAppBar(
         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
             containerColor = Bg,
@@ -425,6 +554,13 @@ private fun TopBar(
             )
         },
         actions = {
+            // حالة السيرفر
+            Icon(
+                imageVector = if (serverOk) Icons.Filled.CheckCircle else Icons.Filled.Cancel,
+                contentDescription = null,
+                tint = if (serverOk) Mint else MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(end = 6.dp)
+            )
             Box(
                 Modifier
                     .padding(end = 10.dp)
@@ -493,16 +629,12 @@ private fun BottomNav(current: Screen, isOwner: Boolean, onSelect: (Screen) -> U
 }
 
 /* =========================
-   HOME — بانر + أقسام + بطاقات + UID/Login
+   HOME — بانر + أقسام + بطاقة UID + زر تسجيل الدخول
    ========================= */
 @Composable
 fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
     val ctx = LocalContext.current
-    val clip = LocalClipboardManager.current
-    val uid by remember { mutableStateOf(Prefs.ensureUid(ctx)) } // يُنشأ تلقائياً إن لم يوجد
-
-    var showLogin by remember { mutableStateOf(false) }
-
+    val uid by vm.uid.collectAsState()
     val banners = listOf(
         Color(0xFF141821) to Color(0xFF252A39),
         Color(0xFF19202A) to Color(0xFF2C3446),
@@ -510,47 +642,25 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
     )
     var bannerIndex by remember { mutableStateOf(0) }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(Bg)
-            .padding(top = 8.dp) // منع أي اقتراب من شريط العنوان
-    ) {
+    Column(Modifier.fillMaxSize().background(Bg)) {
         // صف علوي: زر تسجيل الدخول + بطاقة UID
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 6.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedButton(
-                onClick = { showLogin = true },
-                modifier = Modifier
-                    .height(44.dp)
-            ) { Text("تسجيل الدخول") }
-
-            Spacer(Modifier.width(10.dp))
-
-            ElevatedCard(
-                modifier = Modifier.weight(1f),
-                colors = CardDefaults.elevatedCardColors(containerColor = Surface2)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "معرّفك: $uid (انقر للنسخ)",
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.weight(1f)
-                            .clickable {
-                                clip.setText(AnnotatedString(uid))
-                            }
-                    )
-                    Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = Accent)
-                }
+            LoginButton { show ->
+                if (show) LoginDialog(
+                    onDismiss = {},
+                    onLogin = { input -> vm.loginWithUid(ctx, input) }
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            UidCard(uid = uid ?: "-") {
+                // نسخ إلى الحافظة
+                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("uid", uid ?: ""))
             }
         }
 
@@ -591,10 +701,10 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             CategoryIcon("الكل", Icons.Filled.Apps, selected = true) { open(Screen.SERVICES) }
-            CategoryIcon("سوشيال", Icons.Filled.Group) { open(Screen.SERVICES) }
-            CategoryIcon("تليجرام", Icons.Filled.Send) { open(Screen.SERVICES) }
-            CategoryIcon("الألعاب", Icons.Filled.SportsEsports) { open(Screen.SERVICES) }
-            CategoryIcon("شحن/رصيد", Icons.Filled.CreditCard) { open(Screen.SERVICES) }
+            CategoryIcon("سوشيال", Icons.Filled.Group, selected = false) { open(Screen.SERVICES) }
+            CategoryIcon("تليجرام", Icons.Filled.Send, selected = false) { open(Screen.SERVICES) }
+            CategoryIcon("الألعاب", Icons.Filled.SportsEsports, selected = false) { open(Screen.SERVICES) }
+            CategoryIcon("شحن/رصيد", Icons.Filled.CreditCard, selected = false) { open(Screen.SERVICES) }
         }
 
         Spacer(Modifier.height(10.dp))
@@ -626,34 +736,53 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
             }
         }
     }
+}
 
-    // حوار تسجيل الدخول بإدخال UID (للاستخدام من جهاز آخر)
-    if (showLogin) {
-        var uidInput by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showLogin = false },
-            title = { Text("تسجيل الدخول بواسطة UID") },
-            text = {
-                Column {
-                    Text("أدخل UID الذي لديك لاسترجاع حسابك.")
-                    OutlinedTextField(
-                        value = uidInput,
-                        onValueChange = { uidInput = it.trim() },
-                        label = { Text("UID مثل U123456") },
-                        singleLine = true
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (uidInput.matches(Regex("^U\\d{6}\$"))) {
-                        Prefs.saveUid(ctx, uidInput)
-                        showLogin = false
-                    }
-                }) { Text("تأكيد") }
-            },
-            dismissButton = { TextButton(onClick = { showLogin = false }) { Text("إلغاء") } }
-        )
+@Composable
+private fun LoginButton(onShowDialog: (Boolean) -> Unit) {
+    ElevatedButton(
+        onClick = { onShowDialog(true) },
+        colors = ButtonDefaults.elevatedButtonColors(containerColor = Surface2)
+    ) { Text("تسجيل الدخول") }
+}
+
+@Composable
+private fun LoginDialog(onDismiss: () -> Unit = {}, onLogin: (String) -> Unit) {
+    var t by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("تسجيل الدخول عبر UID") },
+        text = {
+            Column {
+                Text("أدخل UID الخاص بك لاسترجاع حسابك على أي جهاز.")
+                Spacer(Modifier.height(6.dp))
+                OutlinedTextField(value = t, onValueChange = { t = it }, label = { Text("UID") })
+            }
+        },
+        confirmButton = { TextButton(onClick = { if (t.isNotBlank()) { onLogin(t); onDismiss() } }) { Text("دخول") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
+}
+
+@Composable
+private fun UidCard(uid: String, onCopy: () -> Unit) {
+    Box(
+        Modifier
+            .weight(1f)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Surface2)
+            .clickable { onCopy() }
+            .padding(14.dp)
+    ) {
+        Column {
+            Text("معرّفك:", color = OnBg.copy(0.7f), fontSize = 12.sp)
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(uid, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = Accent)
+            }
+            Text("(انقر للنسخ)", fontSize = 10.sp, color = OnBg.copy(0.6f))
+        }
     }
 }
 
@@ -663,7 +792,7 @@ private fun BannerCard(modifier: Modifier = Modifier, start: Color, end: Color) 
         modifier
             .clip(RoundedCornerShape(18.dp))
             .background(Brush.linearGradient(listOf(start, end)))
-    ) { /* زخرفة فقط */ }
+    ) { }
 }
 
 @Composable
@@ -686,7 +815,7 @@ private fun Dots(count: Int, active: Int) {
 private fun CategoryIcon(
     title: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    selected: Boolean = false,
+    selected: Boolean,
     onClick: () -> Unit
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.widthIn(min = 76.dp)) {
@@ -742,31 +871,36 @@ private fun ProductCard(title: String, tag: String, colors: List<Color>, onClick
 }
 
 /* =========================
-   SERVICES — مجموعات ثم عناصر
+   SERVICES — أقسام ثم خدمات
    ========================= */
-data class BuyInfo(val service: String, val qty: Int, val price: Double)
+data class BuyInfo(val category: String, val service: String, val qty: Int, val price: Double)
 
 @Composable
 fun ServicesScreen(vm: AppViewModel) {
-    val qtyOverrides by vm.qtyOverrides.collectAsState()
-    val priceOverrides by vm.priceOverrides.collectAsState()
-    val qtyMap = remember { mutableStateMapOf<String, Int>() }
-    var query by remember { mutableStateOf("") }
-    var buy by remember { mutableStateOf<BuyInfo?>(null) }
-
-    // مفتاح المجموعة المفتوحة
-    var openGroup by remember { mutableStateOf<String?>(null) }
-
-    val blocks = listOf(
-        "TikTok/Instagram/Views/Likes/Score" to vm.servicesTikIgViewsLikesScore,
-        "Telegram" to vm.servicesTelegram,
-        "PUBG" to vm.servicesPubg,
+    val ctx = LocalContext.current
+    val categories = listOf(
+        "سوشيال (تيكتوك/انستغرام/مشاهدات/سكور)" to vm.servicesTikIgViewsLikesScore,
+        "تليجرام" to vm.servicesTelegram,
+        "ببجي" to vm.servicesPubg,
         "iTunes" to vm.servicesItunes,
-        "Mobile" to vm.servicesMobile,
+        "شحن رصيد" to vm.servicesMobile,
         "Ludo" to vm.servicesLudo
     )
 
+    var selectedCat by remember { mutableStateOf(0) }
+    var query by remember { mutableStateOf("") }
+    val qtyMap = remember { mutableStateMapOf<String, Int>() }
+    var buy by remember { mutableStateOf<BuyInfo?>(null) }
+
     Column(Modifier.fillMaxSize().padding(12.dp)) {
+        // تبويبات الأقسام
+        ScrollableTabRow(selectedTabIndex = selectedCat, edgePadding = 0.dp, containerColor = Surface1) {
+            categories.forEachIndexed { i, (name, _) ->
+                Tab(selected = selectedCat == i, onClick = { selectedCat = i }, text = { Text(name) })
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+
         OutlinedTextField(
             value = query, onValueChange = { query = it },
             label = { Text("ابحث عن خدمة") },
@@ -775,59 +909,33 @@ fun ServicesScreen(vm: AppViewModel) {
         )
         Spacer(Modifier.height(8.dp))
 
+        val (catTitle, data) = categories[selectedCat]
         LazyColumn(
             contentPadding = PaddingValues(bottom = 120.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(blocks) { (group, data) ->
-                ElevatedCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.elevatedCardColors(containerColor = Surface2)
-                ) {
-                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth().clickable {
-                                openGroup = if (openGroup == group) null else group
-                            },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                if (openGroup == group) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                                contentDescription = null
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(group, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Accent)
-                        }
+            item { Text(catTitle, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Accent) }
+            items(data.toList(), key = { it.first }) { (svc, base) ->
+                if (query.isNotBlank() && !svc.contains(query, true)) return@items
+                val step = stepFor(svc)
+                val defaultQty = extractQtyFromName(svc)
+                val qty = qtyMap[svc] ?: defaultQty
+                val basePrice = vm.effectiveBasePrice(svc, base)
+                val price = priceFor(svc, qty, basePrice)
 
-                        if (openGroup == group) {
-                            Spacer(Modifier.height(6.dp))
-                            data.forEach { (svc, base) ->
-                                if (query.isNotBlank() && !svc.contains(query, true)) return@forEach
-                                val step = stepFor(svc)
-                                val defaultQty = qtyOverrides[svc] ?: extractQtyFromName(svc)
-                                val qty = qtyMap[svc] ?: defaultQty
-                                val basePrice = vm.effectiveBasePrice(vm.currentUserId, svc, base)
-                                val price = priceFor(svc, qty, basePrice)
-
-                                ServiceRow(
-                                    service = svc,
-                                    qty = qty,
-                                    basePrice = basePrice,
-                                    price = price,
-                                    onDec = { qtyMap[svc] = max(step, qty - step) },
-                                    onInc = { qtyMap[svc] = qty + step },
-                                    onBuy = { buy = BuyInfo(svc, qty, price) }
-                                )
-                                Spacer(Modifier.height(8.dp))
-                            }
-                        }
-                    }
-                }
+                ServiceRow(
+                    service = svc,
+                    qty = qty,
+                    basePrice = basePrice,
+                    price = price,
+                    onDec = { qtyMap[svc] = max(step, qty - step) },
+                    onInc = { qtyMap[svc] = qty + step },
+                    onBuy = { buy = BuyInfo(catTitle, svc, qty, price) }
+                )
             }
         }
     }
 
-    // شراء
     buy?.let { info ->
         var open by remember { mutableStateOf(true) }
         var link by remember { mutableStateOf("") }
@@ -844,7 +952,7 @@ fun ServicesScreen(vm: AppViewModel) {
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        vm.addOrder(vm.currentUserId, "smm", info.service, info.qty, info.price, link)
+                        vm.addOrder(ctx, info.category, info.service, info.qty, info.price, link)
                         open = false; buy = null
                     }) { Text("تأكيد") }
                 },
@@ -920,6 +1028,7 @@ fun OrdersScreen(vm: AppViewModel) {
    ========================= */
 @Composable
 fun WalletScreen(vm: AppViewModel) {
+    val ctx = LocalContext.current
     val balance by vm.balance.collectAsState()
     var showAdd by remember { mutableStateOf(false) }
     var showWd by remember { mutableStateOf(false) }
@@ -947,7 +1056,7 @@ fun WalletScreen(vm: AppViewModel) {
         OutlinedTextField(value = digits, onValueChange = { digits = it }, label = { Text("رقم الكارت") }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(6.dp))
         ElevatedButton(onClick = {
-            val (ok, m) = vm.submitCard(vm.currentUserId, digits.trim())
+            val (ok, m) = vm.submitCard(ctx, digits.trim())
             msg = m; if (ok) digits = ""
         }) { Text("إرسال الكارت") }
         msg?.let { Text(it, modifier = Modifier.padding(top = 6.dp)) }
@@ -1000,18 +1109,11 @@ fun SupportScreen() {
 }
 
 /* =========================
-   Owner Dashboard
+   Owner Dashboard (بدون تعديل أسعار/كميات)
    ========================= */
 @Composable
 fun OwnerDashboard(vm: AppViewModel) {
     val moderators by vm.moderators.collectAsState()
-    val priceOverrides by vm.priceOverrides.collectAsState()
-    val qtyOverrides by vm.qtyOverrides.collectAsState()
-
-    var svcPrice by remember { mutableStateOf("") }
-    var newPrice by remember { mutableStateOf("") }
-    var svcQty by remember { mutableStateOf("") }
-    var newQty by remember { mutableStateOf("") }
     var modId by remember { mutableStateOf("") }
 
     Column(
@@ -1021,40 +1123,6 @@ fun OwnerDashboard(vm: AppViewModel) {
             .verticalScroll(rememberScrollState())
     ) {
         Text("لوحة تحكم المالك", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
-
-        ElevatedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp)) {
-                Text("تعديل الأسعار", fontWeight = FontWeight.SemiBold)
-                OutlinedTextField(value = svcPrice, onValueChange = { svcPrice = it }, label = { Text("اسم الخدمة (بالضبط)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = newPrice, onValueChange = { newPrice = it }, label = { Text("سعر جديد بالدولار") }, modifier = Modifier.fillMaxWidth())
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ElevatedButton(onClick = { newPrice.toDoubleOrNull()?.let { p -> if (svcPrice.isNotBlank()) vm.setPriceOverride(svcPrice.trim(), p) } }) { Text("حفظ السعر") }
-                    OutlinedButton(onClick = { svcPrice = ""; newPrice = "" }) { Text("تفريغ") }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text("Overrides الحالية:")
-                priceOverrides.forEach { (k, v) -> Text("- $k = ${"%.2f".format(v)}$") }
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        ElevatedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp)) {
-                Text("تعديل الكمية الافتراضية", fontWeight = FontWeight.SemiBold)
-                OutlinedTextField(value = svcQty, onValueChange = { svcQty = it }, label = { Text("اسم الخدمة (بالضبط)") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = newQty, onValueChange = { newQty = it }, label = { Text("الكمية (عدد صحيح)") }, modifier = Modifier.fillMaxWidth())
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ElevatedButton(onClick = { newQty.toIntOrNull()?.let { q -> if (svcQty.isNotBlank()) vm.setQtyOverride(svcQty.trim(), q) } }) { Text("حفظ الكمية") }
-                    OutlinedButton(onClick = { svcQty = ""; newQty = "" }) { Text("تفريغ") }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text("كميات افتراضية مخصصة:")
-                qtyOverrides.forEach { (k, v) -> Text("- $k = $v") }
-            }
-        }
-
         Spacer(Modifier.height(12.dp))
 
         ElevatedCard(Modifier.fillMaxWidth()) {

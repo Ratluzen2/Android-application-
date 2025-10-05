@@ -24,9 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardOptions
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -99,7 +97,7 @@ fun AppRoot() {
     var online by remember { mutableStateOf<Boolean?>(null) }
 
     // حالة المالك/لوحته
-    var isOwner by rememberSaveable { mutableStateOf(false) }
+    var isOwner by remember { mutableStateOf(false) }        // <-- أزلنا rememberSaveable
     var askOwnerPin by remember { mutableStateOf(false) }
     var showOwnerDashboard by remember { mutableStateOf(false) }
 
@@ -412,7 +410,7 @@ private fun SettingsDialog(uid: String, onOwnerLoginClick: () -> Unit, onDismiss
 }
 
 /* =========================
-   نافذة إدخال كلمة مرور المالك
+   نافذة إدخال كلمة مرور المالك (بدون KeyboardOptions)
    ========================= */
 @Composable
 private fun OwnerLoginDialog(
@@ -435,8 +433,7 @@ private fun OwnerLoginDialog(
                     },
                     label = { Text("كلمة المرور") },
                     singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    visualTransformation = PasswordVisualTransformation() // أزلنا KeyboardOptions
                 )
                 if (error != null) {
                     Spacer(Modifier.height(6.dp))
@@ -497,7 +494,7 @@ private fun OwnerDashboard(onClose: () -> Unit) {
         color = Bg
     ) {
         Column(Modifier.fillMaxSize()) {
-            // شريط علوي بسيط داخل الصفحة نفسها (ليس TopAppBar النظامي)
+            // شريط علوي بسيط داخل الصفحة نفسها
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -512,14 +509,13 @@ private fun OwnerDashboard(onClose: () -> Unit) {
                 Text("لوحة تحكم المالك", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             }
 
-            // شبكة أزرار بشكل صفين (عمودين)
+            // شبكة أزرار بشكل صفوف (عمودين)
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // اصنع أزواجًا (2 في كل صف)
                 actions.chunked(2).forEach { rowItems ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -532,9 +528,7 @@ private fun OwnerDashboard(onClose: () -> Unit) {
                                 modifier = Modifier.weight(1f)
                             )
                         }
-                        if (rowItems.size == 1) {
-                            Spacer(Modifier.weight(1f))
-                        }
+                        if (rowItems.size == 1) Spacer(Modifier.weight(1f))
                     }
                 }
             }
@@ -547,7 +541,7 @@ private fun OwnerActionButton(label: String, modifier: Modifier = Modifier) {
     ElevatedCard(
         modifier = modifier
             .heightIn(min = 64.dp)
-            .clickable { /* لا شيء الآن */ },
+            .clickable { /* سيُربط لاحقاً */ },
         colors = CardDefaults.elevatedCardColors(containerColor = Surface1),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
     ) {

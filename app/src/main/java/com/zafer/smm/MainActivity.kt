@@ -658,7 +658,7 @@ private fun Dots(count: Int, active: Int) {
 }
 
 @Composable
-private fun CategoryIcon(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean = false, onClick: () -> Unit) {
+private fun CategoryIcon(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.widthIn(min = 76.dp)) {
         Box(
             Modifier
@@ -712,7 +712,7 @@ private fun ProductCard(title: String, tag: String, colors: List<Color>, onClick
 }
 
 /* =========================
-   SERVICES — أقسام بأعلى الشاشة + أزرار خدمات
+   SERVICES — أقسام + أزرار خدمات
    ========================= */
 data class BuyInfo(val service: String, val qty: Int, val price: Double)
 
@@ -732,7 +732,6 @@ fun ServicesScreen(vm: AppViewModel) {
     var selected by remember { mutableStateOf(0) }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        // أقسام الخدمات داخل شاشة الخدمات
         Row(
             modifier = Modifier
                 .fillMaxWidth()

@@ -11,10 +11,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -24,16 +26,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.TextUnit
-import androidx.compose.ui.unit.TextUnitType
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
@@ -43,7 +44,7 @@ import kotlin.random.Random
    إعدادات عامة
    ========================= */
 private const val API_BASE =
-    "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
+    "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // عدّلها إن لزم
 
 /* =========================
    Theme
@@ -87,10 +88,10 @@ class MainActivity : ComponentActivity() {
 private enum class Tab { HOME, SUPPORT, WALLET, ORDERS, SERVICES }
 
 /* مفاتيح التخزين المحلي */
-private const val PREFS = "app_prefs"
-private const val KEY_UID = "uid"
-private const val KEY_OWNER_MODE = "owner_mode"
-private const val KEY_OWNER_DASH_OPEN = "owner_dashboard_open"
+private const val SP_NAME = "app_prefs"
+private const val SP_UID = "uid"
+private const val SP_OWNER = "owner_enabled"
+private const val OWNER_PIN = "2000"
 
 @Composable
 fun AppRoot() {
@@ -101,13 +102,13 @@ fun AppRoot() {
     var uid by remember { mutableStateOf(loadOrCreateUid(ctx)) }
     var settingsOpen by remember { mutableStateOf(false) }
 
+    // وضع المالك محفوظ دائماً
+    var ownerEnabled by remember {
+        mutableStateOf(ctx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE).getBoolean(SP_OWNER, false))
+    }
+
     // حالة السيرفر
     var online by remember { mutableStateOf<Boolean?>(null) }
-
-    // حالة المالك/لوحته (محفوظة في SharedPreferences لتبقى بعد إعادة فتح التطبيق)
-    var isOwner by remember { mutableStateOf(loadOwnerMode(ctx)) }
-    var showOwnerDashboard by remember { mutableStateOf(loadOwnerDashOpen(ctx)) }
-    var askOwnerPin by remember { mutableStateOf(false) }
 
     // فحص السيرفر دوري + تسجيل UID
     LaunchedEffect(Unit) {
@@ -119,6 +120,13 @@ fun AppRoot() {
     }
 
     var current by remember { mutableStateOf(Tab.HOME) }
+
+    // حوارات لوحة المالك
+    var showOwnerLogin by remember { mutableStateOf(false) }
+    var showOwnerPanel by remember { mutableStateOf(false) }
+    var showOrderStatus by remember { mutableStateOf(false) } // فحص حالة الطلب
+    var showBalanceDialog by remember { mutableStateOf(false) }
+    var balanceResult by remember { mutableStateOf<String?>(null) }
 
     // الحاوية الرئيسية
     Box(
@@ -135,14 +143,14 @@ fun AppRoot() {
             Tab.SERVICES -> EmptyScreen()
         }
 
-        // حالة السيرفر أعلى يمين + زر إعدادات (يعرض UID + تسجيل المالك)
+        // حالة السيرفر أعلى يمين + زر إعدادات (يعرض UID و"تسجيل المالك")
         ServerStatusPill(
             online = online,
             onOpenSettings = { settingsOpen = true },
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .statusBarsPadding()
-                .padding(top = Dp(6f), end = Dp(10f))
+                .padding(top = 6.dp, end = 10.dp)
         )
 
         // الشريط السفلي
@@ -153,38 +161,66 @@ fun AppRoot() {
         )
     }
 
+    /* ====== الحوارات ====== */
+
+    // إعدادات: تُظهر UID + زر تسجيل المالك / لوحة المالك
     if (settingsOpen) {
         SettingsDialog(
             uid = uid,
-            onOwnerLoginClick = { askOwnerPin = true },
+            ownerEnabled = ownerEnabled,
+            onOwnerLogin = { settingsOpen = false; showOwnerLogin = true },
+            onOpenOwnerPanel = { settingsOpen = false; showOwnerPanel = true },
             onDismiss = { settingsOpen = false }
         )
     }
 
-    // نافذة إدخال كلمة مرور المالك
-    if (askOwnerPin) {
-        OwnerLoginDialog(
-            onCancel = { askOwnerPin = false },
-            onSubmit = { pin ->
-                if (pin == "2000") {
-                    isOwner = true
-                    showOwnerDashboard = true
-                    saveOwnerFlags(ctx, owner = true, dashOpen = true)
-                    askOwnerPin = false
-                }
+    // تسجيل المالك
+    OwnerLoginDialog(
+        visible = showOwnerLogin,
+        onCancel = { showOwnerLogin = false },
+        onSuccess = {
+            showOwnerLogin = false
+            val sp = ctx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
+            sp.edit().putBoolean(SP_OWNER, true).apply()
+            ownerEnabled = true
+            showOwnerPanel = true
+        }
+    )
+
+    // لوحة المالك
+    OwnerPanelDialog(
+        visible = showOwnerPanel && ownerEnabled,
+        onClose = { showOwnerPanel = false },
+        onCheckBalance = {
+            // فحص رصيد API
+            scope.launch {
+                balanceResult = "جارٍ التحقق..."
+                val res = getSmmBalanceFromServer()
+                balanceResult = res
+                showBalanceDialog = true
             }
+        },
+        onCheckOrderStatus = {
+            // فتح حوار إدخال رقم الطلب
+            showOrderStatus = true
+        }
+    )
+
+    // نتيجة فحص الرصيد
+    if (showBalanceDialog) {
+        AlertDialog(
+            onDismissRequest = { showBalanceDialog = false },
+            title = { Text("نتيجة فحص رصيد API") },
+            text = { Text(balanceResult ?: "—") },
+            confirmButton = { TextButton(onClick = { showBalanceDialog = false }) { Text("حسناً") } }
         )
     }
 
-    // واجهة لوحة تحكم المالك (تبقى محفوظة حتى بعد إغلاق التطبيق إذا كانت مفتوحة)
-    if (showOwnerDashboard && isOwner) {
-        OwnerDashboard(
-            onClose = {
-                showOwnerDashboard = false
-                saveOwnerFlags(ctx, owner = isOwner, dashOpen = false)
-            }
-        )
-    }
+    // حوار فحص حالة الطلب (إدخال رقم الطلب ثم استعلام السيرفر)
+    OrderStatusDialog(
+        visible = showOrderStatus,
+        onClose = { showOrderStatus = false }
+    )
 }
 
 /* =========================
@@ -199,9 +235,7 @@ private fun EmptyScreen() {
     )
 }
 
-/* -------------------------
-   شاشة الدعم
-   ------------------------- */
+/* دعم */
 @Composable
 private fun SupportScreen() {
     val uri = LocalUriHandler.current
@@ -211,15 +245,15 @@ private fun SupportScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(Dp(16f)),
+            .padding(16.dp),
         horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.Top
     ) {
-        Text("الدعم", fontSize = TextUnit(22f, TextUnitType.Sp), fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(Dp(12f)))
+        Text("الدعم", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
         Text("للتواصل أو الاستفسار اختر إحدى الطرق التالية:")
 
-        Spacer(Modifier.height(Dp(12f)))
+        Spacer(Modifier.height(12.dp))
         ContactCard(
             title = "واتساب",
             subtitle = "+964 776 341 0970",
@@ -228,7 +262,7 @@ private fun SupportScreen() {
             icon = Icons.Filled.Call
         )
 
-        Spacer(Modifier.height(Dp(10f)))
+        Spacer(Modifier.height(10.dp))
         ContactCard(
             title = "تيليجرام",
             subtitle = "@z396r",
@@ -251,18 +285,18 @@ private fun ContactCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(horizontal = Dp(0f)),
+            .padding(horizontal = 0.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
     ) {
         Row(
-            modifier = Modifier.padding(Dp(16f)),
+            modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.size(Dp(28f)))
-            Spacer(Modifier.width(Dp(12f)))
+            Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, color = Dim, fontSize = TextUnit(13f, TextUnitType.Sp))
+                Text(subtitle, color = Dim, fontSize = 13.sp)
             }
             TextButton(onClick = onClick) { Text(actionText) }
         }
@@ -283,18 +317,18 @@ private fun ServerStatusPill(
     Row(
         modifier = modifier
             .background(Surface1, shape = MaterialTheme.shapes.medium)
-            .padding(horizontal = Dp(12f), vertical = Dp(6f)),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             Modifier
-                .size(Dp(8f))
+                .size(8.dp)
                 .background(clr, shape = MaterialTheme.shapes.small)
         )
-        Spacer(Modifier.width(Dp(6f)))
-        Text(txt, fontSize = TextUnit(12f, TextUnitType.Sp), color = OnBg)
-        Spacer(Modifier.width(Dp(10f)))
-        IconButton(onClick = onOpenSettings, modifier = Modifier.size(Dp(18f))) {
+        Spacer(Modifier.width(6.dp))
+        Text(txt, fontSize = 12.sp, color = OnBg)
+        Spacer(Modifier.width(10.dp))
+        IconButton(onClick = onOpenSettings, modifier = Modifier.size(18.dp)) {
             Icon(Icons.Filled.Settings, contentDescription = "الإعدادات", tint = OnBg)
         }
     }
@@ -357,7 +391,7 @@ private fun RowScope.NavItem(
         label = {
             Text(
                 text = label,
-                fontSize = TextUnit(12f, TextUnitType.Sp),
+                fontSize = 12.sp,
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
             )
         },
@@ -375,12 +409,23 @@ private fun RowScope.NavItem(
    نافذة الإعدادات — UID + تسجيل المالك
    ========================= */
 @Composable
-private fun SettingsDialog(uid: String, onOwnerLoginClick: () -> Unit, onDismiss: () -> Unit) {
+private fun SettingsDialog(
+    uid: String,
+    ownerEnabled: Boolean,
+    onOwnerLogin: () -> Unit,
+    onOpenOwnerPanel: () -> Unit,
+    onDismiss: () -> Unit
+) {
     val clip: ClipboardManager = LocalClipboardManager.current
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(Dp(8f))) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (ownerEnabled) {
+                    TextButton(onClick = onOpenOwnerPanel) { Text("لوحة المالك") }
+                } else {
+                    TextButton(onClick = onOwnerLogin) { Text("تسجيل المالك") }
+                }
                 TextButton(onClick = onDismiss) { Text("إغلاق") }
             }
         },
@@ -388,34 +433,18 @@ private fun SettingsDialog(uid: String, onOwnerLoginClick: () -> Unit, onDismiss
         text = {
             Column {
                 Text("المعرّف الخاص بك (UID):", fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(Dp(6f)))
+                Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(uid, color = Accent, fontSize = TextUnit(16f, TextUnitType.Sp), fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(Dp(8f)))
+                    Text(uid, color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(8.dp))
                     OutlinedButton(onClick = {
                         clip.setText(AnnotatedString(uid))
                     }) { Text("نسخ") }
                 }
-                Spacer(Modifier.height(Dp(16f)))
-                Divider(color = Dim.copy(alpha = 0.3f))
-                Spacer(Modifier.height(Dp(12f)))
-                // زر تسجيل المالك
-                ElevatedButton(
-                    onClick = onOwnerLoginClick,
-                    colors = ButtonDefaults.elevatedButtonColors(
-                        containerColor = Accent,
-                        contentColor = Color.Black
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Filled.VerifiedUser, contentDescription = null)
-                    Spacer(Modifier.width(Dp(8f)))
-                    Text("تسجيل المالك")
-                }
-                Spacer(Modifier.height(Dp(6f)))
+                Spacer(Modifier.height(10.dp))
                 Text(
-                    "خاص بالمالك فقط، يتطلب كلمة مرور.",
-                    fontSize = TextUnit(12f, TextUnitType.Sp),
+                    "يُنشأ UID تلقائياً عند أول تشغيل ويتم ربطه بحسابك على الخادم.",
+                    fontSize = 12.sp,
                     color = Dim
                 )
             }
@@ -424,15 +453,17 @@ private fun SettingsDialog(uid: String, onOwnerLoginClick: () -> Unit, onDismiss
 }
 
 /* =========================
-   نافذة إدخال كلمة مرور المالك
+   حوار تسجيل المالك (PIN = 2000)
    ========================= */
 @Composable
 private fun OwnerLoginDialog(
+    visible: Boolean,
     onCancel: () -> Unit,
-    onSubmit: (String) -> Unit
+    onSuccess: () -> Unit
 ) {
-    var pin by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
+    if (!visible) return
+    var pin by rememberSaveable { mutableStateOf("") }
+    var err by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onCancel,
@@ -441,28 +472,20 @@ private fun OwnerLoginDialog(
             Column {
                 OutlinedTextField(
                     value = pin,
-                    onValueChange = {
-                        pin = it
-                        error = null
-                    },
+                    onValueChange = { pin = it; err = null },
                     label = { Text("كلمة المرور") },
                     singleLine = true,
-                    visualTransformation = PasswordVisualTransformation()
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                 )
-                if (error != null) {
-                    Spacer(Modifier.height(Dp(6f)))
-                    Text(error!!, color = MaterialTheme.colorScheme.error, fontSize = TextUnit(12f, TextUnitType.Sp))
+                if (err != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(err!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                if (pin.isBlank()) {
-                    error = "أدخل كلمة المرور"
-                } else {
-                    onSubmit(pin)
-                    if (pin != "2000") error = "كلمة المرور غير صحيحة"
-                }
+                if (pin == OWNER_PIN) onSuccess() else err = "كلمة المرور غير صحيحة"
             }) { Text("تأكيد") }
         },
         dismissButton = {
@@ -472,205 +495,137 @@ private fun OwnerLoginDialog(
 }
 
 /* =========================
-   لوحة تحكم المالك — أزرار فقط + فحص رصيد API
+   حوار لوحة المالك — أزرار فقط
    ========================= */
 @Composable
-private fun OwnerDashboard(onClose: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var showResult by remember { mutableStateOf(false) }
-    var resultText by remember { mutableStateOf("...") }
-    var loading by remember { mutableStateOf(false) }
+private fun OwnerPanelDialog(
+    visible: Boolean,
+    onClose: () -> Unit,
+    onCheckBalance: () -> Unit,
+    onCheckOrderStatus: () -> Unit
+) {
+    if (!visible) return
 
-    val actions = listOf(
-        "تعديل الأسعار والكميات",
-        "الطلبات المعلقة (الخدمات)",
-        "الكارتات المعلقة",
-        "طلبات شدات ببجي",
-        "طلبات شحن الايتونز",
-        "طلبات الارصدة المعلقة",
-        "طلبات لودو المعلقة",
-        "إضافة الرصيد",
-        "خصم الرصيد",
-        "فحص رصيد API",
-        "فحص حالة طلب API",
-        "عدد المستخدمين",
-        "رصيد المستخدمين",
-        "إدارة المشرفين",
-        "حظر المستخدم",
-        "الغاء حظر المستخدم",
-        "اعلان البوت",
-        "أكواد خدمات API",
-        "نظام الإحالة",
-        "شرح الخصومات",
-        "المتصدرين 🎉"
-    )
-
-    Surface(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Bg),
-        color = Bg
-    ) {
-        Column(Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Surface1)
-                    .padding(horizontal = Dp(12f), vertical = Dp(10f)),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onClose) {
-                    Icon(Icons.Filled.Close, contentDescription = "إغلاق", tint = OnBg)
-                }
-                Spacer(Modifier.width(Dp(6f)))
-                Text("لوحة تحكم المالك", fontSize = TextUnit(18f, TextUnitType.Sp), fontWeight = FontWeight.SemiBold)
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("لوحة تحكم المالك") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OwnerActionButton("تعديل الأسعار والكميات", Icons.Filled.Tune) {}
+                OwnerActionButton("الطلبات المعلقة (الخدمات)", Icons.Filled.List) {}
+                OwnerActionButton("الكارتات المعلقة", Icons.Filled.CreditCard) {}
+                OwnerActionButton("طلبات شدات ببجي", Icons.Filled.SportsEsports) {}
+                OwnerActionButton("طلبات شحن الايتونز", Icons.Filled.Apple) {}
+                OwnerActionButton("طلبات الارصدة المعلقة", Icons.Filled.AccountBalanceWallet) {}
+                OwnerActionButton("طلبات لودو المعلقة", Icons.Filled.Casino) {}
+                OwnerActionButton("إضافة الرصيد", Icons.Filled.AddCircle) {}
+                OwnerActionButton("خصم الرصيد", Icons.Filled.RemoveCircle) {}
+                OwnerActionButton("فحص رصيد API", Icons.Filled.Verified) { onCheckBalance() }
+                OwnerActionButton("فحص حالة طلب API", Icons.Filled.Search) { onCheckOrderStatus() }
+                OwnerActionButton("عدد المستخدمين", Icons.Filled.Groups) {}
+                OwnerActionButton("رصيد المستخدمين", Icons.Filled.AccountBox) {}
+                OwnerActionButton("إدارة المشرفين", Icons.Filled.AdminPanelSettings) {}
+                OwnerActionButton("حظر المستخدم", Icons.Filled.Block) {}
+                OwnerActionButton("الغاء حظر المستخدم", Icons.Filled.CheckCircle) {}
+                OwnerActionButton("اعلان البوت", Icons.Filled.Campaign) {}
+                OwnerActionButton("أكواد خدمات API", Icons.Filled.Code) {}
+                OwnerActionButton("نظام الإحالة", Icons.Filled.Share) {}
+                OwnerActionButton("شرح الخصومات", Icons.Filled.Info) {}
+                OwnerActionButton("المتصدرين 🎉", Icons.Filled.EmojiEvents) {}
             }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(Dp(12f)),
-                verticalArrangement = Arrangement.spacedBy(Dp(10f))
-            ) {
-                val chunk = 2
-                var i = 0
-                while (i < actions.size) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(Dp(10f)),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        val label1 = actions[i]
-                        OwnerActionButton(
-                            label = label1,
-                            modifier = Modifier.weight(1f),
-                            onClick = {
-                                if (label1 == "فحص رصيد API") {
-                                    loading = true
-                                    resultText = "جارِ الفحص..."
-                                    showResult = true
-                                    scope.launch {
-                                        val (_, text) = fetchApiBalance()
-                                        resultText = text
-                                        loading = false
-                                    }
-                                }
-                            }
-                        )
-                        if (i + 1 < actions.size) {
-                            val label2 = actions[i + 1]
-                            OwnerActionButton(
-                                label = label2,
-                                modifier = Modifier.weight(1f),
-                                onClick = {
-                                    if (label2 == "فحص رصيد API") {
-                                        loading = true
-                                        resultText = "جارِ الفحص..."
-                                        showResult = true
-                                        scope.launch {
-                                            val (_, text) = fetchApiBalance()
-                                            resultText = text
-                                            loading = false
-                                        }
-                                    }
-                                }
-                            )
-                        } else {
-                            Spacer(modifier = Modifier.weight(1f))
-                        }
-                    }
-                    i += chunk
-                }
-            }
+        },
+        confirmButton = {
+            TextButton(onClick = onClose) { Text("إغلاق") }
         }
-    }
-
-    if (showResult) {
-        AlertDialog(
-            onDismissRequest = { showResult = false },
-            confirmButton = {
-                TextButton(onClick = { showResult = false }) { Text("إغلاق") }
-            },
-            title = { Text("نتيجة فحص رصيد API") },
-            text = {
-                if (loading) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(Dp(22f)))
-                        Spacer(Modifier.width(Dp(10f)))
-                        Text(resultText)
-                    }
-                } else {
-                    Text(resultText)
-                }
-            }
-        )
-    }
+    )
 }
 
 @Composable
 private fun OwnerActionButton(
-    label: String,
-    modifier: Modifier = Modifier,
+    text: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit
 ) {
-    ElevatedCard(
-        modifier = modifier
-            .heightIn(min = Dp(64f))
-            .clickable { onClick() },
-        colors = CardDefaults.elevatedCardColors(containerColor = Surface1),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = Dp(4f))
+    ElevatedButton(
+        onClick = onClick,
+        colors = ButtonDefaults.elevatedButtonColors(
+            containerColor = Surface1,
+            contentColor = OnBg
+        ),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(Dp(14f)),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Dp(10f))
-            ) {
-                Icon(
-                    Icons.Filled.Settings,
-                    contentDescription = null,
-                    tint = Accent
-                )
-                Text(
-                    label,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = TextUnit(14f, TextUnitType.Sp)
-                )
-            }
-        }
+        Icon(icon, contentDescription = null, tint = Accent)
+        Spacer(Modifier.width(8.dp))
+        Text(text)
     }
 }
 
 /* =========================
-   منطق UID + الشبكة + تخزين حالة المالك
+   حوار فحص حالة الطلب (إدخال رقم الطلب)
    ========================= */
-private fun prefs(ctx: Context) =
-    ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+@Composable
+private fun OrderStatusDialog(
+    visible: Boolean,
+    onClose: () -> Unit
+) {
+    if (!visible) return
 
-private fun loadOrCreateUid(ctx: Context): String {
-    val sp = prefs(ctx)
-    val existing = sp.getString(KEY_UID, null)
-    if (existing != null) return existing
-    val fresh = "U" + (100000..999999).random(Random(System.currentTimeMillis()))
-    sp.edit().putString(KEY_UID, fresh).apply()
-    return fresh
+    val scope = rememberCoroutineScope()
+    var orderId by rememberSaveable { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = { if (!loading) onClose() },
+        title = { Text("فحص حالة الطلب (API)") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = orderId,
+                    onValueChange = { orderId = it },
+                    label = { Text("رقم الطلب") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                Spacer(Modifier.height(8.dp))
+                if (loading) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+                if (!loading && result != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(result!!, color = Dim, fontSize = 13.sp)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = orderId.isNotBlank() && !loading,
+                onClick = {
+                    scope.launch {
+                        loading = true
+                        result = null
+                        result = getOrderStatusFromServer(orderId)
+                        loading = false
+                    }
+                }
+            ) { Text("تحقق") }
+        },
+        dismissButton = {
+            TextButton(enabled = !loading, onClick = onClose) { Text("إغلاق") }
+        }
+    )
 }
 
-private fun loadOwnerMode(ctx: Context): Boolean =
-    prefs(ctx).getBoolean(KEY_OWNER_MODE, false)
-
-private fun loadOwnerDashOpen(ctx: Context): Boolean =
-    prefs(ctx).getBoolean(KEY_OWNER_DASH_OPEN, false)
-
-private fun saveOwnerFlags(ctx: Context, owner: Boolean, dashOpen: Boolean) {
-    prefs(ctx).edit()
-        .putBoolean(KEY_OWNER_MODE, owner)
-        .putBoolean(KEY_OWNER_DASH_OPEN, dashOpen)
-        .apply()
+/* =========================
+   منطق UID + الشبكة
+   ========================= */
+private fun loadOrCreateUid(ctx: Context): String {
+    val sp = ctx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
+    val existing = sp.getString(SP_UID, null)
+    if (existing != null) return existing
+    val fresh = "U" + (100000..999999).random(Random(System.currentTimeMillis()))
+    sp.edit().putString(SP_UID, fresh).apply()
+    return fresh
 }
 
 private suspend fun pingHealth(): Boolean? = withContext(Dispatchers.IO) {
@@ -706,32 +661,63 @@ private suspend fun tryUpsertUid(uid: String) = withContext(Dispatchers.IO) {
     }
 }
 
-/* =========================
-   فحص رصيد API — يحاول عدة مسارات
-   ========================= */
-private suspend fun fetchApiBalance(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
-    val paths = listOf(
-        "$API_BASE/api/smm/balance",
-        "$API_BASE/api/balance",
-        "$API_BASE/api/panel/balance"
-    )
-    for (p in paths) {
-        try {
-            val url = URL(p)
-            val con = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 6000
-                readTimeout = 6000
-            }
-            val code = con.responseCode
-            val stream = if (code in 200..299) con.inputStream else con.errorStream
-            val text = stream?.use { InputStreamReader(it, Charsets.UTF_8).readText() } ?: ""
-            if (code in 200..299) {
-                return@withContext true to (text.ifBlank { "تم بنجاح، بدون محتوى." })
-            }
-        } catch (_: Exception) {
-            // جرّب المسار التالي
+/* فحص رصيد API */
+private suspend fun getSmmBalanceFromServer(): String = withContext(Dispatchers.IO) {
+    try {
+        val url = URL("$API_BASE/api/smm/balance")
+        val con = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 6000
+            readTimeout = 6000
         }
+        val code = con.responseCode
+        val body = con.inputStream.bufferedReader().use { it.readText() }
+        if (code in 200..299) {
+            return@withContext runCatching {
+                val json = JSONObject(body)
+                if (json.optBoolean("ok", false)) {
+                    val bal = json.opt("balance")?.toString() ?: "-"
+                    "الرصيد: $bal"
+                } else {
+                    json.optString("detail", json.optString("message", body))
+                }
+            }.getOrElse { body }
+        } else {
+            "فشل الطلب (${code}): $body"
+        }
+    } catch (e: Exception) {
+        "خطأ في الاتصال: ${e.message}"
     }
-    false to "تعذر الحصول على الرصيد من الخادم. تأكد من وجود مسار رصيد صالح على الخادم."
+}
+
+/* فحص حالة الطلب API */
+private suspend fun getOrderStatusFromServer(orderId: String): String = withContext(Dispatchers.IO) {
+    try {
+        val url = URL("$API_BASE/api/smm/order-status?order_id=${orderId.trim()}")
+        val con = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 6000
+            readTimeout = 6000
+        }
+        val code = con.responseCode
+        val body = con.inputStream.bufferedReader().use { it.readText() }
+        if (code in 200..299) {
+            return@withContext runCatching {
+                val json = JSONObject(body)
+                if (json.optBoolean("ok", false)) {
+                    val res = json.optJSONObject("result")
+                    val status = res?.optString("status") ?: "غير معروف"
+                    val charge = res?.optString("charge") ?: "-"
+                    val remains = res?.optString("remains") ?: "-"
+                    "الحالة: $status\nالكلفة: $charge\nالمتبقي: $remains"
+                } else {
+                    json.optString("detail", json.optString("message", body))
+                }
+            }.getOrElse { body }
+        } else {
+            "فشل الطلب (${code}): $body"
+        }
+    } catch (e: Exception) {
+        "خطأ في الاتصال: ${e.message}"
+    }
 }

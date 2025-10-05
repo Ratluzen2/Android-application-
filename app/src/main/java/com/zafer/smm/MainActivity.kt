@@ -40,6 +40,12 @@ import kotlin.math.max
 import kotlin.math.round
 
 /* =========================
+   API CONFIG — عدّل القيمتين فقط عند الحاجة
+   ========================= */
+private const val BASE_URL = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // بدون سلاش في النهاية
+private const val API_KEY  = "ضع_هنا_نفس_قيمة_API_KEY_من_Heroku" // للهيدر X-API-KEY في العمليات المحمية
+
+/* =========================
    Theme — داكن احترافي
    ========================= */
 private val Bg       = Color(0xFF0F1115)

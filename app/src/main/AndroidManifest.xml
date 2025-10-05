@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.zafer.smm">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- صلاحية الاتصال بالإنترنت للتطبيق -->
+    <!-- صلاحيات الشبكة للتطبيق -->
     <uses-permission android:name="android.permission.INTERNET" />
-
-    <!-- (اختياري) لمعرفة حالة الشبكة إن احتجتها لاحقًا -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:allowBackup="true"
+        android:supportsRtl="true"
         android:label="خدمات راتلوزن"
-        android:supportsRtl="true">
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:usesCleartextTraffic="true">
 
         <activity
             android:name=".MainActivity"

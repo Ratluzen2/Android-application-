@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -110,10 +112,10 @@ fun AppRoot() {
             .fillMaxSize()
             .background(Bg)
     ) {
-        // محتوى كل تبويب — شاشة فارغة بسيطة
+        // محتوى كل تبويب
         when (current) {
             Tab.HOME     -> EmptyScreen()
-            Tab.SUPPORT  -> EmptyScreen()
+            Tab.SUPPORT  -> SupportScreen()   // ←← الإضافة الجديدة
             Tab.WALLET   -> EmptyScreen()
             Tab.ORDERS   -> EmptyScreen()
             Tab.SERVICES -> EmptyScreen()
@@ -152,6 +154,76 @@ private fun EmptyScreen() {
             .fillMaxSize()
             .background(Bg)
     )
+}
+
+/* -------------------------
+   شاشة الدعم (الإضافة الجديدة)
+   ------------------------- */
+@Composable
+private fun SupportScreen() {
+    val uri = LocalUriHandler.current
+    val whatsappUrl = "https://wa.me/9647763410970"
+    val telegramUrl = "https://t.me/z396r"
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.Start,
+        verticalArrangement = Arrangement.Top
+    ) {
+        Text("الدعم", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+        Text("للتواصل أو الاستفسار اختر إحدى الطرق التالية:")
+
+        Spacer(Modifier.height(12.dp))
+        ContactCard(
+            title = "واتساب",
+            subtitle = "+964 776 341 0970",
+            actionText = "افتح واتساب",
+            onClick = { uri.openUri(whatsappUrl) },
+            icon = Icons.Filled.Call
+        )
+
+        Spacer(Modifier.height(10.dp))
+        ContactCard(
+            title = "تيليجرام",
+            subtitle = "@z396r",
+            actionText = "افتح تيليجرام",
+            onClick = { uri.openUri(telegramUrl) },
+            icon = Icons.Filled.Send
+        )
+    }
+}
+
+@Composable
+private fun ContactCard(
+    title: String,
+    subtitle: String,
+    actionText: String,
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 0.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.size(28.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, color = Dim, fontSize = 13.sp)
+            }
+            TextButton(onClick = onClick) { Text(actionText) }
+        }
+    }
 }
 
 @Composable

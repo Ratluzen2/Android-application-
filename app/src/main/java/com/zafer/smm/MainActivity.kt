@@ -37,6 +37,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -56,10 +57,12 @@ private const val OWNER_PIN = "123456"
 private const val SERVER_URL = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
 
 /* =========================
-   عميل HTTP خفيف
+   عميل HTTP خفيف + محاولات وإطالة مهلة
    ========================= */
 object Api {
-    private fun httpGet(path: String, timeout: Int = 8000): Pair<Int, String?> {
+    private const val TAG = "Api"
+
+    private fun httpGet(path: String, timeout: Int): Pair<Int, String?> {
         val url = URL("$SERVER_URL$path")
         val c = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
@@ -77,7 +80,7 @@ object Api {
         }
     }
 
-    private fun httpPost(path: String, json: JSONObject, timeout: Int = 8000): Pair<Int, String?> {
+    private fun httpPost(path: String, json: JSONObject, timeout: Int): Pair<Int, String?> {
         val url = URL("$SERVER_URL$path")
         val c = (url.openConnection() as HttpURLConnection).apply {
             doOutput = true
@@ -99,23 +102,34 @@ object Api {
         }
     }
 
-    suspend fun health(): Boolean = runCatching {
-        val candidates = listOf("/api/health", "/healthz", "/")
-        for (p in candidates) {
-            val (code, body) = httpGet(p)
-            if (code in 200..299) return true
-            if (body?.contains("OK", true) == true) return true
+    private suspend fun retry(times: Int, delayMs: Long, block: () -> Boolean): Boolean {
+        repeat(times - 1) {
+            if (block()) return true
+            delay(delayMs)
         }
-        false
+        return block()
+    }
+
+    /** يفحص عدة مسارات بصبر أكبر (25s، 3 محاولات) */
+    suspend fun health(timeoutMs: Int = 25_000, retries: Int = 3): Boolean = runCatching {
+        retry(retries, 1200L) {
+            val checks = listOf("/api/health", "/healthz", "/")
+            for (p in checks) {
+                val (code, body) = httpGet(p, timeoutMs)
+                if (code in 200..299) return@retry true
+                if (body?.contains("OK", true) == true) return@retry true
+            }
+            false
+        }
     }.getOrDefault(false)
 
-    suspend fun upsertUser(uid: String): Boolean = runCatching {
+    suspend fun upsertUser(uid: String, timeoutMs: Int = 25_000): Boolean = runCatching {
         val payload = JSONObject().put("uid", uid)
-        val (code, _) = httpPost("/api/users/upsert", payload)
+        val (code, _) = httpPost("/api/users/upsert", payload, timeoutMs)
         code in 200..299
-    }.getOrDefault(false)
+    }.onFailure { Log.e(TAG, "upsertUser error", it) }.getOrDefault(false)
 
-    suspend fun createOrder(uid: String, service: String, qty: Int, price: Double, link: String): Boolean =
+    suspend fun createOrder(uid: String, service: String, qty: Int, price: Double, link: String, timeoutMs: Int = 25_000): Boolean =
         runCatching {
             val payload = JSONObject()
                 .put("uid", uid)
@@ -123,9 +137,9 @@ object Api {
                 .put("quantity", qty)
                 .put("price", price)
                 .put("link", link)
-            val (code, _) = httpPost("/api/orders", payload)
+            val (code, _) = httpPost("/api/orders", payload, timeoutMs)
             code in 200..299
-        }.getOrDefault(false)
+        }.onFailure { Log.e(TAG, "createOrder error", it) }.getOrDefault(false)
 }
 
 /* =========================
@@ -468,7 +482,7 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
 @Composable
 fun ServicesScreen(vm: AppViewModel) {
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        TopChipsRow(vm, onWallet = { /* فتح المحفظة من مكان آخر إن أردت */ })
+        TopChipsRow(vm, onWallet = { /* فتح المحفظة من هنا اذا أردت */ })
         Spacer(Modifier.height(8.dp))
         ServicesBody(vm)
     }
@@ -522,7 +536,6 @@ private fun ServicesBody(vm: AppViewModel) {
     val qtyMap = remember { mutableStateMapOf<String, Int>() }
     var buy by remember { mutableStateOf<BuyInfo?>(null) }
 
-    // Tabs بسيطة بدون weight
     ScrollableTabRow(selectedTabIndex = selectedCat, edgePadding = 0.dp, containerColor = Surface1) {
         categories.forEachIndexed { i, (name, _) ->
             Tab(
@@ -621,7 +634,6 @@ private fun ServiceRow(
             OutlinedButton(onClick = onDec) { Text("-${stepFor(service)}") }
             Text("$qty", fontWeight = FontWeight.Bold)
             OutlinedButton(onClick = onInc) { Text("+${stepFor(service)}") }
-            // بدون weight لتفادي مشاكل البناء
             Spacer(Modifier.width(8.dp))
             ElevatedButton(onClick = onBuy) { Text("شراء") }
         }
@@ -820,7 +832,7 @@ fun OwnerDashboard(vm: AppViewModel) {
 }
 
 /* =========================
-   PIN Dialog (غير مستخدم حاليًا)
+   PIN Dialog (اختياري لاحقًا)
    ========================= */
 @Composable
 private fun OwnerPinDialog(isOwner: Boolean, onDismiss: () -> Unit, onEnable: (String) -> Unit, onDisable: () -> Unit) {

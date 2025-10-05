@@ -1,8 +1,27 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- ثيم التطبيق -->
-    <style name="Theme.Smm" parent="Theme.Material3.DayNight.NoActionBar">
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ثيم بدون ActionBar وبحواف شفافة (Edge-to-Edge) -->
+    <style name="Theme.Smm.NoActionBar" parent="Theme.Material3.Dark.NoActionBar">
+        <!-- إزالة العنوان/الأكشن بار نهائيًا -->
+        <item name="android:windowNoTitle">true</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="windowActionBar">false</item>
+
+        <!-- ألوان الأشرطة -->
         <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <item name="statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+
+        <!-- تباين الأيقونات (مناسب للداكن) -->
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+
+        <!-- دعم النوتش والرسم أسفل الأشرطة -->
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+
+        <!-- خلفية أساسية داكنة -->
+        <item name="android:windowBackground">@android:color/black</item>
     </style>
+
 </resources>

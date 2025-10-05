@@ -11,7 +11,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -35,9 +37,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.InputStream
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import kotlin.random.Random
 
 /* =========================
@@ -495,7 +499,7 @@ private fun OwnerLoginDialog(
 }
 
 /* =========================
-   حوار لوحة المالك — أزرار فقط
+   حوار لوحة المالك — أزرار فقط (قابل للتمرير)
    ========================= */
 @Composable
 private fun OwnerPanelDialog(
@@ -510,14 +514,20 @@ private fun OwnerPanelDialog(
         onDismissRequest = onClose,
         title = { Text("لوحة تحكم المالك") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // <<< إضافة التمرير حتى لا تختفي الأزرار على الشاشات الصغيرة
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 520.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 OwnerActionButton("تعديل الأسعار والكميات", Icons.Filled.Tune) {}
                 OwnerActionButton("الطلبات المعلقة (الخدمات)", Icons.Filled.List) {}
                 OwnerActionButton("الكارتات المعلقة", Icons.Filled.CreditCard) {}
                 OwnerActionButton("طلبات شدات ببجي", Icons.Filled.SportsEsports) {}
-                OwnerActionButton("طلبات شحن الايتونز", Icons.Filled.MusicNote) {} // <- بديل أيقونة Apple
+                OwnerActionButton("طلبات شحن الايتونز", Icons.Filled.MusicNote) {}
                 OwnerActionButton("طلبات الارصدة المعلقة", Icons.Filled.AccountBalanceWallet) {}
-                OwnerActionButton("طلبات لودو المعلقة", Icons.Filled.Extension) {} // <- بديل Casino
+                OwnerActionButton("طلبات لودو المعلقة", Icons.Filled.Extension) {}
                 OwnerActionButton("إضافة الرصيد", Icons.Filled.AddCircle) {}
                 OwnerActionButton("خصم الرصيد", Icons.Filled.RemoveCircle) {}
                 OwnerActionButton("فحص رصيد API", Icons.Filled.Verified) { onCheckBalance() }
@@ -661,6 +671,20 @@ private suspend fun tryUpsertUid(uid: String) = withContext(Dispatchers.IO) {
     }
 }
 
+/* مساعد قراءة الاستجابة (للنجاح أو الخطأ) */
+private fun readBody(con: HttpURLConnection): String {
+    val stream: InputStream? = try {
+        if (con.responseCode in 200..299) con.inputStream else con.errorStream
+    } catch (_: Exception) {
+        con.errorStream
+    }
+    return try {
+        stream?.bufferedReader()?.use { it.readText() } ?: ""
+    } catch (e: Exception) {
+        e.message ?: ""
+    }
+}
+
 /* فحص رصيد API */
 private suspend fun getSmmBalanceFromServer(): String = withContext(Dispatchers.IO) {
     try {
@@ -671,7 +695,7 @@ private suspend fun getSmmBalanceFromServer(): String = withContext(Dispatchers.
             readTimeout = 6000
         }
         val code = con.responseCode
-        val body = con.inputStream.bufferedReader().use { it.readText() }
+        val body = readBody(con)
         if (code in 200..299) {
             return@withContext runCatching {
                 val json = JSONObject(body)
@@ -690,34 +714,58 @@ private suspend fun getSmmBalanceFromServer(): String = withContext(Dispatchers.
     }
 }
 
-/* فحص حالة الطلب API */
+/* فحص حالة الطلب API — GET مع ترميز، ثم محاولة POST إن لزم */
 private suspend fun getOrderStatusFromServer(orderId: String): String = withContext(Dispatchers.IO) {
+    val id = orderId.trim()
+    if (id.isEmpty()) return@withContext "الرجاء إدخال رقم الطلب."
+
+    fun parseStatusJson(body: String): String {
+        return runCatching {
+            val json = JSONObject(body)
+            if (json.optBoolean("ok", false)) {
+                val res = json.optJSONObject("result")
+                val status = res?.optString("status") ?: "غير معروف"
+                val charge = res?.optString("charge") ?: "-"
+                val remains = res?.optString("remains") ?: "-"
+                "الحالة: $status\nالكلفة: $charge\nالمتبقي: $remains"
+            } else {
+                json.optString("detail", json.optString("message", body))
+            }
+        }.getOrElse { body }
+    }
+
     try {
-        val url = URL("$API_BASE/api/smm/order-status?order_id=${orderId.trim()}")
-        val con = (url.openConnection() as HttpURLConnection).apply {
+        // 1) GET مع ترميز آمن
+        val q = URLEncoder.encode(id, "UTF-8")
+        var con = (URL("$API_BASE/api/smm/order-status?order_id=$q").openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
-            connectTimeout = 6000
-            readTimeout = 6000
+            connectTimeout = 7000
+            readTimeout = 7000
         }
-        val code = con.responseCode
-        val body = con.inputStream.bufferedReader().use { it.readText() }
+        var code = con.responseCode
+        var body = readBody(con)
         if (code in 200..299) {
-            return@withContext runCatching {
-                val json = JSONObject(body)
-                if (json.optBoolean("ok", false)) {
-                    val res = json.optJSONObject("result")
-                    val status = res?.optString("status") ?: "غير معروف"
-                    val charge = res?.optString("charge") ?: "-"
-                    val remains = res?.optString("remains") ?: "-"
-                    "الحالة: $status\nالكلفة: $charge\nالمتبقي: $remains"
-                } else {
-                    json.optString("detail", json.optString("message", body))
-                }
-            }.getOrElse { body }
+            return@withContext parseStatusJson(body)
+        }
+
+        // 2) محاولة POST JSON احتياطية
+        con = (URL("$API_BASE/api/smm/order-status").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            connectTimeout = 7000
+            readTimeout = 7000
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        }
+        val payload = """{"order_id":"$id"}"""
+        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(payload) }
+        code = con.responseCode
+        body = readBody(con)
+        if (code in 200..299) {
+            return@withContext parseStatusJson(body)
         } else {
-            "فشل الطلب (${code}): $body"
+            return@withContext "فشل الطلب (${code}): $body"
         }
     } catch (e: Exception) {
-        "خطأ في الاتصال: ${e.message}"
+        return@withContext "حدث خطأ: ${e.message}"
     }
 }

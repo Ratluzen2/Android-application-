@@ -515,9 +515,9 @@ private fun OwnerPanelDialog(
                 OwnerActionButton("الطلبات المعلقة (الخدمات)", Icons.Filled.List) {}
                 OwnerActionButton("الكارتات المعلقة", Icons.Filled.CreditCard) {}
                 OwnerActionButton("طلبات شدات ببجي", Icons.Filled.SportsEsports) {}
-                OwnerActionButton("طلبات شحن الايتونز", Icons.Filled.Apple) {}
+                OwnerActionButton("طلبات شحن الايتونز", Icons.Filled.MusicNote) {} // <- بديل أيقونة Apple
                 OwnerActionButton("طلبات الارصدة المعلقة", Icons.Filled.AccountBalanceWallet) {}
-                OwnerActionButton("طلبات لودو المعلقة", Icons.Filled.Casino) {}
+                OwnerActionButton("طلبات لودو المعلقة", Icons.Filled.Extension) {} // <- بديل Casino
                 OwnerActionButton("إضافة الرصيد", Icons.Filled.AddCircle) {}
                 OwnerActionButton("خصم الرصيد", Icons.Filled.RemoveCircle) {}
                 OwnerActionButton("فحص رصيد API", Icons.Filled.Verified) { onCheckBalance() }

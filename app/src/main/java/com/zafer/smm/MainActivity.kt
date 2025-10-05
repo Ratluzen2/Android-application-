@@ -3,6 +3,7 @@
 package com.zafer.smm
 
 import android.os.Bundle
+import android.os.Build
 import android.widget.Toast
 import android.content.Context
 import androidx.activity.ComponentActivity
@@ -93,7 +94,7 @@ fun AppTheme(content: @Composable () -> Unit) {
 /* =========================
    Screens
    ========================= */
-enum class Screen { LOGIN, HOME, SERVICES, ORDERS, WALLET, SUPPORT, OWNER }
+enum class Screen { HOME, SERVICES, ORDERS, WALLET, SUPPORT, OWNER }
 
 /* =========================
    Models
@@ -259,7 +260,7 @@ class AppViewModel : ViewModel() {
 }
 
 /* =========================
-   Helpers — UID للمستخدم + فحص السيرفر + تسجيل الدخول
+   Helpers — UID + تخزين محلي + API
    ========================= */
 private const val PREFS = "ratluzen_prefs"
 private const val KEY_UID = "user_uid"
@@ -273,6 +274,12 @@ private fun getOrCreateUserUid(context: Context): String {
     sp.edit().putString(KEY_UID, newId).apply()
     return newId
 }
+private fun setUid(context: Context, newUid: String) {
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_UID, newUid).apply()
+}
+private fun readUid(context: Context): String =
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_UID, "") ?: ""
+
 private fun isLoggedIn(context: Context): Boolean {
     val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     return sp.getBoolean(KEY_LOGGED_IN, false)
@@ -294,73 +301,76 @@ private fun extractQtyFromName(name: String): Int {
     return Regex("(\\d+)").findAll(name).lastOrNull()?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
 }
 
-/* ========= فحص السيرفر /health (مع إيقاظ هيروكو وإعادة المحاولة) ========= */
-private suspend fun pingHealth(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
-    fun hit(urlStr: String, connectMs: Int, readMs: Int): Pair<Int, String> {
-        val url = URL(urlStr)
-        val conn = (url.openConnection() as HttpURLConnection).apply {
-            connectTimeout = connectMs
-            readTimeout = readMs
-            requestMethod = "GET"
-        }
-        val code = conn.responseCode
-        val body = try {
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-        } catch (_: Exception) { "" }
-        conn.disconnect()
-        return code to body
+/* ========= شبكة عامة ========= */
+private fun httpGet(urlStr: String, connectMs: Int = 12000, readMs: Int = 12000): Pair<Int, String> {
+    val url = URL(urlStr)
+    val conn = (url.openConnection() as HttpURLConnection).apply {
+        connectTimeout = connectMs
+        readTimeout = readMs
+        requestMethod = "GET"
     }
+    val code = conn.responseCode
+    val body = try {
+        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+        stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+    } catch (_: Exception) { "" }
+    conn.disconnect()
+    return code to body
+}
+private fun httpJson(
+    urlStr: String,
+    method: String,
+    body: String,
+    connectMs: Int = 12000,
+    readMs: Int = 12000
+): Pair<Int, String> {
+    val url = URL(urlStr)
+    val conn = (url.openConnection() as HttpURLConnection).apply {
+        connectTimeout = connectMs
+        readTimeout = readMs
+        requestMethod = method
+        doOutput = true
+        setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+    }
+    conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+    val code = conn.responseCode
+    val resp = try {
+        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+        stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+    } catch (_: Exception) { "" }
+    conn.disconnect()
+    return code to resp
+}
 
+/* ========= /health ========= */
+private suspend fun pingHealth(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
     try {
-        val (c1, b1) = hit("$BASE_URL/health", 6000, 6000)
+        val (c1, b1) = httpGet("$BASE_URL/health", 6000, 6000)
         if (c1 == 200 && b1.contains("\"ok\"")) return@withContext true to b1
-        hit("$BASE_URL/", 6000, 6000) // إيقاظ هيروكو
+        httpGet("$BASE_URL/", 6000, 6000) // إيقاظ هيروكو
         delay(1500)
-        val (c2, b2) = hit("$BASE_URL/health", 15000, 15000)
+        val (c2, b2) = httpGet("$BASE_URL/health", 15000, 15000)
         (c2 == 200 && b2.contains("\"ok\"")) to b2
     } catch (e: Exception) {
         false to (e.message ?: "Network error")
     }
 }
 
-/* ========= التحقق من وجود UID في قاعدة البيانات =========
- * مهم: عدّل endpoint في الباك-إند ليعيد JSON مثل:
- * { "exists": true } لـ GET /auth/exists?uid=XXXX
- */
+/* ========= التحقق من وجود UID ========= */
 private suspend fun checkUidExists(uid: String): Boolean = withContext(Dispatchers.IO) {
-    fun get(urlStr: String): Pair<Int, String> {
-        val url = URL(urlStr)
-        val conn = (url.openConnection() as HttpURLConnection).apply {
-            connectTimeout = 12000
-            readTimeout = 12000
-            requestMethod = "GET"
-        }
-        val code = conn.responseCode
-        val body = try {
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-        } catch (_: Exception) { "" }
-        conn.disconnect()
-        return code to body
-    }
-
-    // مسارات مرشحة، غيّر/احذف غير المناسب حسب باك-إندك
     val candidates = listOf(
         "$BASE_URL/auth/exists?uid=$uid",
         "$BASE_URL/users/exists?uid=$uid",
         "$BASE_URL/user/exists?uid=$uid",
         "$BASE_URL/api/users/exists?uid=$uid",
-        "$BASE_URL/users/$uid",     // قد يعيد 200 عند الوجود و 404 عند عدم الوجود
+        "$BASE_URL/users/$uid",
         "$BASE_URL/api/users/$uid"
     )
-
     try {
         for (u in candidates) {
-            val (code, body) = get(u)
+            val (code, body) = httpGet(u)
             if (code == 200) {
                 val norm = body.lowercase()
-                // تحقق بسيط بدون JSON parser إضافي
                 if (norm.contains("\"exists\":true") || norm.contains(":true") || norm.trim() == "true") return@withContext true
                 if (norm.contains(uid.lowercase()) && !norm.contains("not found") && !norm.contains("false")) return@withContext true
             } else if (code == 404) {
@@ -368,101 +378,130 @@ private suspend fun checkUidExists(uid: String): Boolean = withContext(Dispatche
             }
         }
         false
-    } catch (e: Exception) {
+    } catch (_: Exception) { false }
+}
+
+/* ========= تسجيل UID جديد تلقائيًا إذا لم يكن موجودًا ========= */
+private suspend fun registerUidIfMissing(uid: String): Boolean = withContext(Dispatchers.IO) {
+    // نحاول مسارات شائعة لإنشاء المستخدم
+    val payload = """{"uid":"$uid","device_model":"${Build.MODEL}","platform":"android"}"""
+    val candidates = listOf(
+        Triple("$BASE_URL/auth/register", "POST", """{"uid":"$uid"}"""),
+        Triple("$BASE_URL/users", "POST", payload),
+        Triple("$BASE_URL/api/users", "POST", payload),
+        Triple("$BASE_URL/users/$uid", "PUT", payload),
+        Triple("$BASE_URL/api/users/$uid", "PUT", payload)
+    )
+    try {
+        for ((u, m, b) in candidates) {
+            val (code, body) = httpJson(u, m, b)
+            if (code in 200..201) return@withContext true
+            // أحيانًا يرجع 409 إذا موجود مسبقًا — نعتبره نجاح
+            if (code == 409) return@withContext true
+            // بعض الـAPIs تعيد 200 مع نص "exists"
+            if (code == 200 && body.lowercase().contains("exists")) return@withContext true
+        }
         false
-    }
+    } catch (_: Exception) { false }
+}
+
+/* ========= ضمان وجود المستخدم (exists أو register) ========= */
+private suspend fun ensureUser(uid: String): Boolean {
+    val (ok, _) = pingHealth()
+    if (!ok) return false
+    return if (checkUidExists(uid)) true else registerUidIfMissing(uid)
 }
 
 /* =========================
-   Root + PIN + تدفق تسجيل الدخول
+   Root + PIN + تدفق التسجيل التلقائي
    ========================= */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppRoot(vm: AppViewModel = viewModel()) {
     val ctx = LocalContext.current
-
-    // حالة تسجيل الدخول من التخزين المحلي
-    var loggedIn by remember { mutableStateOf(isLoggedIn(ctx)) }
     var current by rememberSaveable { mutableStateOf(Screen.HOME) }
-
-    // عند أول تشغيل، إن لم تكن مسجّلًا → انتقل لشاشة تسجيل الدخول
-    LaunchedEffect(Unit) { if (!loggedIn) current = Screen.LOGIN }
-
     val isOwner by vm.isOwner.collectAsState()
     val drawer = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    var showPin by remember { mutableStateOf(false) }
 
+    // حالة تسجيل محلي + UID
+    var loggedIn by remember { mutableStateOf(isLoggedIn(ctx)) }
+    val localUid = rememberUserUid()
+
+    // تسجيل تلقائي عند أول تشغيل
+    LaunchedEffect(Unit) {
+        if (!loggedIn) {
+            val ok = ensureUser(localUid)
+            if (ok) {
+                setLoggedIn(ctx, true)
+                loggedIn = true
+                Toast.makeText(ctx, "تم إنشاء/تفعيل الحساب تلقائيًا ✅", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(ctx, "تعذر إنشاء الحساب الآن. حاول لاحقًا.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    var showPin by remember { mutableStateOf(false) }
     var taps by remember { mutableStateOf(0) }
     var lastTap by remember { mutableStateOf(0L) }
+
+    // حوار تسجيل الدخول اليدوي لاستعادة حساب من جهاز آخر
+    var showLoginDialog by remember { mutableStateOf(false) }
 
     ModalNavigationDrawer(
         drawerState = drawer,
         drawerContent = {
-            if (current != Screen.LOGIN) {
-                DrawerContent(current, isOwner) {
-                    current = it
-                    scope.launch { drawer.close() }
-                }
+            DrawerContent(current, isOwner) {
+                current = it
+                scope.launch { drawer.close() }
             }
         }
     ) {
         Scaffold(
             containerColor = Bg,
             topBar = {
-                if (current != Screen.LOGIN) {
-                    TopBar(
-                        balanceFlow = vm.balance,
-                        onMenu = { scope.launch { drawer.open() } },
-                        onLogoTapped = {
-                            val now = System.currentTimeMillis()
-                            if (now - lastTap > 2000) taps = 0
-                            taps++; lastTap = now
-                            if (taps >= 5) { taps = 0; showPin = true }
-                        },
-                        onSearch = { current = Screen.SERVICES },
-                        onCloudCheck = {
-                            Toast.makeText(ctx, "جاري فحص السيرفر…", Toast.LENGTH_SHORT).show()
-                            scope.launch {
-                                val (ok, _) = pingHealth()
-                                Toast.makeText(
-                                    ctx,
-                                    if (ok) "السيرفر متصل ✅" else "تعذر الاتصال بالسيرفر ❌",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
+                TopBar(
+                    balanceFlow = vm.balance,
+                    onMenu = { scope.launch { drawer.open() } },
+                    onLogoTapped = {
+                        val now = System.currentTimeMillis()
+                        if (now - lastTap > 2000) taps = 0
+                        taps++; lastTap = now
+                        if (taps >= 5) { taps = 0; showPin = true }
+                    },
+                    onSearch = { current = Screen.SERVICES },
+                    onCloudCheck = {
+                        Toast.makeText(ctx, "جاري فحص السيرفر…", Toast.LENGTH_SHORT).show()
+                        scope.launch {
+                            val (ok, _) = pingHealth()
+                            Toast.makeText(
+                                ctx,
+                                if (ok) "السيرفر متصل ✅" else "تعذر الاتصال بالسيرفر ❌",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
-                    )
-                }
+                    }
+                )
             },
-            bottomBar = {
-                if (current != Screen.LOGIN) BottomNav(current, isOwner) { current = it }
-            },
+            bottomBar = { BottomNav(current, isOwner) { current = it } },
             floatingActionButton = {
-                if (current != Screen.LOGIN) {
-                    ExtendedFloatingActionButton(
-                        containerColor = Mint,
-                        contentColor = Color.Black,
-                        onClick = { current = Screen.SUPPORT },
-                        text = { Text("راسل الدعم", fontWeight = FontWeight.SemiBold) },
-                        icon = { Icon(Icons.Filled.ChatBubble, contentDescription = null) }
-                    )
-                }
+                ExtendedFloatingActionButton(
+                    containerColor = Mint,
+                    contentColor = Color.Black,
+                    onClick = { current = Screen.SUPPORT },
+                    text = { Text("راسل الدعم", fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Filled.ChatBubble, contentDescription = null) }
+                )
             },
             floatingActionButtonPosition = FabPosition.Center,
         ) { padding ->
             Box(Modifier.padding(padding)) {
                 when (current) {
-                    Screen.LOGIN   -> LoginScreen(
-                        onLoggedIn = {
-                            setLoggedIn(ctx, true)
-                            loggedIn = true
-                            Toast.makeText(ctx, "تم تسجيل الدخول بنجاح ✅", Toast.LENGTH_SHORT).show()
-                            // بعد تسجيل الدخول → الرئيسية
-                            current = Screen.HOME
-                        }
+                    Screen.HOME     -> HomeScreen(vm,
+                        open = { current = it },
+                        onOpenLogin = { showLoginDialog = true }
                     )
-                    Screen.HOME     -> HomeScreen(vm) { current = it }
                     Screen.SERVICES -> ServicesScreen(vm)
                     Screen.ORDERS   -> OrdersScreen(vm)
                     Screen.WALLET   -> WalletScreen(vm)
@@ -481,110 +520,78 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
             onDisable = { vm.disableOwner() }
         )
     }
+
+    if (showLoginDialog) {
+        LoginDialog(
+            onClose = { showLoginDialog = false },
+            onSwitchUid = { inputUid ->
+                scope.launch {
+                    if (inputUid.isBlank()) return@launch
+                    val ok = checkUidExists(inputUid)
+                    if (ok) {
+                        setUid(ctx, inputUid)
+                        setLoggedIn(ctx, true)
+                        Toast.makeText(ctx, "تم تسجيل الدخول واستعادة الحساب ✅", Toast.LENGTH_SHORT).show()
+                        showLoginDialog = false
+                    } else {
+                        Toast.makeText(ctx, "UID غير موجود في قاعدة البيانات ❌", Toast.LENGTH_LONG).show()
+                    }
+                }
+            },
+            onCreateNew = {
+                scope.launch {
+                    // إنشاء UID جديد عشوائي وتسجيله فورًا
+                    val newUid = "U" + (100000..999999).random()
+                    val created = registerUidIfMissing(newUid)
+                    if (created) {
+                        setUid(ctx, newUid)
+                        setLoggedIn(ctx, true)
+                        Toast.makeText(ctx, "تم إنشاء حساب جديد وتسجيل الدخول ✅ ($newUid)", Toast.LENGTH_LONG).show()
+                        showLoginDialog = false
+                    } else {
+                        Toast.makeText(ctx, "تعذر إنشاء حساب جديد الآن ❌", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+        )
+    }
 }
 
 /* =========================
-   شاشة تسجيل الدخول بالـUID فقط
+   شاشة/حوار تسجيل الدخول البسيط (إدخال UID)
    ========================= */
 @Composable
-private fun LoginScreen(onLoggedIn: () -> Unit) {
-    val ctx = LocalContext.current
-    val uid = rememberUserUid()
-    val scope = rememberCoroutineScope()
-
-    var checking by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf<String?>(null) }
-    val clipboard = LocalClipboardManager.current
-
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(Bg)
-            .padding(18.dp)
-    ) {
-        Spacer(Modifier.height(18.dp))
-        Text("تسجيل الدخول", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
-        Spacer(Modifier.height(8.dp))
-        Text("يتم تسجيل الدخول بالاعتماد على UID الخاص بك. إذا كان UID موجوداً في قاعدة البيانات سيتم تسجيل الدخول فورًا.", color = OnBg.copy(alpha = 0.8f))
-        Spacer(Modifier.height(18.dp))
-
-        // بطاقة UID
-        ElevatedCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp)) {
-                Text("معرّف المستخدم (UID):", fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(6.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Surface2)
-                        .padding(12.dp)
-                ) {
-                    Icon(Icons.Filled.Badge, contentDescription = null, tint = Accent)
-                    Spacer(Modifier.width(8.dp))
-                    Text(uid, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    TextButton(onClick = {
-                        clipboard.setText(AnnotatedString(uid))
-                        Toast.makeText(ctx, "تم نسخ UID", Toast.LENGTH_SHORT).show()
-                    }) { Text("نسخ") }
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(
-                        onClick = {
-                            if (checking) return@Button
-                            checking = true
-                            status = "جارِ التحقق من الحساب…"
-                            scope.launch {
-                                val (ok, _) = pingHealth()
-                                if (!ok) {
-                                    status = "تعذر الاتصال بالسيرفر ❌"
-                                    checking = false
-                                    return@launch
-                                }
-                                val exists = checkUidExists(uid)
-                                if (exists) {
-                                    status = "الحساب موجود ✅"
-                                    onLoggedIn()
-                                } else {
-                                    status = "UID غير موجود في قاعدة البيانات ❌"
-                                }
-                                checking = false
-                            }
-                        },
-                        enabled = !checking,
-                        shape = RoundedCornerShape(12.dp)
-                    ) { Text(if (checking) "جارِ الفحص…" else "تسجيل الدخول") }
-
-                    OutlinedButton(
-                        onClick = {
-                            clipboard.setText(AnnotatedString(uid))
-                            Toast.makeText(ctx, "أرسل UID للدعم لتفعيله", Toast.LENGTH_SHORT).show()
-                        },
-                        enabled = !checking,
-                        shape = RoundedCornerShape(12.dp)
-                    ) { Text("إرسال للدعم") }
-                }
-
-                status?.let {
-                    Spacer(Modifier.height(10.dp))
-                    Text(it, color = if (it.contains("✅")) Mint else MaterialTheme.colorScheme.error)
-                }
+private fun LoginDialog(
+    onClose: () -> Unit,
+    onSwitchUid: (String) -> Unit,
+    onCreateNew: () -> Unit
+) {
+    var uid by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("تسجيل الدخول / استعادة حساب") },
+        text = {
+            Column {
+                Text("أدخل UID الخاص بك لاستعادة حسابك من أي جهاز.", color = OnBg.copy(alpha = 0.8f))
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = uid,
+                    onValueChange = { uid = it.trim() },
+                    label = { Text("UID") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+                AssistChip(
+                    onClick = onCreateNew,
+                    label = { Text("أريد حسابًا جديدًا") },
+                    leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) }
+                )
             }
-        }
-
-        Spacer(Modifier.height(24.dp))
-        AssistChip(
-            onClick = {
-                Toast.makeText(ctx, "يمكنك دائمًا نسخ UID وإرساله للتفعيل.", Toast.LENGTH_SHORT).show()
-            },
-            label = { Text("تعليمات سريعة") },
-            leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) }
-        )
-    }
+        },
+        confirmButton = { TextButton(onClick = { onSwitchUid(uid) }) { Text("تسجيل الدخول") } },
+        dismissButton = { TextButton(onClick = onClose) { Text("إلغاء") } }
+    )
 }
 
 /* =========================
@@ -701,10 +708,10 @@ private fun BottomNav(current: Screen, isOwner: Boolean, onSelect: (Screen) -> U
 }
 
 /* =========================
-   HOME — UID + واجهة
+   HOME — UID + زر تسجيل الدخول مرتب
    ========================= */
 @Composable
-fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
+fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit, onOpenLogin: () -> Unit) {
     val userUid = rememberUserUid()
     val banners = listOf(
         Color(0xFF141821) to Color(0xFF252A39),
@@ -715,8 +722,8 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
 
     Column(Modifier.fillMaxSize().background(Bg)) {
 
-        // شارة UID قابلة للنسخ
-        UserIdPill(userUid)
+        // شارة UID قابلة للنسخ + زر تسجيل الدخول/التبديل
+        UserIdRow(userUid, onOpenLogin)
 
         LazyRow(
             modifier = Modifier
@@ -790,16 +797,18 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
 }
 
 @Composable
-private fun UserIdPill(uid: String) {
+private fun UserIdRow(uid: String, onOpenLogin: () -> Unit) {
     val clipboard = LocalClipboardManager.current
     val ctx = LocalContext.current
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, start = 14.dp, end = 14.dp)
+            .padding(top = 8.dp, start = 14.dp, end = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             Modifier
+                .weight(1f)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Surface2)
                 .clickable {
@@ -815,6 +824,12 @@ private fun UserIdPill(uid: String) {
                 Text("معرّفك: $uid (انقر للنسخ)", fontWeight = FontWeight.SemiBold)
             }
         }
+        Spacer(Modifier.width(8.dp))
+        // زر صغير ومرتب لتسجيل الدخول/التبديل
+        ElevatedButton(
+            onClick = onOpenLogin,
+            shape = RoundedCornerShape(12.dp)
+        ) { Text("تسجيل الدخول") }
     }
 }
 

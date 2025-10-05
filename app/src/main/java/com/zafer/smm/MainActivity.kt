@@ -24,6 +24,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardOptions
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -95,6 +98,11 @@ fun AppRoot() {
     // حالة السيرفر
     var online by remember { mutableStateOf<Boolean?>(null) }
 
+    // حالة المالك/لوحته
+    var isOwner by rememberSaveable { mutableStateOf(false) }
+    var askOwnerPin by remember { mutableStateOf(false) }
+    var showOwnerDashboard by remember { mutableStateOf(false) }
+
     // فحص السيرفر دوري + تسجيل UID
     LaunchedEffect(Unit) {
         scope.launch { tryUpsertUid(uid) }
@@ -115,19 +123,19 @@ fun AppRoot() {
         // محتوى كل تبويب
         when (current) {
             Tab.HOME     -> EmptyScreen()
-            Tab.SUPPORT  -> SupportScreen()   // ←← الإضافة الجديدة
+            Tab.SUPPORT  -> SupportScreen()
             Tab.WALLET   -> EmptyScreen()
             Tab.ORDERS   -> EmptyScreen()
             Tab.SERVICES -> EmptyScreen()
         }
 
-        // حالة السيرفر أعلى يمين + زر إعدادات (يعرض UID فقط)
+        // حالة السيرفر أعلى يمين + زر إعدادات (يعرض UID + تسجيل المالك)
         ServerStatusPill(
             online = online,
             onOpenSettings = { settingsOpen = true },
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .statusBarsPadding()  // <<< يمنع التداخل مع شريط الحالة
+                .statusBarsPadding()
                 .padding(top = 6.dp, end = 10.dp)
         )
 
@@ -140,7 +148,30 @@ fun AppRoot() {
     }
 
     if (settingsOpen) {
-        SettingsDialog(uid = uid, onDismiss = { settingsOpen = false })
+        SettingsDialog(
+            uid = uid,
+            onOwnerLoginClick = { askOwnerPin = true },
+            onDismiss = { settingsOpen = false }
+        )
+    }
+
+    // نافذة إدخال كلمة مرور المالك
+    if (askOwnerPin) {
+        OwnerLoginDialog(
+            onCancel = { askOwnerPin = false },
+            onSubmit = { pin ->
+                if (pin == "2000") {
+                    isOwner = true
+                    askOwnerPin = false
+                    showOwnerDashboard = true
+                }
+            }
+        )
+    }
+
+    // واجهة لوحة تحكم المالك (أزرار فقط)
+    if (showOwnerDashboard && isOwner) {
+        OwnerDashboard(onClose = { showOwnerDashboard = false })
     }
 }
 
@@ -157,7 +188,7 @@ private fun EmptyScreen() {
 }
 
 /* -------------------------
-   شاشة الدعم (الإضافة الجديدة)
+   شاشة الدعم
    ------------------------- */
 @Composable
 private fun SupportScreen() {
@@ -329,15 +360,17 @@ private fun RowScope.NavItem(
 }
 
 /* =========================
-   نافذة الإعدادات — UID فقط
+   نافذة الإعدادات — UID + تسجيل المالك
    ========================= */
 @Composable
-private fun SettingsDialog(uid: String, onDismiss: () -> Unit) {
+private fun SettingsDialog(uid: String, onOwnerLoginClick: () -> Unit, onDismiss: () -> Unit) {
     val clip: ClipboardManager = LocalClipboardManager.current
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("إغلاق") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) { Text("إغلاق") }
+            }
         },
         title = { Text("الإعدادات") },
         text = {
@@ -351,15 +384,196 @@ private fun SettingsDialog(uid: String, onDismiss: () -> Unit) {
                         clip.setText(AnnotatedString(uid))
                     }) { Text("نسخ") }
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(16.dp))
+                Divider(color = Dim.copy(alpha = 0.3f))
+                Spacer(Modifier.height(12.dp))
+                // زر تسجيل المالك
+                ElevatedButton(
+                    onClick = onOwnerLoginClick,
+                    colors = ButtonDefaults.elevatedButtonColors(
+                        containerColor = Accent,
+                        contentColor = Color.Black
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.VerifiedUser, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("تسجيل المالك")
+                }
+                Spacer(Modifier.height(6.dp))
                 Text(
-                    "يُنشأ UID تلقائياً عند أول تشغيل ويتم ربطه بحسابك على الخادم.",
+                    "خاص بالمالك فقط، يتطلب كلمة مرور.",
                     fontSize = 12.sp,
                     color = Dim
                 )
             }
         }
     )
+}
+
+/* =========================
+   نافذة إدخال كلمة مرور المالك
+   ========================= */
+@Composable
+private fun OwnerLoginDialog(
+    onCancel: () -> Unit,
+    onSubmit: (String) -> Unit
+) {
+    var pin by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("تسجيل المالك") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = pin,
+                    onValueChange = {
+                        pin = it
+                        error = null
+                    },
+                    label = { Text("كلمة المرور") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                )
+                if (error != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(error!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (pin.isBlank()) {
+                    error = "أدخل كلمة المرور"
+                } else {
+                    onSubmit(pin)
+                    if (pin != "2000") error = "كلمة المرور غير صحيحة"
+                }
+            }) { Text("تأكيد") }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) { Text("إلغاء") }
+        }
+    )
+}
+
+/* =========================
+   لوحة تحكم المالك — أزرار فقط
+   ========================= */
+@Composable
+private fun OwnerDashboard(onClose: () -> Unit) {
+    val actions = listOf(
+        "تعديل الأسعار والكميات",
+        "الطلبات المعلقة (الخدمات)",
+        "الكارتات المعلقة",
+        "طلبات شدات ببجي",
+        "طلبات شحن الايتونز",
+        "طلبات الارصدة المعلقة",
+        "طلبات لودو المعلقة",
+        "إضافة الرصيد",
+        "خصم الرصيد",
+        "فحص رصيد API",
+        "فحص حالة طلب API",
+        "عدد المستخدمين",
+        "رصيد المستخدمين",
+        "إدارة المشرفين",
+        "حظر المستخدم",
+        "الغاء حظر المستخدم",
+        "اعلان البوت",
+        "أكواد خدمات API",
+        "نظام الإحالة",
+        "شرح الخصومات",
+        "المتصدرين 🎉"
+    )
+
+    // صفحة كاملة فوق التطبيق
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Bg),
+        color = Bg
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            // شريط علوي بسيط داخل الصفحة نفسها (ليس TopAppBar النظامي)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Surface1)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onClose) {
+                    Icon(Icons.Filled.Close, contentDescription = "إغلاق", tint = OnBg)
+                }
+                Spacer(Modifier.width(6.dp))
+                Text("لوحة تحكم المالك", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            }
+
+            // شبكة أزرار بشكل صفين (عمودين)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // اصنع أزواجًا (2 في كل صف)
+                actions.chunked(2).forEach { rowItems ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        rowItems.forEach { label ->
+                            OwnerActionButton(
+                                label = label,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        if (rowItems.size == 1) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OwnerActionButton(label: String, modifier: Modifier = Modifier) {
+    ElevatedCard(
+        modifier = modifier
+            .heightIn(min = 64.dp)
+            .clickable { /* لا شيء الآن */ },
+        colors = CardDefaults.elevatedCardColors(containerColor = Surface1),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    Icons.Filled.Settings,
+                    contentDescription = null,
+                    tint = Accent
+                )
+                Text(
+                    label,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp
+                )
+            }
+        }
+    }
 }
 
 /* =========================

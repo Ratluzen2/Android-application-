@@ -6,7 +6,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -17,7 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll   // ✅ الإضافة المطلوبة
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -41,14 +40,14 @@ import kotlin.math.max
 import kotlin.math.round
 
 /* =========================
-   Theme — ألوان داكنة قريبة من اللقطة
+   Theme — داكن احترافي
    ========================= */
 private val Bg       = Color(0xFF0F1115)
 private val Surface1 = Color(0xFF151821)
 private val Surface2 = Color(0xFF1E2230)
 private val OnBg     = Color(0xFFE9EAEE)
-private val Accent   = Color(0xFFFFD54F) // أصفر
-private val Mint     = Color(0xFF4CD964) // أخضر زر الاقتراح
+private val Accent   = Color(0xFFFFD54F) // أصفر بارز
+private val Mint     = Color(0xFF4CD964) // أخضر للأزرار البارزة
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
@@ -81,14 +80,12 @@ class MainActivity : ComponentActivity() {
 }
 
 /* =========================
-   Screens enum
+   Screens
    ========================= */
-enum class Screen {
-    HOME, SERVICES, ORDERS, WALLET, SUPPORT, OWNER
-}
+enum class Screen { HOME, SERVICES, ORDERS, WALLET, SUPPORT, OWNER }
 
 /* =========================
-   Data models
+   Models
    ========================= */
 data class Order(
     val id: Int,
@@ -101,11 +98,10 @@ data class Order(
     val link: String,
     val ts: Long = System.currentTimeMillis()
 )
-
 data class CardSubmission(val userId: Int, val digits: String, val ts: Long = System.currentTimeMillis())
 
 /* =========================
-   ViewModel (نفس الميزات السابقة)
+   ViewModel (نفس الميزات)
    ========================= */
 private const val OWNER_PIN = "123456"
 
@@ -123,7 +119,7 @@ class AppViewModel : ViewModel() {
     private val _moderators = MutableStateFlow<Set<Int>>(emptySet())
     val moderators: StateFlow<Set<Int>> = _moderators
 
-    // الخدمات (كما كانت)
+    // الخرائط كما هي
     val servicesTikIgViewsLikesScore = linkedMapOf(
         "متابعين تيكتوك 1k" to 3.50,
         "متابعين تيكتوك 2k" to 7.0,
@@ -276,7 +272,7 @@ class AppViewModel : ViewModel() {
 }
 
 /* =========================
-   Helpers (سعر/كمية/تنسيق)
+   Helpers
    ========================= */
 private fun extractQtyFromName(name: String): Int {
     val k = Regex("(\\d+)\\s*k", RegexOption.IGNORE_CASE).find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
@@ -295,7 +291,7 @@ private fun priceFor(serviceName: String, qty: Int, basePrice: Double): Double {
 }
 
 /* =========================
-   Root with secret PIN (tap title 5x)
+   Root + PIN
    ========================= */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -306,21 +302,16 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
     val scope = rememberCoroutineScope()
     var showPin by remember { mutableStateOf(false) }
 
-    // taps على العنوان
     var taps by remember { mutableStateOf(0) }
     var lastTap by remember { mutableStateOf(0L) }
 
     ModalNavigationDrawer(
         drawerState = drawer,
         drawerContent = {
-            DrawerContent(
-                current = current,
-                isOwner = isOwner,
-                onSelect = {
-                    current = it
-                    scope.launch { drawer.close() }
-                }
-            )
+            DrawerContent(current, isOwner) {
+                current = it
+                scope.launch { drawer.close() }
+            }
         }
     ) {
         Scaffold(
@@ -338,19 +329,13 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                     onSearch = { current = Screen.SERVICES }
                 )
             },
-            bottomBar = {
-                BottomNav(
-                    current = current,
-                    isOwner = isOwner,
-                    onSelect = { current = it }
-                )
-            },
+            bottomBar = { BottomNav(current, isOwner) { current = it } },
             floatingActionButton = {
                 ExtendedFloatingActionButton(
                     containerColor = Mint,
                     contentColor = Color.Black,
                     onClick = { current = Screen.SUPPORT },
-                    text = { Text("شاركنا اقتراحك", fontWeight = FontWeight.SemiBold) },
+                    text = { Text("راسل الدعم", fontWeight = FontWeight.SemiBold) }, // ← بدل “شاركنا اقتراحك”
                     icon = { Icon(Icons.Filled.ChatBubble, contentDescription = null) }
                 )
             },
@@ -380,7 +365,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
 }
 
 /* =========================
-   Top Bar شبيه بالصورة
+   Top Bar — اسم التطبيق “خدمات راتلوزن”
    ========================= */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -408,9 +393,8 @@ private fun TopBar(
             )
         },
         title = {
-            // شعار نصّي قابل للنقر (لـ PIN)
             Text(
-                text = "إشحنها", // شعار بسيط
+                text = "خدمات راتلوزن",   // ← هنا الاسم
                 color = OnBg,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.ExtraBold,
@@ -418,7 +402,6 @@ private fun TopBar(
             )
         },
         actions = {
-            // رصيد
             Box(
                 Modifier
                     .padding(end = 10.dp)
@@ -433,7 +416,6 @@ private fun TopBar(
                     Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = Accent)
                 }
             }
-            // بحث
             Icon(
                 Icons.Filled.Search, contentDescription = "بحث",
                 modifier = Modifier
@@ -447,50 +429,30 @@ private fun TopBar(
 }
 
 /* =========================
-   Drawer (مختصر)
+   Drawer
    ========================= */
 @Composable
 private fun DrawerContent(current: Screen, isOwner: Boolean, onSelect: (Screen) -> Unit) {
     Column(Modifier.padding(14.dp)) {
         Text("القوائم", color = OnBg, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.padding(6.dp))
-        NavigationDrawerItem(
-            label = { Text("الواجهة") }, selected = current == Screen.HOME,
-            onClick = { onSelect(Screen.HOME) }, icon = { Icon(Icons.Filled.Home, null) }
-        )
-        NavigationDrawerItem(
-            label = { Text("الخدمات") }, selected = current == Screen.SERVICES,
-            onClick = { onSelect(Screen.SERVICES) }, icon = { Icon(Icons.Filled.Apps, null) }
-        )
-        NavigationDrawerItem(
-            label = { Text("الطلبات") }, selected = current == Screen.ORDERS,
-            onClick = { onSelect(Screen.ORDERS) }, icon = { Icon(Icons.Filled.ShoppingCart, null) }
-        )
-        NavigationDrawerItem(
-            label = { Text("المحفظة") }, selected = current == Screen.WALLET,
-            onClick = { onSelect(Screen.WALLET) }, icon = { Icon(Icons.Filled.AccountBalanceWallet, null) }
-        )
-        NavigationDrawerItem(
-            label = { Text("الدعم") }, selected = current == Screen.SUPPORT,
-            onClick = { onSelect(Screen.SUPPORT) }, icon = { Icon(Icons.Filled.Chat, null) }
-        )
-        if (isOwner) {
-            NavigationDrawerItem(
-                label = { Text("لوحة المالك") }, selected = current == Screen.OWNER,
-                onClick = { onSelect(Screen.OWNER) }, icon = { Icon(Icons.Filled.Settings, null) }
-            )
-        }
+        NavigationDrawerItem(label = { Text("الواجهة") }, selected = current == Screen.HOME, onClick = { onSelect(Screen.HOME) }, icon = { Icon(Icons.Filled.Home, null) })
+        NavigationDrawerItem(label = { Text("الخدمات") }, selected = current == Screen.SERVICES, onClick = { onSelect(Screen.SERVICES) }, icon = { Icon(Icons.Filled.List, null) })
+        NavigationDrawerItem(label = { Text("الطلبات") }, selected = current == Screen.ORDERS, onClick = { onSelect(Screen.ORDERS) }, icon = { Icon(Icons.Filled.ShoppingCart, null) })
+        NavigationDrawerItem(label = { Text("المحفظة") }, selected = current == Screen.WALLET, onClick = { onSelect(Screen.WALLET) }, icon = { Icon(Icons.Filled.AccountBalanceWallet, null) })
+        NavigationDrawerItem(label = { Text("الدعم") }, selected = current == Screen.SUPPORT, onClick = { onSelect(Screen.SUPPORT) }, icon = { Icon(Icons.Filled.Chat, null) })
+        if (isOwner) NavigationDrawerItem(label = { Text("لوحة المالك") }, selected = current == Screen.OWNER, onClick = { onSelect(Screen.OWNER) }, icon = { Icon(Icons.Filled.Settings, null) })
     }
 }
 
 /* =========================
-   Bottom Navigation — ترتيب قريب من اللقطة
+   Bottom Nav — استخدمنا List بدل ReceiptLong
    ========================= */
 @Composable
 private fun BottomNav(current: Screen, isOwner: Boolean, onSelect: (Screen) -> Unit) {
     NavigationBar(containerColor = Surface1, tonalElevation = 3.dp) {
         val items = listOf(
             Triple(Screen.OWNER, Icons.Filled.Settings, "الإعدادات"),
-            Triple(Screen.SERVICES, Icons.Filled.ReceiptLong, "الخدمات"),
+            Triple(Screen.SERVICES, Icons.Filled.List, "الخدمات"),   // ← آمنة بدون تبعيات
             Triple(Screen.ORDERS, Icons.Filled.ShoppingCart, "الطلبات"),
             Triple(Screen.SUPPORT, Icons.Filled.ChatBubble, "الدعم"),
             Triple(Screen.HOME, Icons.Filled.Home, "الرئيسية"),
@@ -501,15 +463,14 @@ private fun BottomNav(current: Screen, isOwner: Boolean, onSelect: (Screen) -> U
                 selected = current == scr,
                 onClick = { if (enabled) onSelect(scr) else onSelect(Screen.SUPPORT) },
                 icon = { Icon(icon, contentDescription = label) },
-                label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                enabled = true
+                label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
             )
         }
     }
 }
 
 /* =========================
-   HOME — بانر/نقاط + أقسام + بطاقات منتجات
+   HOME — بانر بدون كلمات + أقسام عامة + بطاقات عامة
    ========================= */
 @Composable
 fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
@@ -521,7 +482,7 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
     var bannerIndex by remember { mutableStateOf(0) }
 
     Column(Modifier.fillMaxSize().background(Bg)) {
-        // سلايدر بانرات
+        // بانرات زخرفية بدون نص
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
@@ -543,13 +504,13 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
 
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("كل المنتجات", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+            Text("الخدمات", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold) // ← بدل "كل المنتجات"
             Spacer(Modifier.weight(1f))
             AssistChip(onClick = { open(Screen.SERVICES) }, label = { Text("عرض الكل") })
         }
         Spacer(Modifier.height(6.dp))
 
-        // أقسام دائرية
+        // أقسام عامة
         Row(
             Modifier
                 .fillMaxWidth()
@@ -557,16 +518,16 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
                 .padding(horizontal = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            CategoryIcon("الجميع", Icons.Filled.Apps, selected = true) { open(Screen.SERVICES) }
-            CategoryIcon("متاجر التطبيقات", Icons.Filled.Store) { }
-            CategoryIcon("الألعاب", Icons.Filled.SportsEsports) { }
-            CategoryIcon("الإتصالات", Icons.Filled.Wifi) { }
-            CategoryIcon("التسوق", Icons.Filled.Campaign) { }
+            CategoryIcon("الكل", Icons.Filled.Apps, selected = true) { open(Screen.SERVICES) }
+            CategoryIcon("سوشيال", Icons.Filled.Group) { open(Screen.SERVICES) }
+            CategoryIcon("تليجرام", Icons.Filled.Send) { open(Screen.SERVICES) }
+            CategoryIcon("الألعاب", Icons.Filled.SportsEsports) { open(Screen.SERVICES) }
+            CategoryIcon("شحن/رصيد", Icons.Filled.CreditCard) { open(Screen.SERVICES) }
         }
 
         Spacer(Modifier.height(10.dp))
 
-        // بطاقات منتجات (نماذج من الخرائط)
+        // بطاقات عامة (بدون كلمات من السكرينشوت)
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 120.dp, start = 12.dp, end = 12.dp),
@@ -575,18 +536,18 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                     ProductCard(
-                        title = "بطاقات iTunes",
-                        discount = "0.5 %",
+                        title = "تيكتوك / انستغرام",
+                        tag = "مميز",
                         colors = listOf(Color(0xFF2D2A49), Color(0xFF5F5DB8))
                     ) { open(Screen.SERVICES) }
                     ProductCard(
-                        title = "بلايستيشن ستور",
-                        discount = "0.5 %",
+                        title = "تليجرام",
+                        tag = "مطلوب",
                         colors = listOf(Color(0xFF1F2A3E), Color(0xFF4C77B1))
                     ) { open(Screen.SERVICES) }
                     ProductCard(
-                        title = "كوينز فيفا 26",
-                        discount = "1.0 %",
+                        title = "شحن ببجي",
+                        tag = "شائع",
                         colors = listOf(Color(0xFF0E3B2E), Color(0xFF15A979))
                     ) { open(Screen.SERVICES) }
                 }
@@ -597,29 +558,17 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
 
 @Composable
 private fun BannerCard(modifier: Modifier = Modifier, start: Color, end: Color) {
+    // بلا نص — تدرّج فقط
     Box(
         modifier
             .clip(RoundedCornerShape(18.dp))
             .background(Brush.linearGradient(listOf(start, end)))
-    ) {
-        // عنوان/زخرفة
-        Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.SpaceBetween) {
-            Text("أشحنها تكفيك وتوفيك", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf(Accent, Mint, Color(0xFF80DEEA)).forEach {
-                    Box(Modifier.size(10.dp).clip(CircleShape).background(it))
-                }
-            }
-        }
-    }
+    ) { /* زخرفة فقط */ }
 }
 
 @Composable
 private fun Dots(count: Int, active: Int) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center
-    ) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
         repeat(count) { i ->
             val w = if (i == active) 10.dp else 6.dp
             Box(
@@ -650,7 +599,7 @@ private fun CategoryIcon(title: String, icon: androidx.compose.ui.graphics.vecto
 }
 
 @Composable
-private fun ProductCard(title: String, discount: String, colors: List<Color>, onClick: () -> Unit) {
+private fun ProductCard(title: String, tag: String, colors: List<Color>, onClick: () -> Unit) {
     Column(
         Modifier
             .width(190.dp)
@@ -666,28 +615,21 @@ private fun ProductCard(title: String, discount: String, colors: List<Color>, on
                 .background(Brush.linearGradient(colors)),
             contentAlignment = Alignment.BottomStart
         ) {
-            Text(
-                title,
-                modifier = Modifier.padding(12.dp),
-                fontWeight = FontWeight.Bold
-            )
+            Text(title, modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold)
         }
-        Row(
-            Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            // شارة خصم صغيرة
+            // شارة صغيرة “مميز/شائع/…”
             Box(
                 Modifier
                     .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF0C3B47))
+                    .background(Color(0xFF203A22))
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.LocalOffer, contentDescription = null, tint = Color(0xFF7EE7FF), modifier = Modifier.size(16.dp))
+                    Icon(Icons.Filled.Star, contentDescription = null, tint = Mint, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text(discount, fontSize = 12.sp, color = Color(0xFF7EE7FF))
+                    Text(tag, fontSize = 12.sp, color = Mint)
                 }
             }
         }
@@ -696,7 +638,7 @@ private fun ProductCard(title: String, discount: String, colors: List<Color>, on
 }
 
 /* =========================
-   SERVICES — نفس المنطق السابق لكن بستايل داكن
+   SERVICES — كما السابق
    ========================= */
 data class BuyInfo(val service: String, val qty: Int, val price: Double)
 
@@ -732,9 +674,7 @@ fun ServicesScreen(vm: AppViewModel) {
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             blocks.forEach { (group, data) ->
-                item {
-                    Text(group, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Accent)
-                }
+                item { Text(group, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Accent) }
                 items(data.toList(), key = { it.first }) { (svc, base) ->
                     if (query.isNotBlank() && !svc.contains(query, true)) return@items
                     val step = stepFor(svc)
@@ -950,7 +890,7 @@ fun SupportScreen() {
 }
 
 /* =========================
-   Owner Dashboard (كما السابق)
+   Owner Dashboard
    ========================= */
 @Composable
 fun OwnerDashboard(vm: AppViewModel) {
@@ -968,7 +908,7 @@ fun OwnerDashboard(vm: AppViewModel) {
         Modifier
             .fillMaxSize()
             .padding(12.dp)
-            .verticalScroll(rememberScrollState())   // ← كان يسبب الخطأ بدون import
+            .verticalScroll(rememberScrollState())
     ) {
         Text("لوحة تحكم المالك", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))

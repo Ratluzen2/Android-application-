@@ -27,7 +27,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -39,14 +41,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.max
 import kotlin.math.round
 import android.widget.Toast
 import java.net.HttpURLConnection
 import java.net.URL
+import android.content.Context
 
 /* =========================
-   API CONFIG — عدّل القيمتين فقط عند الحاجة
+   API CONFIG
    ========================= */
 private const val BASE_URL = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // بدون سلاش في النهاية
 private const val API_KEY  = "ضع_هنا_نفس_قيمة_API_KEY_من_Heroku" // للهيدر X-API-KEY إذا احتجته لاحقًا
@@ -58,8 +60,8 @@ private val Bg       = Color(0xFF0F1115)
 private val Surface1 = Color(0xFF151821)
 private val Surface2 = Color(0xFF1E2230)
 private val OnBg     = Color(0xFFE9EAEE)
-private val Accent   = Color(0xFFFFD54F) // أصفر بارز
-private val Mint     = Color(0xFF4CD964) // أخضر للأزرار البارزة
+private val Accent   = Color(0xFFFFD54F)
+private val Mint     = Color(0xFF4CD964)
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
@@ -131,7 +133,7 @@ class AppViewModel : ViewModel() {
     private val _moderators = MutableStateFlow<Set<Int>>(emptySet())
     val moderators: StateFlow<Set<Int>> = _moderators
 
-    // خرائط الخدمات (سعر الزر = السعر النهائي المعروض)
+    // خرائط الخدمات (السعر النهائي)
     val servicesTikIgViewsLikesScore = linkedMapOf(
         "لايكات تيكتوك 1k" to 1.0,
         "لايكات تيكتوك 2k" to 2.0,
@@ -262,12 +264,25 @@ class AppViewModel : ViewModel() {
 }
 
 /* =========================
-   Helpers
+   Helpers — UID للمستخدم
    ========================= */
-private fun extractQtyFromName(name: String): Int {
-    val k = Regex("(\\d+)\\s*k", RegexOption.IGNORE_CASE).find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
-    if (k != null) return k * 1000
-    return Regex("(\\d+)").findAll(name).lastOrNull()?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
+private const val PREFS = "ratluzen_prefs"
+private const val KEY_UID = "user_uid"
+
+private fun getOrCreateUserUid(context: Context): String {
+    val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    val existing = sp.getString(KEY_UID, null)
+    if (existing != null) return existing
+    // UID بسيط مثل U123456
+    val newId = "U" + (100000..999999).random()
+    sp.edit().putString(KEY_UID, newId).apply()
+    return newId
+}
+
+@Composable
+private fun rememberUserUid(): String {
+    val ctx = LocalContext.current
+    return remember { getOrCreateUserUid(ctx) }
 }
 
 /* ========= فحص السيرفر /health ========= */
@@ -302,6 +317,8 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
     val scope = rememberCoroutineScope()
     var showPin by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
+
+    val userUid = rememberUserUid() // ← UID ثابت للمستخدم
 
     var taps by remember { mutableStateOf(0) }
     var lastTap by remember { mutableStateOf(0L) }
@@ -350,7 +367,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
         ) { padding ->
             Box(Modifier.padding(padding)) {
                 when (current) {
-                    Screen.HOME     -> HomeScreen(vm) { current = it }
+                    Screen.HOME     -> HomeScreen(vm, userUid) { current = it } // ← نعرض UID هنا
                     Screen.SERVICES -> ServicesScreen(vm)
                     Screen.ORDERS   -> OrdersScreen(vm)
                     Screen.WALLET   -> WalletScreen(vm)
@@ -485,10 +502,10 @@ private fun BottomNav(current: Screen, isOwner: Boolean, onSelect: (Screen) -> U
 }
 
 /* =========================
-   HOME
+   HOME — يظهر UID أعلى الصفحة
    ========================= */
 @Composable
-fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
+fun HomeScreen(vm: AppViewModel, userUid: String, open: (Screen) -> Unit) {
     val banners = listOf(
         Color(0xFF141821) to Color(0xFF252A39),
         Color(0xFF19202A) to Color(0xFF2C3446),
@@ -497,6 +514,10 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
     var bannerIndex by remember { mutableStateOf(0) }
 
     Column(Modifier.fillMaxSize().background(Bg)) {
+
+        // شارة UID (تُنسخ بالضغط)
+        UserIdPill(userUid)
+
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
@@ -563,6 +584,35 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
                         colors = listOf(Color(0xFF0E3B2E), Color(0xFF15A979))
                     ) { open(Screen.SERVICES) }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UserIdPill(uid: String) {
+    val clipboard = LocalClipboardManager.current
+    val ctx = LocalContext.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, start = 14.dp, end = 14.dp)
+    ) {
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(Surface2)
+                .clickable {
+                    clipboard.setText(AnnotatedString(uid))
+                    Toast.makeText(ctx, "تم نسخ المعرّف: $uid", Toast.LENGTH_SHORT).show()
+                }
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.Badge, contentDescription = null, tint = Accent)
+                Spacer(Modifier.width(8.dp))
+                Text("معرّفك: $uid (انقر للنسخ)", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -668,7 +718,6 @@ fun ServicesScreen(vm: AppViewModel) {
     var selected by remember { mutableStateOf(0) }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        // الأقسام
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -695,7 +744,6 @@ fun ServicesScreen(vm: AppViewModel) {
 
         Spacer(Modifier.height(10.dp))
 
-        // أزرار الخدمات للقسم المختار
         val data = blocks[selected].second
         LazyColumn(
             contentPadding = PaddingValues(bottom = 120.dp),
@@ -714,7 +762,6 @@ fun ServicesScreen(vm: AppViewModel) {
         }
     }
 
-    // شراء
     buy?.let { info ->
         var open by remember { mutableStateOf(true) }
         var link by remember { mutableStateOf("") }
@@ -873,7 +920,7 @@ fun SupportScreen() {
 }
 
 /* =========================
-   Owner Dashboard — (أزلنا كروت تعديل السعر/الكمية)
+   Owner Dashboard — إدارة المشرفين فقط
    ========================= */
 @Composable
 fun OwnerDashboard(vm: AppViewModel) {

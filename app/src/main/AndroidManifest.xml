@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.zafer.smm">
 
-    <!-- صلاحية الاتصال بالإنترنت لفحص/استخدام السيرفر -->
+    <!-- صلاحية الاتصال بالإنترنت للتطبيق -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <!-- (اختياري) لمعرفة حالة الشبكة إن احتجتها لاحقًا -->
@@ -24,4 +24,3 @@
 
     </application>
 </manifest>
-```0

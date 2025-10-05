@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -81,7 +83,7 @@ private enum class Tab { HOME, SUPPORT, WALLET, ORDERS, SERVICES }
 
 @Composable
 fun AppRoot() {
-    val ctx = remember { LocalAppContext.current }
+    val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
     // UID — يُنشأ تلقائياً ويُرسل للخادم مرة واحدة
@@ -91,11 +93,9 @@ fun AppRoot() {
     // حالة السيرفر
     var online by remember { mutableStateOf<Boolean?>(null) }
 
-    // فحص السيرفر دوري
+    // فحص السيرفر دوري + تسجيل UID
     LaunchedEffect(Unit) {
-        // أولاً سجّل/حدّث UID في الخادم (غير معطل لو فشل)
         scope.launch { tryUpsertUid(uid) }
-        // مراقبة الصحة كل 20 ثانية
         while (true) {
             online = pingHealth()
             delay(20_000)
@@ -110,7 +110,7 @@ fun AppRoot() {
             .fillMaxSize()
             .background(Bg)
     ) {
-        // محتوى كل تبويب — واجهة فارغة بسيطة (حسب طلبك)
+        // محتوى كل تبويب — شاشة فارغة بسيطة
         when (current) {
             Tab.HOME     -> EmptyScreen()
             Tab.SUPPORT  -> EmptyScreen()
@@ -119,7 +119,7 @@ fun AppRoot() {
             Tab.SERVICES -> EmptyScreen()
         }
 
-        // حالة السيرفر أعلى يمين + زر إعدادات لعرض UID فقط
+        // حالة السيرفر أعلى يمين + زر إعدادات (يعرض UID فقط)
         ServerStatusPill(
             online = online,
             onOpenSettings = { settingsOpen = true },
@@ -128,7 +128,7 @@ fun AppRoot() {
                 .padding(top = 10.dp, end = 10.dp)
         )
 
-        // الشريط السفلي (الأيقونات + الأسماء)
+        // الشريط السفلي
         BottomNavBar(
             current = current,
             onChange = { current = it },
@@ -146,7 +146,6 @@ fun AppRoot() {
    ========================= */
 @Composable
 private fun EmptyScreen() {
-    // شاشة فارغة متناسقة اللون
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -330,16 +329,7 @@ private suspend fun tryUpsertUid(uid: String) = withContext(Dispatchers.IO) {
         val body = """{"uid":"$uid"}"""
         OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
         con.inputStream.bufferedReader().use(BufferedReader::readText)
-        // لا يهم الرد حالياً
     } catch (_: Exception) {
-        // تجاهل الفشل — سيتم تكراره لاحقاً إذا رغبت
+        // تجاهل الفشل — لا يؤثر على البناء
     }
-}
-
-/* =========================
-   Local Context Helper
-   ========================= */
-private object LocalAppContext {
-    val current: Context
-        @Composable get() = androidx.compose.ui.platform.LocalContext.current
 }

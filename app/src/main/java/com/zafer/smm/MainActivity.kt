@@ -27,17 +27,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.max
 import kotlin.math.round
+import android.widget.Toast
+import java.net.HttpURLConnection
+import java.net.URL
 
 /* =========================
    API CONFIG — عدّل القيمتين فقط عند الحاجة
@@ -207,7 +213,7 @@ class AppViewModel : ViewModel() {
         "شراء رصيد 2دولار اسيا" to 2.0,
         "شراء رصيد 5دولار اسيا" to 5.0,
         "شراء رصيد 10دولار اسيا" to 10.0,
-        "شراء رصيد 15دولار اسيا" to 15.0,
+        "شراء رصيد 15دولار اسيا" إلى 15.0,
         "شراء رصيد 40دولار اسيا" to 40.0,
         "شراء رصيد 2دولار كورك" to 2.0,
         "شراء رصيد 5دولار كورك" to 5.0,
@@ -266,7 +272,7 @@ class AppViewModel : ViewModel() {
 
     fun submitCard(userId: Int, digits: String): Pair<Boolean, String> {
         val now = System.currentTimeMillis()
-        val dup = cardSubmissions.count { it.userId == userId && it.digits == digits }
+        the dup = cardSubmissions.count { it.userId == userId && it.digits == digits }
         if (dup > CARD_DUP_LIMIT) return false to "مرفوض: تكرار لنفس رقم الكارت"
         val recent = cardSubmissions.count { it.userId == userId && it.ts >= now - CARD_SPAM_WINDOW_MS }
         if (recent > CARD_SPAM_COUNT) return false to "مرفوض: محاولات كثيرة خلال وقت قصير"
@@ -296,6 +302,26 @@ private fun priceFor(serviceName: String, qty: Int, basePrice: Double): Double {
     return (round(raw * 100.0) / 100.0)
 }
 
+/* ========= NEW: فحص السيرفر /health ========= */
+private suspend fun pingHealth(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+    try {
+        val url = URL("$BASE_URL/health")
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            connectTimeout = 5000
+            readTimeout = 5000
+            requestMethod = "GET"
+        }
+        val code = conn.responseCode
+        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+        val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+        conn.disconnect()
+        val ok = code == 200 && body.contains("\"ok\":") // يكفي للتأكد
+        ok to body
+    } catch (e: Exception) {
+        false to (e.message ?: "Network error")
+    }
+}
+
 /* =========================
    Root + PIN
    ========================= */
@@ -307,6 +333,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
     val drawer = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var showPin by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
 
     var taps by remember { mutableStateOf(0) }
     var lastTap by remember { mutableStateOf(0L) }
@@ -332,7 +359,13 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                         taps++; lastTap = now
                         if (taps >= 5) { taps = 0; showPin = true }
                     },
-                    onSearch = { current = Screen.SERVICES }
+                    onSearch = { current = Screen.SERVICES },
+                    onCloudCheck = {
+                        scope.launch {
+                            val (ok, _) = pingHealth()
+                            Toast.makeText(ctx, if (ok) "السيرفر متصل ✅" else "تعذر الاتصال بالسيرفر ❌", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 )
             },
             bottomBar = { BottomNav(current, isOwner) { current = it } },
@@ -379,7 +412,8 @@ private fun TopBar(
     balanceFlow: StateFlow<Double>,
     onMenu: () -> Unit,
     onLogoTapped: () -> Unit,
-    onSearch: () -> Unit
+    onSearch: () -> Unit,
+    onCloudCheck: () -> Unit
 ) {
     val balance by balanceFlow.collectAsState()
     CenterAlignedTopAppBar(
@@ -422,6 +456,14 @@ private fun TopBar(
                     Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = Accent)
                 }
             }
+            Icon(
+                Icons.Filled.CloudQueue, contentDescription = "فحص السيرفر",
+                modifier = Modifier
+                    .padding(end = 4.dp)
+                    .clip(CircleShape)
+                    .clickable { onCloudCheck() }
+                    .padding(8.dp)
+            )
             Icon(
                 Icons.Filled.Search, contentDescription = "بحث",
                 modifier = Modifier

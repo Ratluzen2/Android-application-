@@ -14,7 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.weight
+/* ملاحظة مهمة: لا تستورد androidx.compose.foundation.layout.weight هنا */
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -330,7 +330,7 @@ class AppViewModel : ViewModel() {
         "شراء رصيد 2دولار اسيا" to 3.5,
         "شراء رصيد 5دولار اسيا" to 7.0,
         "شراء رصيد 10دولار اسيا" to 13.0,
-        "شراء رصيد 15دولار اسيا" to 19.0,
+        "شراء رصيد 15دولار اسيا" إلى 19.0,
         "شراء رصيد 40دولار اسيا" to 52.0,
         "شراء رصيد 2دولار كورك" to 3.5,
         "شراء رصيد 5دولار كورك" to 7.0,
@@ -775,7 +775,7 @@ private fun LoginDialog(onDismiss: () -> Unit = {}, onLogin: (String) -> Unit) {
 private fun UidCard(uid: String, onCopy: () -> Unit) {
     Box(
         Modifier
-            .weight(1f)
+            .weight(1f) // يعمل بدون أي import، بشرط أن UidCard يُستدعى كطفل داخل Row
             .clip(RoundedCornerShape(16.dp))
             .background(Surface2)
             .clickable { onCopy() }

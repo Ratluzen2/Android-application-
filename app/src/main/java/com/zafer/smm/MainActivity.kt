@@ -1,14 +1,9 @@
-@file:Suppress("UnusedImport")
-
 package com.zafer.smm
 
-import android.os.Bundle
-import android.os.Build
-import android.widget.Toast
 import android.content.Context
+import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -39,14 +34,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
-import java.net.URL
+import kotlin.math.max
+import kotlin.math.round
+import kotlin.random.Random
 
 /* =========================
    Theme — داكن احترافي
@@ -57,20 +50,6 @@ private val Surface2 = Color(0xFF1E2230)
 private val OnBg     = Color(0xFFE9EAEE)
 private val Accent   = Color(0xFFFFD54F) // أصفر بارز
 private val Mint     = Color(0xFF4CD964) // أخضر للأزرار البارزة
-
-// عنوان باك-إند هيروكو — بدون سلاش أخير
-private const val BASE_URL = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
-
-/* =========================
-   MainActivity
-   ========================= */
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setContent { AppTheme { AppRoot() } }
-    }
-}
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
@@ -89,6 +68,17 @@ fun AppTheme(content: @Composable () -> Unit) {
         typography = Typography(),
         content = content
     )
+}
+
+/* =========================
+   MainActivity
+   ========================= */
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // تم إلغاء edge-to-edge لتجنب تداخل الشريط العلوي
+        setContent { AppTheme { AppRoot() } }
+    }
 }
 
 /* =========================
@@ -113,7 +103,28 @@ data class Order(
 data class CardSubmission(val userId: Int, val digits: String, val ts: Long = System.currentTimeMillis())
 
 /* =========================
-   ViewModel (بدون تعديل سعر/كمية)
+   Prefs (UID)
+   ========================= */
+private object Prefs {
+    private const val FILE = "app_prefs"
+    private const val KEY_UID = "uid"
+    fun getUid(ctx: Context): String? =
+        ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString(KEY_UID, null)
+
+    fun saveUid(ctx: Context, uid: String) {
+        ctx.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putString(KEY_UID, uid).apply()
+    }
+    fun ensureUid(ctx: Context): String {
+        val cur = getUid(ctx)
+        if (cur != null) return cur
+        val gen = "U" + (100000..999999).random()
+        saveUid(ctx, gen)
+        return gen
+    }
+}
+
+/* =========================
+   ViewModel (نفس الميزات)
    ========================= */
 private const val OWNER_PIN = "123456"
 
@@ -131,12 +142,8 @@ class AppViewModel : ViewModel() {
     private val _moderators = MutableStateFlow<Set<Int>>(emptySet())
     val moderators: StateFlow<Set<Int>> = _moderators
 
-    // قوائم الخدمات (سعر نهائي للبند الظاهر)
+    // الخرائط كما هي
     val servicesTikIgViewsLikesScore = linkedMapOf(
-        "لايكات تيكتوك 1k" to 1.0,
-        "لايكات تيكتوك 2k" to 2.0,
-        "لايكات تيكتوك 3k" to 3.0,
-        "لايكات تيكتوك 4k" to 4.0,
         "متابعين تيكتوك 1k" to 3.50,
         "متابعين تيكتوك 2k" to 7.0,
         "متابعين تيكتوك 3k" to 10.50,
@@ -146,6 +153,14 @@ class AppViewModel : ViewModel() {
         "مشاهدات تيكتوك 20k" to 1.60,
         "مشاهدات تيكتوك 30k" to 2.40,
         "مشاهدات تيكتوك 50k" to 3.20,
+        "متابعين انستغرام 1k" to 3.0,
+        "متابعين انستغرام 2k" to 6.0,
+        "متابعين انستغرام 3k" to 9.0,
+        "متابعين انستغرام 4k" to 12.0,
+        "لايكات تيكتوك 1k" to 1.0,
+        "لايكات تيكتوك 2k" to 2.0,
+        "لايكات تيكتوك 3k" to 3.0,
+        "لايكات تيكتوك 4k" to 4.0,
         "لايكات انستغرام 1k" to 1.0,
         "لايكات انستغرام 2k" to 2.0,
         "لايكات انستغرام 3k" to 3.0,
@@ -201,31 +216,37 @@ class AppViewModel : ViewModel() {
         "شراء رصيد 50 ايتونز" to 90.0,
     )
     val servicesMobile = linkedMapOf(
-        "شراء رصيد 2دولار اثير" to 3.5,
-        "شراء رصيد 5دولار اثير" to 7.0,
-        "شراء رصيد 10دولار اثير" to 13.0,
-        "شراء رصيد 15دولار اثير" to 19.0,
-        "شراء رصيد 40دولار اثير" to 52.0,
-        "شراء رصيد 2دولار اسيا" to 3.5,
-        "شراء رصيد 5دولار اسيا" to 7.0,
-        "شراء رصيد 10دولار اسيا" to 13.0,
-        "شراء رصيد 15دولار اسيا" to 19.0,
-        "شراء رصيد 40دولار اسيا" to 52.0,
-        "شراء رصيد 2دولار كورك" to 3.5,
-        "شراء رصيد 5دولار كورك" to 7.0,
-        "شراء رصيد 10دولار كورك" to 13.0,
-        "شراء رصيد 15دولار كورك" to 19.0,
+        "شراء رصيد 2دولار اثير" to 2.0,
+        "شراء رصيد 5دولار اثير" to 5.0,
+        "شراء رصيد 10دولار اثير" to 10.0,
+        "شراء رصيد 15دولار اثير" to 15.0,
+        "شراء رصيد 40دولار اثير" to 40.0,
+        "شراء رصيد 2دولار اسيا" to 2.0,
+        "شراء رصيد 5دولار اسيا" to 5.0,
+        "شراء رصيد 10دولار اسيا" to 10.0,
+        "شراء رصيد 15دولار اسيا" to 15.0,
+        "شراء رصيد 40دولار اسيا" to 40.0,
+        "شراء رصيد 2دولار كورك" to 2.0,
+        "شراء رصيد 5دولار كورك" to 5.0,
+        "شراء رصيد 10دولار كورك" to 10.0,
+        "شراء رصيد 15دولار كورك" to 15.0,
+        "شراء رصيد 40دولار كورك" to 40.0,
     )
     val servicesLudo = linkedMapOf(
-        "لودو 810 الماسة" to 4.0,
-        "لودو 2280 الماسة" to 8.9,
-        "لودو 5080 الماسة" to 17.5,
-        "لودو 12750 الماسة" to 42.7,
-        "لودو 66680 ذهب" to 4.0,
-        "لودو 219500 ذهب" to 8.9,
-        "لودو 1443000 ذهب" to 17.5,
-        "لودو 3627000 ذهب" to 42.7,
+        "لودو 810 الماسة" to 3.0,
+        "لودو 2280 الماسة" to 7.0,
+        "لودو 5080 الماسة" to 13.0,
+        "لودو 12750 الماسة" to 28.0,
+        "لودو 66680 ذهب" to 3.0,
+        "لودو 219500 ذهب" to 7.0,
+        "لودو 1443000 ذهب" to 13.0,
+        "لودو 3627000 ذهب" to 28.0,
     )
+
+    private val _priceOverrides = MutableStateFlow<Map<String, Double>>(emptyMap())
+    val priceOverrides: StateFlow<Map<String, Double>> = _priceOverrides
+    private val _qtyOverrides = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val qtyOverrides: StateFlow<Map<String, Int>> = _qtyOverrides
 
     private val _orders = MutableStateFlow<List<Order>>(emptyList())
     val orders: StateFlow<List<Order>> = _orders
@@ -240,8 +261,20 @@ class AppViewModel : ViewModel() {
     fun addModerator(userId: Int) { _moderators.value = _moderators.value + userId }
     fun removeModerator(userId: Int) { _moderators.value = _moderators.value - userId }
 
+    fun setPriceOverride(service: String, price: Double) {
+        _priceOverrides.value = _priceOverrides.value.toMutableMap().apply { this[service] = price }
+    }
+    fun setQtyOverride(service: String, qty: Int) {
+        _qtyOverrides.value = _qtyOverrides.value.toMutableMap().apply { this[service] = qty }
+    }
+
+    fun effectiveBasePrice(userId: Int, service: String, default: Double): Double {
+        val base = _priceOverrides.value[service] ?: default
+        return if (isModerator(userId)) round2(base * 0.9) else base
+    }
+
     fun addOrder(userId: Int, category: String, service: String, qty: Int, price: Double, link: String) {
-        val o = Order(++orderAutoId, userId, category, service, qty, price, "pending", link)
+        val o = Order(++orderAutoId, userId, category, service, qty, round2(price), "pending", link)
         _orders.value = listOf(o) + _orders.value
     }
 
@@ -257,194 +290,43 @@ class AppViewModel : ViewModel() {
         cardSubmissions += CardSubmission(userId, digits, now)
         return true to "تم إرسال الكارت للمراجعة"
     }
+
+    private fun round2(v: Double) = kotlin.math.round(v * 100.0) / 100.0
 }
 
 /* =========================
-   Helpers — UID + تخزين محلي + API
+   Helpers
    ========================= */
-private const val PREFS = "ratluzen_prefs"
-private const val KEY_UID = "user_uid"
-private const val KEY_LOGGED_IN = "logged_in"
-
-private fun getOrCreateUserUid(context: Context): String {
-    val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    val existing = sp.getString(KEY_UID, null)
-    if (existing != null) return existing
-    val newId = "U" + (100000..999999).random()
-    sp.edit().putString(KEY_UID, newId).apply()
-    return newId
-}
-private fun setUid(context: Context, newUid: String) {
-    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_UID, newUid).apply()
-}
-private fun readUid(context: Context): String =
-    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_UID, "") ?: ""
-
-private fun isLoggedIn(context: Context): Boolean {
-    val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    return sp.getBoolean(KEY_LOGGED_IN, false)
-}
-private fun setLoggedIn(context: Context, v: Boolean) {
-    val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    sp.edit().putBoolean(KEY_LOGGED_IN, v).apply()
-}
-
-@Composable
-private fun rememberUserUid(): String {
-    val ctx = LocalContext.current
-    return remember { getOrCreateUserUid(ctx) }
-}
-
 private fun extractQtyFromName(name: String): Int {
     val k = Regex("(\\d+)\\s*k", RegexOption.IGNORE_CASE).find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
     if (k != null) return k * 1000
-    return Regex("(\\d+)").findAll(name).lastOrNull()?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1
+    return Regex("(\\d+)").findAll(name).lastOrNull()?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1000
 }
-
-/* ========= شبكة عامة ========= */
-private fun httpGet(urlStr: String, connectMs: Int = 12000, readMs: Int = 12000): Pair<Int, String> {
-    val url = URL(urlStr)
-    val conn = (url.openConnection() as HttpURLConnection).apply {
-        connectTimeout = connectMs
-        readTimeout = readMs
-        requestMethod = "GET"
+private fun stepFor(serviceName: String) = if (serviceName.contains("شدة") || serviceName.contains("ببجي")) 1 else 1000
+private fun priceFor(serviceName: String, qty: Int, basePrice: Double): Double {
+    val div = when {
+        serviceName.contains("10k", true) -> 10000.0
+        serviceName.contains("شدة") || serviceName.contains("ببجي") -> 1.0
+        else -> 1000.0
     }
-    val code = conn.responseCode
-    val body = try {
-        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-        stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-    } catch (_: Exception) { "" }
-    conn.disconnect()
-    return code to body
-}
-private fun httpJson(
-    urlStr: String,
-    method: String,
-    body: String,
-    connectMs: Int = 12000,
-    readMs: Int = 12000
-): Pair<Int, String> {
-    val url = URL(urlStr)
-    val conn = (url.openConnection() as HttpURLConnection).apply {
-        connectTimeout = connectMs
-        readTimeout = readMs
-        requestMethod = method
-        doOutput = true
-        setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-    }
-    conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-    val code = conn.responseCode
-    val resp = try {
-        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-        stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-    } catch (_: Exception) { "" }
-    conn.disconnect()
-    return code to resp
-}
-
-/* ========= /health ========= */
-private suspend fun pingHealth(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
-    try {
-        val (c1, b1) = httpGet("$BASE_URL/health", 6000, 6000)
-        if (c1 == 200 && b1.contains("\"ok\"")) return@withContext true to b1
-        httpGet("$BASE_URL/", 6000, 6000) // إيقاظ هيروكو
-        delay(1500)
-        val (c2, b2) = httpGet("$BASE_URL/health", 15000, 15000)
-        (c2 == 200 && b2.contains("\"ok\"")) to b2
-    } catch (e: Exception) {
-        false to (e.message ?: "Network error")
-    }
-}
-
-/* ========= التحقق من وجود UID ========= */
-private suspend fun checkUidExists(uid: String): Boolean = withContext(Dispatchers.IO) {
-    val candidates = listOf(
-        "$BASE_URL/auth/exists?uid=$uid",
-        "$BASE_URL/users/exists?uid=$uid",
-        "$BASE_URL/user/exists?uid=$uid",
-        "$BASE_URL/api/users/exists?uid=$uid",
-        "$BASE_URL/users/$uid",
-        "$BASE_URL/api/users/$uid"
-    )
-    try {
-        for (u in candidates) {
-            val (code, body) = httpGet(u)
-            if (code == 200) {
-                val norm = body.lowercase()
-                if (norm.contains("\"exists\":true") || norm.contains(":true") || norm.trim() == "true") return@withContext true
-                if (norm.contains(uid.lowercase()) && !norm.contains("not found") && !norm.contains("false")) return@withContext true
-            } else if (code == 404) {
-                return@withContext false
-            }
-        }
-        false
-    } catch (_: Exception) { false }
-}
-
-/* ========= تسجيل UID جديد تلقائيًا إذا لم يكن موجودًا ========= */
-private suspend fun registerUidIfMissing(uid: String): Boolean = withContext(Dispatchers.IO) {
-    val payload = """{"uid":"$uid","device_model":"${Build.MODEL}","platform":"android"}"""
-    val candidates = listOf(
-        Triple("$BASE_URL/auth/register", "POST", """{"uid":"$uid"}"""),
-        Triple("$BASE_URL/users", "POST", payload),
-        Triple("$BASE_URL/api/users", "POST", payload),
-        Triple("$BASE_URL/users/$uid", "PUT", payload),
-        Triple("$BASE_URL/api/users/$uid", "PUT", payload)
-    )
-    try {
-        for ((u, m, b) in candidates) {
-            val (code, body) = httpJson(u, m, b)
-            if (code in 200..201) return@withContext true
-            if (code == 409) return@withContext true
-            if (code == 200 && body.lowercase().contains("exists")) return@withContext true
-        }
-        false
-    } catch (_: Exception) { false }
-}
-
-/* ========= ضمان وجود المستخدم (exists أو register) ========= */
-private suspend fun ensureUser(uid: String): Boolean {
-    val (ok, _) = pingHealth()
-    if (!ok) return false
-    return if (checkUidExists(uid)) true else registerUidIfMissing(uid)
+    val raw = basePrice * (qty.toDouble() / div)
+    return (round(raw * 100.0) / 100.0)
 }
 
 /* =========================
-   Root + PIN + تدفق التسجيل التلقائي
+   Root + PIN
    ========================= */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppRoot(vm: AppViewModel = viewModel()) {
-    val ctx = LocalContext.current
     var current by rememberSaveable { mutableStateOf(Screen.HOME) }
     val isOwner by vm.isOwner.collectAsState()
     val drawer = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-
-    // حالة تسجيل محلي + UID
-    var loggedIn by remember { mutableStateOf(isLoggedIn(ctx)) }
-    val localUid = rememberUserUid()
-
-    // تسجيل تلقائي عند أول تشغيل
-    LaunchedEffect(Unit) {
-        if (!loggedIn) {
-            val ok = ensureUser(localUid)
-            if (ok) {
-                setLoggedIn(ctx, true)
-                loggedIn = true
-                Toast.makeText(ctx, "تم إنشاء/تفعيل الحساب تلقائيًا ✅", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(ctx, "تعذر إنشاء الحساب الآن. حاول لاحقًا.", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
     var showPin by remember { mutableStateOf(false) }
+
     var taps by remember { mutableStateOf(0) }
     var lastTap by remember { mutableStateOf(0L) }
-
-    // حوار تسجيل الدخول اليدوي لاستعادة حساب من جهاز آخر
-    var showLoginDialog by remember { mutableStateOf(false) }
 
     ModalNavigationDrawer(
         drawerState = drawer,
@@ -467,18 +349,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                         taps++; lastTap = now
                         if (taps >= 5) { taps = 0; showPin = true }
                     },
-                    onSearch = { current = Screen.SERVICES },
-                    onCloudCheck = {
-                        Toast.makeText(ctx, "جاري فحص السيرفر…", Toast.LENGTH_SHORT).show()
-                        scope.launch {
-                            val (ok, _) = pingHealth()
-                            Toast.makeText(
-                                ctx,
-                                if (ok) "السيرفر متصل ✅" else "تعذر الاتصال بالسيرفر ❌",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
+                    onSearch = { current = Screen.SERVICES }
                 )
             },
             bottomBar = { BottomNav(current, isOwner) { current = it } },
@@ -495,10 +366,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
         ) { padding ->
             Box(Modifier.padding(padding)) {
                 when (current) {
-                    Screen.HOME     -> HomeScreen(vm,
-                        open = { current = it },
-                        onOpenLogin = { showLoginDialog = true }
-                    )
+                    Screen.HOME     -> HomeScreen(vm) { current = it }
                     Screen.SERVICES -> ServicesScreen(vm)
                     Screen.ORDERS   -> OrdersScreen(vm)
                     Screen.WALLET   -> WalletScreen(vm)
@@ -517,82 +385,10 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
             onDisable = { vm.disableOwner() }
         )
     }
-
-    if (showLoginDialog) {
-        LoginDialog(
-            onClose = { showLoginDialog = false },
-            onSwitchUid = { inputUid ->
-                scope.launch {
-                    if (inputUid.isBlank()) return@launch
-                    val ok = checkUidExists(inputUid)
-                    if (ok) {
-                        setUid(ctx, inputUid)
-                        setLoggedIn(ctx, true)
-                        Toast.makeText(ctx, "تم تسجيل الدخول واستعادة الحساب ✅", Toast.LENGTH_SHORT).show()
-                        showLoginDialog = false
-                    } else {
-                        Toast.makeText(ctx, "UID غير موجود في قاعدة البيانات ❌", Toast.LENGTH_LONG).show()
-                    }
-                }
-            },
-            onCreateNew = {
-                scope.launch {
-                    // إنشاء UID جديد عشوائي وتسجيله فورًا
-                    val newUid = "U" + (100000..999999).random()
-                    val created = registerUidIfMissing(newUid)
-                    if (created) {
-                        setUid(ctx, newUid)
-                        setLoggedIn(ctx, true)
-                        Toast.makeText(ctx, "تم إنشاء حساب جديد وتسجيل الدخول ✅ ($newUid)", Toast.LENGTH_LONG).show()
-                        showLoginDialog = false
-                    } else {
-                        Toast.makeText(ctx, "تعذر إنشاء حساب جديد الآن ❌", Toast.LENGTH_LONG).show()
-                    }
-                }
-            }
-        )
-    }
 }
 
 /* =========================
-   شاشة/حوار تسجيل الدخول البسيط (إدخال UID)
-   ========================= */
-@Composable
-private fun LoginDialog(
-    onClose: () -> Unit,
-    onSwitchUid: (String) -> Unit,
-    onCreateNew: () -> Unit
-) {
-    var uid by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text("تسجيل الدخول / استعادة حساب") },
-        text = {
-            Column {
-                Text("أدخل UID الخاص بك لاستعادة حسابك من أي جهاز.", color = OnBg.copy(alpha = 0.8f))
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = uid,
-                    onValueChange = { uid = it.trim() },
-                    label = { Text("UID") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                AssistChip(
-                    onClick = onCreateNew,
-                    label = { Text("أريد حسابًا جديدًا") },
-                    leadingIcon = { Icon(Icons.Filled.Add, contentDescription = null) }
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = { onSwitchUid(uid) }) { Text("تسجيل الدخول") } },
-        dismissButton = { TextButton(onClick = onClose) { Text("إلغاء") } }
-    )
-}
-
-/* =========================
-   Top Bar — اسم التطبيق
+   Top Bar — اسم التطبيق “خدمات راتلوزن”
    ========================= */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -600,8 +396,7 @@ private fun TopBar(
     balanceFlow: StateFlow<Double>,
     onMenu: () -> Unit,
     onLogoTapped: () -> Unit,
-    onSearch: () -> Unit,
-    onCloudCheck: () -> Unit
+    onSearch: () -> Unit
 ) {
     val balance by balanceFlow.collectAsState()
     CenterAlignedTopAppBar(
@@ -635,6 +430,7 @@ private fun TopBar(
                     .padding(end = 10.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(Surface2)
+                    .clickable { }
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -643,14 +439,6 @@ private fun TopBar(
                     Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = Accent)
                 }
             }
-            Icon(
-                Icons.Filled.CloudQueue, contentDescription = "السيرفر",
-                modifier = Modifier
-                    .padding(end = 4.dp)
-                    .clip(CircleShape)
-                    .clickable { onCloudCheck() }
-                    .padding(8.dp)
-            )
             Icon(
                 Icons.Filled.Search, contentDescription = "بحث",
                 modifier = Modifier
@@ -705,11 +493,16 @@ private fun BottomNav(current: Screen, isOwner: Boolean, onSelect: (Screen) -> U
 }
 
 /* =========================
-   HOME — UID + زر تسجيل الدخول مرتب
+   HOME — بانر + أقسام + بطاقات + UID/Login
    ========================= */
 @Composable
-fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit, onOpenLogin: () -> Unit) {
-    val userUid = rememberUserUid()
+fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
+    val ctx = LocalContext.current
+    val clip = LocalClipboardManager.current
+    val uid by remember { mutableStateOf(Prefs.ensureUid(ctx)) } // يُنشأ تلقائياً إن لم يوجد
+
+    var showLogin by remember { mutableStateOf(false) }
+
     val banners = listOf(
         Color(0xFF141821) to Color(0xFF252A39),
         Color(0xFF19202A) to Color(0xFF2C3446),
@@ -717,11 +510,51 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit, onOpenLogin: () -> Unit
     )
     var bannerIndex by remember { mutableStateOf(0) }
 
-    Column(Modifier.fillMaxSize().background(Bg)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Bg)
+            .padding(top = 8.dp) // منع أي اقتراب من شريط العنوان
+    ) {
+        // صف علوي: زر تسجيل الدخول + بطاقة UID
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(
+                onClick = { showLogin = true },
+                modifier = Modifier
+                    .height(44.dp)
+            ) { Text("تسجيل الدخول") }
 
-        // شارة UID قابلة للنسخ + زر تسجيل الدخول/التبديل
-        UserIdRow(userUid, onOpenLogin)
+            Spacer(Modifier.width(10.dp))
 
+            ElevatedCard(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.elevatedCardColors(containerColor = Surface2)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "معرّفك: $uid (انقر للنسخ)",
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                            .clickable {
+                                clip.setText(AnnotatedString(uid))
+                            }
+                    )
+                    Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = Accent)
+                }
+            }
+        }
+
+        // بانرات زخرفية
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
@@ -742,15 +575,14 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit, onOpenLogin: () -> Unit
         Dots(count = banners.size, active = bannerIndex)
 
         Spacer(Modifier.height(8.dp))
-        Row(Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("الخدمات", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(Modifier.weight(1f))
             AssistChip(onClick = { open(Screen.SERVICES) }, label = { Text("عرض الكل") })
         }
         Spacer(Modifier.height(6.dp))
 
+        // أقسام عامة
         Row(
             Modifier
                 .fillMaxWidth()
@@ -759,14 +591,15 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit, onOpenLogin: () -> Unit
             horizontalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             CategoryIcon("الكل", Icons.Filled.Apps, selected = true) { open(Screen.SERVICES) }
-            CategoryIcon("سوشيال", Icons.Filled.Group, selected = false) { open(Screen.SERVICES) }     // ← تمت إضافة selected
-            CategoryIcon("تليجرام", Icons.Filled.Send, selected = false) { open(Screen.SERVICES) }      // ← تمت إضافة selected
-            CategoryIcon("الألعاب", Icons.Filled.SportsEsports, selected = false) { open(Screen.SERVICES) } // ← تمت إضافة selected
-            CategoryIcon("شحن/رصيد", Icons.Filled.CreditCard, selected = false) { open(Screen.SERVICES) }   // ← تمت إضافة selected
+            CategoryIcon("سوشيال", Icons.Filled.Group) { open(Screen.SERVICES) }
+            CategoryIcon("تليجرام", Icons.Filled.Send) { open(Screen.SERVICES) }
+            CategoryIcon("الألعاب", Icons.Filled.SportsEsports) { open(Screen.SERVICES) }
+            CategoryIcon("شحن/رصيد", Icons.Filled.CreditCard) { open(Screen.SERVICES) }
         }
 
         Spacer(Modifier.height(10.dp))
 
+        // بطاقات عامة
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 120.dp, start = 12.dp, end = 12.dp),
@@ -793,41 +626,34 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit, onOpenLogin: () -> Unit
             }
         }
     }
-}
 
-@Composable
-private fun UserIdRow(uid: String, onOpenLogin: () -> Unit) {
-    val clipboard = LocalClipboardManager.current
-    val ctx = LocalContext.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp, start = 14.dp, end = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            Modifier
-                .weight(1f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Surface2)
-                .clickable {
-                    clipboard.setText(AnnotatedString(uid))
-                    Toast.makeText(ctx, "تم نسخ المعرّف: $uid", Toast.LENGTH_SHORT).show()
+    // حوار تسجيل الدخول بإدخال UID (للاستخدام من جهاز آخر)
+    if (showLogin) {
+        var uidInput by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showLogin = false },
+            title = { Text("تسجيل الدخول بواسطة UID") },
+            text = {
+                Column {
+                    Text("أدخل UID الذي لديك لاسترجاع حسابك.")
+                    OutlinedTextField(
+                        value = uidInput,
+                        onValueChange = { uidInput = it.trim() },
+                        label = { Text("UID مثل U123456") },
+                        singleLine = true
+                    )
                 }
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Badge, contentDescription = null, tint = Accent)
-                Spacer(Modifier.width(8.dp))
-                Text("معرّفك: $uid (انقر للنسخ)", fontWeight = FontWeight.SemiBold)
-            }
-        }
-        Spacer(Modifier.width(8.dp))
-        ElevatedButton(
-            onClick = onOpenLogin,
-            shape = RoundedCornerShape(12.dp)
-        ) { Text("تسجيل الدخول") }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (uidInput.matches(Regex("^U\\d{6}\$"))) {
+                        Prefs.saveUid(ctx, uidInput)
+                        showLogin = false
+                    }
+                }) { Text("تأكيد") }
+            },
+            dismissButton = { TextButton(onClick = { showLogin = false }) { Text("إلغاء") } }
+        )
     }
 }
 
@@ -837,7 +663,7 @@ private fun BannerCard(modifier: Modifier = Modifier, start: Color, end: Color) 
         modifier
             .clip(RoundedCornerShape(18.dp))
             .background(Brush.linearGradient(listOf(start, end)))
-    ) { }
+    ) { /* زخرفة فقط */ }
 }
 
 @Composable
@@ -857,7 +683,12 @@ private fun Dots(count: Int, active: Int) {
 }
 
 @Composable
-private fun CategoryIcon(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onClick: () -> Unit) {
+private fun CategoryIcon(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean = false,
+    onClick: () -> Unit
+) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.widthIn(min = 76.dp)) {
         Box(
             Modifier
@@ -886,7 +717,7 @@ private fun ProductCard(title: String, tag: String, colors: List<Color>, onClick
                 .height(180.dp)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-            .background(Brush.linearGradient(colors)),
+                .background(Brush.linearGradient(colors)),
             contentAlignment = Alignment.BottomStart
         ) {
             Text(title, modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold)
@@ -911,70 +742,92 @@ private fun ProductCard(title: String, tag: String, colors: List<Color>, onClick
 }
 
 /* =========================
-   SERVICES — أقسام + أزرار خدمات
+   SERVICES — مجموعات ثم عناصر
    ========================= */
 data class BuyInfo(val service: String, val qty: Int, val price: Double)
 
 @Composable
 fun ServicesScreen(vm: AppViewModel) {
+    val qtyOverrides by vm.qtyOverrides.collectAsState()
+    val priceOverrides by vm.priceOverrides.collectAsState()
+    val qtyMap = remember { mutableStateMapOf<String, Int>() }
     var query by remember { mutableStateOf("") }
     var buy by remember { mutableStateOf<BuyInfo?>(null) }
 
+    // مفتاح المجموعة المفتوحة
+    var openGroup by remember { mutableStateOf<String?>(null) }
+
     val blocks = listOf(
-        "لايكات/مشاهدات/متابعين" to vm.servicesTikIgViewsLikesScore,
-        "تليجرام" to vm.servicesTelegram,
-        "ببجي" to vm.servicesPubg,
-        "ايتونز" to vm.servicesItunes,
-        "شحن الموبايل" to vm.servicesMobile,
-        "لودو" to vm.servicesLudo
+        "TikTok/Instagram/Views/Likes/Score" to vm.servicesTikIgViewsLikesScore,
+        "Telegram" to vm.servicesTelegram,
+        "PUBG" to vm.servicesPubg,
+        "iTunes" to vm.servicesItunes,
+        "Mobile" to vm.servicesMobile,
+        "Ludo" to vm.servicesLudo
     )
-    var selected by remember { mutableStateOf(0) }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            blocks.forEachIndexed { i, (title, _) ->
-                FilterChip(
-                    selected = selected == i,
-                    onClick = { selected = i },
-                    label = { Text(title) }
-                )
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
         OutlinedTextField(
             value = query, onValueChange = { query = it },
-            label = { Text("ابحث داخل القسم المحدد") },
+            label = { Text("ابحث عن خدمة") },
             leadingIcon = { Icon(Icons.Filled.Search, null) },
             modifier = Modifier.fillMaxWidth()
         )
+        Spacer(Modifier.height(8.dp))
 
-        Spacer(Modifier.height(10.dp))
-
-        val data = blocks[selected].second
         LazyColumn(
             contentPadding = PaddingValues(bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(data.toList(), key = { it.first }) { (svc, price) ->
-                if (query.isNotBlank() && !svc.contains(query, true)) return@items
-                ServiceButton(
-                    label = labelForButton(svc, price),
-                    onClick = {
-                        val qty = extractQtyFromName(svc)
-                        buy = BuyInfo(svc, qty, price)
+            items(blocks) { (group, data) ->
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.elevatedCardColors(containerColor = Surface2)
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth().clickable {
+                                openGroup = if (openGroup == group) null else group
+                            },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                if (openGroup == group) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                                contentDescription = null
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(group, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Accent)
+                        }
+
+                        if (openGroup == group) {
+                            Spacer(Modifier.height(6.dp))
+                            data.forEach { (svc, base) ->
+                                if (query.isNotBlank() && !svc.contains(query, true)) return@forEach
+                                val step = stepFor(svc)
+                                val defaultQty = qtyOverrides[svc] ?: extractQtyFromName(svc)
+                                val qty = qtyMap[svc] ?: defaultQty
+                                val basePrice = vm.effectiveBasePrice(vm.currentUserId, svc, base)
+                                val price = priceFor(svc, qty, basePrice)
+
+                                ServiceRow(
+                                    service = svc,
+                                    qty = qty,
+                                    basePrice = basePrice,
+                                    price = price,
+                                    onDec = { qtyMap[svc] = max(step, qty - step) },
+                                    onInc = { qtyMap[svc] = qty + step },
+                                    onBuy = { buy = BuyInfo(svc, qty, price) }
+                                )
+                                Spacer(Modifier.height(8.dp))
+                            }
+                        }
                     }
-                )
+                }
             }
         }
     }
 
+    // شراء
     buy?.let { info ->
         var open by remember { mutableStateOf(true) }
         var link by remember { mutableStateOf("") }
@@ -1002,22 +855,36 @@ fun ServicesScreen(vm: AppViewModel) {
 }
 
 @Composable
-private fun ServiceButton(label: String, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Surface2, contentColor = OnBg)
+private fun ServiceRow(
+    service: String,
+    qty: Int,
+    basePrice: Double,
+    price: Double,
+    onDec: () -> Unit,
+    onInc: () -> Unit,
+    onBuy: () -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Surface2)
+            .padding(12.dp)
     ) {
-        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
+        Text(service, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(4.dp))
+        Text("السعر الأساسي: ${"%.2f".format(basePrice)} $", fontSize = 12.sp)
+        Text("سعر الطلب الحالي: ${"%.2f".format(price)} $", fontWeight = FontWeight.SemiBold)
 
-private fun labelForButton(svc: String, price: Double): String {
-    val qtyRaw = Regex("(\\d+\\s*k|\\d+)").find(svc)?.value ?: ""
-    val qty = qtyRaw.replace("k", "000", ignoreCase = true).trim()
-    val name = svc.replace(qtyRaw, "").trim()
-    return if (qty.isNotBlank()) "(${qty}) - $${"%.1f".format(price)}  $name" else "$name - $${"%.1f".format(price)}"
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onDec) { Text("-${stepFor(service)}") }
+            Text("$qty", fontWeight = FontWeight.Bold)
+            OutlinedButton(onClick = onInc) { Text("+${stepFor(service)}") }
+            Spacer(Modifier.weight(1f))
+            ElevatedButton(onClick = onBuy) { Text("شراء") }
+        }
+    }
 }
 
 /* =========================
@@ -1133,11 +1000,18 @@ fun SupportScreen() {
 }
 
 /* =========================
-   Owner Dashboard — إدارة المشرفين فقط
+   Owner Dashboard
    ========================= */
 @Composable
 fun OwnerDashboard(vm: AppViewModel) {
     val moderators by vm.moderators.collectAsState()
+    val priceOverrides by vm.priceOverrides.collectAsState()
+    val qtyOverrides by vm.qtyOverrides.collectAsState()
+
+    var svcPrice by remember { mutableStateOf("") }
+    var newPrice by remember { mutableStateOf("") }
+    var svcQty by remember { mutableStateOf("") }
+    var newQty by remember { mutableStateOf("") }
     var modId by remember { mutableStateOf("") }
 
     Column(
@@ -1147,6 +1021,40 @@ fun OwnerDashboard(vm: AppViewModel) {
             .verticalScroll(rememberScrollState())
     ) {
         Text("لوحة تحكم المالك", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp)) {
+                Text("تعديل الأسعار", fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(value = svcPrice, onValueChange = { svcPrice = it }, label = { Text("اسم الخدمة (بالضبط)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = newPrice, onValueChange = { newPrice = it }, label = { Text("سعر جديد بالدولار") }, modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ElevatedButton(onClick = { newPrice.toDoubleOrNull()?.let { p -> if (svcPrice.isNotBlank()) vm.setPriceOverride(svcPrice.trim(), p) } }) { Text("حفظ السعر") }
+                    OutlinedButton(onClick = { svcPrice = ""; newPrice = "" }) { Text("تفريغ") }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("Overrides الحالية:")
+                priceOverrides.forEach { (k, v) -> Text("- $k = ${"%.2f".format(v)}$") }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp)) {
+                Text("تعديل الكمية الافتراضية", fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(value = svcQty, onValueChange = { svcQty = it }, label = { Text("اسم الخدمة (بالضبط)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = newQty, onValueChange = { newQty = it }, label = { Text("الكمية (عدد صحيح)") }, modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ElevatedButton(onClick = { newQty.toIntOrNull()?.let { q -> if (svcQty.isNotBlank()) vm.setQtyOverride(svcQty.trim(), q) } }) { Text("حفظ الكمية") }
+                    OutlinedButton(onClick = { svcQty = ""; newQty = "" }) { Text("تفريغ") }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("كميات افتراضية مخصصة:")
+                qtyOverrides.forEach { (k, v) -> Text("- $k = $v") }
+            }
+        }
+
         Spacer(Modifier.height(12.dp))
 
         ElevatedCard(Modifier.fillMaxWidth()) {

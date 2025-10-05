@@ -1,18 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.zafer.smm">
+
+    <!-- صلاحية الاتصال بالإنترنت لفحص/استخدام السيرفر -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- (اختياري) لمعرفة حالة الشبكة إن احتجتها لاحقًا -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
-        android:name=".SmmApp"
         android:allowBackup="true"
         android:label="خدمات راتلوزن"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.Smm">
-
-        <activity
-            android:name=".crash.CrashReportActivity"
-            android:exported="false" />
+        android:supportsRtl="true">
 
         <activity
             android:name=".MainActivity"
@@ -25,3 +24,4 @@
 
     </application>
 </manifest>
+```0

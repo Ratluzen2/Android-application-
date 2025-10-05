@@ -3,6 +3,7 @@
 package com.zafer.smm
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -27,9 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,21 +36,15 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.round
-import android.widget.Toast
 import java.net.HttpURLConnection
 import java.net.URL
-import android.content.Context
-
-/* =========================
-   API CONFIG
-   ========================= */
-private const val BASE_URL = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // بدون سلاش في النهاية
-private const val API_KEY  = "ضع_هنا_نفس_قيمة_API_KEY_من_Heroku" // للهيدر X-API-KEY إذا احتجته لاحقًا
+import kotlin.math.max
+import kotlin.math.round
 
 /* =========================
    Theme — داكن احترافي
@@ -60,8 +53,12 @@ private val Bg       = Color(0xFF0F1115)
 private val Surface1 = Color(0xFF151821)
 private val Surface2 = Color(0xFF1E2230)
 private val OnBg     = Color(0xFFE9EAEE)
-private val Accent   = Color(0xFFFFD54F)
-private val Mint     = Color(0xFF4CD964)
+private val Accent   = Color(0xFFFFD54F) // أصفر بارز
+private val Mint     = Color(0xFF4CD964) // أخضر للأزرار البارزة
+
+// العنوان الكامل لباك إند هيروكو — بدون سلاش أخير
+private const val BASE_URL =
+    "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
@@ -115,7 +112,7 @@ data class Order(
 data class CardSubmission(val userId: Int, val digits: String, val ts: Long = System.currentTimeMillis())
 
 /* =========================
-   ViewModel
+   ViewModel (نفس الميزات)
    ========================= */
 private const val OWNER_PIN = "123456"
 
@@ -133,12 +130,8 @@ class AppViewModel : ViewModel() {
     private val _moderators = MutableStateFlow<Set<Int>>(emptySet())
     val moderators: StateFlow<Set<Int>> = _moderators
 
-    // خرائط الخدمات (السعر النهائي)
+    // الخرائط كما هي
     val servicesTikIgViewsLikesScore = linkedMapOf(
-        "لايكات تيكتوك 1k" to 1.0,
-        "لايكات تيكتوك 2k" to 2.0,
-        "لايكات تيكتوك 3k" to 3.0,
-        "لايكات تيكتوك 4k" to 4.0,
         "متابعين تيكتوك 1k" to 3.50,
         "متابعين تيكتوك 2k" to 7.0,
         "متابعين تيكتوك 3k" to 10.50,
@@ -148,6 +141,14 @@ class AppViewModel : ViewModel() {
         "مشاهدات تيكتوك 20k" to 1.60,
         "مشاهدات تيكتوك 30k" to 2.40,
         "مشاهدات تيكتوك 50k" to 3.20,
+        "متابعين انستغرام 1k" to 3.0,
+        "متابعين انستغرام 2k" to 6.0,
+        "متابعين انستغرام 3k" to 9.0,
+        "متابعين انستغرام 4k" to 12.0,
+        "لايكات تيكتوك 1k" to 1.0,
+        "لايكات تيكتوك 2k" to 2.0,
+        "لايكات تيكتوك 3k" to 3.0,
+        "لايكات تيكتوك 4k" to 4.0,
         "لايكات انستغرام 1k" to 1.0,
         "لايكات انستغرام 2k" to 2.0,
         "لايكات انستغرام 3k" to 3.0,
@@ -203,31 +204,37 @@ class AppViewModel : ViewModel() {
         "شراء رصيد 50 ايتونز" to 90.0,
     )
     val servicesMobile = linkedMapOf(
-        "شراء رصيد 2دولار اثير" to 3.5,
-        "شراء رصيد 5دولار اثير" to 7.0,
-        "شراء رصيد 10دولار اثير" to 13.0,
-        "شراء رصيد 15دولار اثير" to 19.0,
-        "شراء رصيد 40دولار اثير" to 52.0,
-        "شراء رصيد 2دولار اسيا" to 3.5,
-        "شراء رصيد 5دولار اسيا" to 7.0,
-        "شراء رصيد 10دولار اسيا" to 13.0,
-        "شراء رصيد 15دولار اسيا" to 19.0,
-        "شراء رصيد 40دولار اسيا" to 52.0,
-        "شراء رصيد 2دولار كورك" to 3.5,
-        "شراء رصيد 5دولار كورك" to 7.0,
-        "شراء رصيد 10دولار كورك" to 13.0,
-        "شراء رصيد 15دولار كورك" to 19.0,
+        "شراء رصيد 2دولار اثير" to 2.0,
+        "شراء رصيد 5دولار اثير" to 5.0,
+        "شراء رصيد 10دولار اثير" to 10.0,
+        "شراء رصيد 15دولار اثير" to 15.0,
+        "شراء رصيد 40دولار اثير" to 40.0,
+        "شراء رصيد 2دولار اسيا" to 2.0,
+        "شراء رصيد 5دولار اسيا" to 5.0,
+        "شراء رصيد 10دولار اسيا" to 10.0,
+        "شراء رصيد 15دولار اسيا" to 15.0,
+        "شراء رصيد 40دولار اسيا" to 40.0,
+        "شراء رصيد 2دولار كورك" to 2.0,
+        "شراء رصيد 5دولار كورك" to 5.0,
+        "شراء رصيد 10دولار كورك" to 10.0,
+        "شراء رصيد 15دولار كورك" to 15.0,
+        "شراء رصيد 40دولار كورك" to 40.0,
     )
     val servicesLudo = linkedMapOf(
-        "لودو 810 الماسة" to 4.0,
-        "لودو 2280 الماسة" to 8.9,
-        "لودو 5080 الماسة" to 17.5,
-        "لودو 12750 الماسة" to 42.7,
-        "لودو 66680 ذهب" to 4.0,
-        "لودو 219500 ذهب" to 8.9,
-        "لودو 1443000 ذهب" to 17.5,
-        "لودو 3627000 ذهب" to 42.7,
+        "لودو 810 الماسة" to 3.0,
+        "لودو 2280 الماسة" to 7.0,
+        "لودو 5080 الماسة" to 13.0,
+        "لودو 12750 الماسة" to 28.0,
+        "لودو 66680 ذهب" to 3.0,
+        "لودو 219500 ذهب" to 7.0,
+        "لودو 1443000 ذهب" to 13.0,
+        "لودو 3627000 ذهب" to 28.0,
     )
+
+    private val _priceOverrides = MutableStateFlow<Map<String, Double>>(emptyMap())
+    val priceOverrides: StateFlow<Map<String, Double>> = _priceOverrides
+    private val _qtyOverrides = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val qtyOverrides: StateFlow<Map<String, Int>> = _qtyOverrides
 
     private val _orders = MutableStateFlow<List<Order>>(emptyList())
     val orders: StateFlow<List<Order>> = _orders
@@ -241,6 +248,18 @@ class AppViewModel : ViewModel() {
     fun isModerator(userId: Int) = _moderators.value.contains(userId)
     fun addModerator(userId: Int) { _moderators.value = _moderators.value + userId }
     fun removeModerator(userId: Int) { _moderators.value = _moderators.value - userId }
+
+    fun setPriceOverride(service: String, price: Double) {
+        _priceOverrides.value = _priceOverrides.value.toMutableMap().apply { this[service] = price }
+    }
+    fun setQtyOverride(service: String, qty: Int) {
+        _qtyOverrides.value = _qtyOverrides.value.toMutableMap().apply { this[service] = qty }
+    }
+
+    fun effectiveBasePrice(userId: Int, service: String, default: Double): Double {
+        val base = _priceOverrides.value[service] ?: default
+        return if (isModerator(userId)) round2(base * 0.9) else base
+    }
 
     fun addOrder(userId: Int, category: String, service: String, qty: Int, price: Double, link: String) {
         val o = Order(++orderAutoId, userId, category, service, qty, round2(price), "pending", link)
@@ -264,42 +283,54 @@ class AppViewModel : ViewModel() {
 }
 
 /* =========================
-   Helpers — UID للمستخدم
+   Helpers
    ========================= */
-private const val PREFS = "ratluzen_prefs"
-private const val KEY_UID = "user_uid"
-
-private fun getOrCreateUserUid(context: Context): String {
-    val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    val existing = sp.getString(KEY_UID, null)
-    if (existing != null) return existing
-    // UID بسيط مثل U123456
-    val newId = "U" + (100000..999999).random()
-    sp.edit().putString(KEY_UID, newId).apply()
-    return newId
+private fun extractQtyFromName(name: String): Int {
+    val k = Regex("(\\d+)\\s*k", RegexOption.IGNORE_CASE).find(name)?.groupValues?.getOrNull(1)?.toIntOrNull()
+    if (k != null) return k * 1000
+    return Regex("(\\d+)").findAll(name).lastOrNull()?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 1000
+}
+private fun stepFor(serviceName: String) = if (serviceName.contains("شدة") || serviceName.contains("ببجي")) 1 else 1000
+private fun priceFor(serviceName: String, qty: Int, basePrice: Double): Double {
+    val div = when {
+        serviceName.contains("10k", true) -> 10000.0
+        serviceName.contains("شدة") || serviceName.contains("ببجي") -> 1.0
+        else -> 1000.0
+    }
+    val raw = basePrice * (qty.toDouble() / div)
+    return (round(raw * 100.0) / 100.0)
 }
 
-@Composable
-private fun rememberUserUid(): String {
-    val ctx = LocalContext.current
-    return remember { getOrCreateUserUid(ctx) }
-}
-
-/* ========= فحص السيرفر /health ========= */
+/* ========= فحص السيرفر /health (مع إيقاظ هيروكو وإعادة المحاولة) ========= */
 private suspend fun pingHealth(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("$BASE_URL/health")
+    fun hit(urlStr: String, connectMs: Int, readMs: Int): Pair<Int, String> {
+        val url = URL(urlStr)
         val conn = (url.openConnection() as HttpURLConnection).apply {
-            connectTimeout = 5000
-            readTimeout = 5000
+            connectTimeout = connectMs
+            readTimeout = readMs
             requestMethod = "GET"
         }
         val code = conn.responseCode
-        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-        val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+        val body = try {
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+        } catch (_: Exception) { "" }
         conn.disconnect()
-        val ok = code == 200 && body.contains("\"ok\":")
-        ok to body
+        return code to body
+    }
+
+    try {
+        // محاولة سريعة
+        val (c1, b1) = hit("$BASE_URL/health", 6000, 6000)
+        if (c1 == 200 && b1.contains("\"ok\"")) return@withContext true to b1
+
+        // إيقاظ هيروكو على المسار الرئيسي ثم انتظار قصير
+        hit("$BASE_URL/", 6000, 6000)
+        delay(1500)
+
+        // إعادة المحاولة بمهلة أطول
+        val (c2, b2) = hit("$BASE_URL/health", 15000, 15000)
+        (c2 == 200 && b2.contains("\"ok\"")) to b2
     } catch (e: Exception) {
         false to (e.message ?: "Network error")
     }
@@ -315,10 +346,8 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
     val isOwner by vm.isOwner.collectAsState()
     val drawer = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    var showPin by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
-
-    val userUid = rememberUserUid() // ← UID ثابت للمستخدم
+    var showPin by remember { mutableStateOf(false) }
 
     var taps by remember { mutableStateOf(0) }
     var lastTap by remember { mutableStateOf(0L) }
@@ -346,9 +375,14 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                     },
                     onSearch = { current = Screen.SERVICES },
                     onCloudCheck = {
+                        Toast.makeText(ctx, "جاري فحص السيرفر…", Toast.LENGTH_SHORT).show()
                         scope.launch {
                             val (ok, _) = pingHealth()
-                            Toast.makeText(ctx, if (ok) "السيرفر متصل ✅" else "تعذر الاتصال بالسيرفر ❌", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                ctx,
+                                if (ok) "السيرفر متصل ✅" else "تعذر الاتصال بالسيرفر ❌",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     }
                 )
@@ -367,7 +401,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
         ) { padding ->
             Box(Modifier.padding(padding)) {
                 when (current) {
-                    Screen.HOME     -> HomeScreen(vm, userUid) { current = it } // ← نعرض UID هنا
+                    Screen.HOME     -> HomeScreen(vm) { current = it }
                     Screen.SERVICES -> ServicesScreen(vm)
                     Screen.ORDERS   -> OrdersScreen(vm)
                     Screen.WALLET   -> WalletScreen(vm)
@@ -389,7 +423,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
 }
 
 /* =========================
-   Top Bar
+   Top Bar — اسم التطبيق “خدمات راتلوزن”
    ========================= */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -432,6 +466,7 @@ private fun TopBar(
                     .padding(end = 10.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(Surface2)
+                    .clickable { }
                     .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -440,8 +475,9 @@ private fun TopBar(
                     Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = Accent)
                 }
             }
+            // زر فحص السيرفر
             Icon(
-                Icons.Filled.CloudQueue, contentDescription = "فحص السيرفر",
+                Icons.Filled.CloudQueue, contentDescription = "السيرفر",
                 modifier = Modifier
                     .padding(end = 4.dp)
                     .clip(CircleShape)
@@ -502,10 +538,10 @@ private fun BottomNav(current: Screen, isOwner: Boolean, onSelect: (Screen) -> U
 }
 
 /* =========================
-   HOME — يظهر UID أعلى الصفحة
+   HOME — بانر بدون كلمات + أقسام عامة + بطاقات عامة
    ========================= */
 @Composable
-fun HomeScreen(vm: AppViewModel, userUid: String, open: (Screen) -> Unit) {
+fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
     val banners = listOf(
         Color(0xFF141821) to Color(0xFF252A39),
         Color(0xFF19202A) to Color(0xFF2C3446),
@@ -514,10 +550,6 @@ fun HomeScreen(vm: AppViewModel, userUid: String, open: (Screen) -> Unit) {
     var bannerIndex by remember { mutableStateOf(0) }
 
     Column(Modifier.fillMaxSize().background(Bg)) {
-
-        // شارة UID (تُنسخ بالضغط)
-        UserIdPill(userUid)
-
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
@@ -584,35 +616,6 @@ fun HomeScreen(vm: AppViewModel, userUid: String, open: (Screen) -> Unit) {
                         colors = listOf(Color(0xFF0E3B2E), Color(0xFF15A979))
                     ) { open(Screen.SERVICES) }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun UserIdPill(uid: String) {
-    val clipboard = LocalClipboardManager.current
-    val ctx = LocalContext.current
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp, start = 14.dp, end = 14.dp)
-    ) {
-        Box(
-            Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .background(Surface2)
-                .clickable {
-                    clipboard.setText(AnnotatedString(uid))
-                    Toast.makeText(ctx, "تم نسخ المعرّف: $uid", Toast.LENGTH_SHORT).show()
-                }
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            contentAlignment = Alignment.CenterStart
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Badge, contentDescription = null, tint = Accent)
-                Spacer(Modifier.width(8.dp))
-                Text("معرّفك: $uid (انقر للنسخ)", fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -698,68 +701,80 @@ private fun ProductCard(title: String, tag: String, colors: List<Color>, onClick
 }
 
 /* =========================
-   SERVICES — أقسام + أزرار مثل البوت
+   SERVICES — كما السابق
    ========================= */
 data class BuyInfo(val service: String, val qty: Int, val price: Double)
 
 @Composable
 fun ServicesScreen(vm: AppViewModel) {
+    val qtyOverrides by vm.qtyOverrides.collectAsState()
+    val priceOverrides by vm.priceOverrides.collectAsState()
+    val qtyMap = remember { mutableStateMapOf<String, Int>() }
     var query by remember { mutableStateOf("") }
     var buy by remember { mutableStateOf<BuyInfo?>(null) }
+    var editService by remember { mutableStateOf<String?>(null) }
 
     val blocks = listOf(
-        "لايكات/مشاهدات/متابعين" to vm.servicesTikIgViewsLikesScore,
-        "تليجرام" to vm.servicesTelegram,
-        "ببجي" to vm.servicesPubg,
-        "ايتونز" to vm.servicesItunes,
-        "شحن الموبايل" to vm.servicesMobile,
-        "لودو" to vm.servicesLudo
+        "TikTok/Instagram/Views/Likes/Score" to vm.servicesTikIgViewsLikesScore,
+        "Telegram" to vm.servicesTelegram,
+        "PUBG" to vm.servicesPubg,
+        "iTunes" to vm.servicesItunes,
+        "Mobile" to vm.servicesMobile,
+        "Ludo" to vm.servicesLudo
     )
-    var selected by remember { mutableStateOf(0) }
 
     Column(Modifier.fillMaxSize().padding(12.dp)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            blocks.forEachIndexed { i, (title, _) ->
-                FilterChip(
-                    selected = selected == i,
-                    onClick = { selected = i },
-                    label = { Text(title) }
-                )
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
         OutlinedTextField(
             value = query, onValueChange = { query = it },
-            label = { Text("ابحث عن خدمة داخل القسم") },
+            label = { Text("ابحث عن خدمة") },
             leadingIcon = { Icon(Icons.Filled.Search, null) },
             modifier = Modifier.fillMaxWidth()
         )
+        Spacer(Modifier.height(8.dp))
 
-        Spacer(Modifier.height(10.dp))
-
-        val data = blocks[selected].second
         LazyColumn(
             contentPadding = PaddingValues(bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(data.toList(), key = { it.first }) { (svc, price) ->
-                if (query.isNotBlank() && !svc.contains(query, true)) return@items
-                ServiceButton(
-                    label = labelForButton(svc, price),
-                    onClick = {
-                        val qty = extractQtyFromName(svc)
-                        buy = BuyInfo(svc, qty, price)
-                    }
-                )
+            blocks.forEach { (group, data) ->
+                item { Text(group, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Accent) }
+                items(data.toList(), key = { it.first }) { (svc, base) ->
+                    if (query.isNotBlank() && !svc.contains(query, true)) return@items
+                    val step = stepFor(svc)
+                    val defaultQty = qtyOverrides[svc] ?: extractQtyFromName(svc)
+                    val qty = qtyMap[svc] ?: defaultQty
+                    val basePrice = vm.effectiveBasePrice(vm.currentUserId, svc, base)
+                    val price = priceFor(svc, qty, basePrice)
+
+                    ServiceRow(
+                        service = svc,
+                        qty = qty,
+                        basePrice = basePrice,
+                        price = price,
+                        onDec = { qtyMap[svc] = max(step, qty - step) },
+                        onInc = { qtyMap[svc] = qty + step },
+                        onBuy = { buy = BuyInfo(svc, qty, price) },
+                        onEdit = { editService = svc }
+                    )
+                }
             }
         }
+    }
+
+    editService?.let { svc ->
+        var priceTxt by remember { mutableStateOf((priceOverrides[svc] ?: 0.0).takeIf { it > 0 }?.toString() ?: "") }
+        AlertDialog(
+            onDismissRequest = { editService = null },
+            title = { Text("تعديل سعر: $svc") },
+            text = { OutlinedTextField(value = priceTxt, onValueChange = { priceTxt = it }, label = { Text("السعر بالدولار") }) },
+            confirmButton = {
+                TextButton(onClick = {
+                    priceTxt.toDoubleOrNull()?.let { vm.setPriceOverride(svc, it) }
+                    editService = null
+                }) { Text("حفظ") }
+            },
+            dismissButton = { TextButton(onClick = { editService = null }) { Text("إلغاء") } }
+        )
     }
 
     buy?.let { info ->
@@ -789,22 +804,38 @@ fun ServicesScreen(vm: AppViewModel) {
 }
 
 @Composable
-private fun ServiceButton(label: String, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = Surface2, contentColor = OnBg)
+private fun ServiceRow(
+    service: String,
+    qty: Int,
+    basePrice: Double,
+    price: Double,
+    onDec: () -> Unit,
+    onInc: () -> Unit,
+    onBuy: () -> Unit,
+    onEdit: () -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Surface2)
+            .padding(12.dp)
     ) {
-        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
+        Text(service, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(4.dp))
+        Text("السعر الأساسي: ${"%.2f".format(basePrice)} $", fontSize = 12.sp)
+        Text("سعر الطلب الحالي: ${"%.2f".format(price)} $", fontWeight = FontWeight.SemiBold)
 
-private fun labelForButton(svc: String, price: Double): String {
-    val qtyRaw = Regex("(\\d+\\s*k|\\d+)").find(svc)?.value ?: ""
-    val qty = qtyRaw.replace("k", "000", ignoreCase = true).trim()
-    val name = svc.replace(qtyRaw, "").trim()
-    return if (qty.isNotBlank()) "(${qty}) - $${"%.1f".format(price)}  $name" else "$name - $${"%.1f".format(price)}"
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onDec) { Text("-${stepFor(service)}") }
+            Text("$qty", fontWeight = FontWeight.Bold)
+            OutlinedButton(onClick = onInc) { Text("+${stepFor(service)}") }
+            Spacer(Modifier.weight(1f))
+            ElevatedButton(onClick = onBuy) { Text("شراء") }
+            OutlinedButton(onClick = onEdit) { Text("تعديل السعر") }
+        }
+    }
 }
 
 /* =========================
@@ -920,11 +951,18 @@ fun SupportScreen() {
 }
 
 /* =========================
-   Owner Dashboard — إدارة المشرفين فقط
+   Owner Dashboard
    ========================= */
 @Composable
 fun OwnerDashboard(vm: AppViewModel) {
     val moderators by vm.moderators.collectAsState()
+    val priceOverrides by vm.priceOverrides.collectAsState()
+    val qtyOverrides by vm.qtyOverrides.collectAsState()
+
+    var svcPrice by remember { mutableStateOf("") }
+    var newPrice by remember { mutableStateOf("") }
+    var svcQty by remember { mutableStateOf("") }
+    var newQty by remember { mutableStateOf("") }
     var modId by remember { mutableStateOf("") }
 
     Column(
@@ -934,6 +972,40 @@ fun OwnerDashboard(vm: AppViewModel) {
             .verticalScroll(rememberScrollState())
     ) {
         Text("لوحة تحكم المالك", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp)) {
+                Text("تعديل الأسعار", fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(value = svcPrice, onValueChange = { svcPrice = it }, label = { Text("اسم الخدمة (بالضبط)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = newPrice, onValueChange = { newPrice = it }, label = { Text("سعر جديد بالدولار") }, modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ElevatedButton(onClick = { newPrice.toDoubleOrNull()?.let { p -> if (svcPrice.isNotBlank()) vm.setPriceOverride(svcPrice.trim(), p) } }) { Text("حفظ السعر") }
+                    OutlinedButton(onClick = { svcPrice = ""; newPrice = "" }) { Text("تفريغ") }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("Overrides الحالية:")
+                priceOverrides.forEach { (k, v) -> Text("- $k = ${"%.2f".format(v)}$") }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp)) {
+                Text("تعديل الكمية الافتراضية", fontWeight = FontWeight.SemiBold)
+                OutlinedTextField(value = svcQty, onValueChange = { svcQty = it }, label = { Text("اسم الخدمة (بالضبط)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = newQty, onValueChange = { newQty = it }, label = { Text("الكمية (عدد صحيح)") }, modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ElevatedButton(onClick = { newQty.toIntOrNull()?.let { q -> if (svcQty.isNotBlank()) vm.setQtyOverride(svcQty.trim(), q) } }) { Text("حفظ الكمية") }
+                    OutlinedButton(onClick = { svcQty = ""; newQty = "" }) { Text("تفريغ") }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("كميات افتراضية مخصصة:")
+                qtyOverrides.forEach { (k, v) -> Text("- $k = $v") }
+            }
+        }
+
         Spacer(Modifier.height(12.dp))
 
         ElevatedCard(Modifier.fillMaxWidth()) {

@@ -1,4 +1,5 @@
 @file:Suppress("UnusedImport")
+@file:OptIn(androidx.compose.ui.unit.ExperimentalUnitApi::class)
 
 package com.zafer.smm
 
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.ExperimentalUnitApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

@@ -93,7 +93,7 @@ fun AppTheme(content: @Composable () -> Unit) {
 /* =========================
    Screens
    ========================= */
-enum class Screen { HOME, SERVICES, ORDERS, WALLET, SUPPORT, OWNER }
+enum class Screen { LOGIN, HOME, SERVICES, ORDERS, WALLET, SUPPORT, OWNER }
 
 /* =========================
    Models
@@ -259,10 +259,11 @@ class AppViewModel : ViewModel() {
 }
 
 /* =========================
-   Helpers — UID للمستخدم + فحص السيرفر
+   Helpers — UID للمستخدم + فحص السيرفر + تسجيل الدخول
    ========================= */
 private const val PREFS = "ratluzen_prefs"
 private const val KEY_UID = "user_uid"
+private const val KEY_LOGGED_IN = "logged_in"
 
 private fun getOrCreateUserUid(context: Context): String {
     val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -271,6 +272,14 @@ private fun getOrCreateUserUid(context: Context): String {
     val newId = "U" + (100000..999999).random()
     sp.edit().putString(KEY_UID, newId).apply()
     return newId
+}
+private fun isLoggedIn(context: Context): Boolean {
+    val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    return sp.getBoolean(KEY_LOGGED_IN, false)
+}
+private fun setLoggedIn(context: Context, v: Boolean) {
+    val sp = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    sp.edit().putBoolean(KEY_LOGGED_IN, v).apply()
 }
 
 @Composable
@@ -306,7 +315,7 @@ private suspend fun pingHealth(): Pair<Boolean, String> = withContext(Dispatcher
     try {
         val (c1, b1) = hit("$BASE_URL/health", 6000, 6000)
         if (c1 == 200 && b1.contains("\"ok\"")) return@withContext true to b1
-        hit("$BASE_URL/", 6000, 6000)
+        hit("$BASE_URL/", 6000, 6000) // إيقاظ هيروكو
         delay(1500)
         val (c2, b2) = hit("$BASE_URL/health", 15000, 15000)
         (c2 == 200 && b2.contains("\"ok\"")) to b2
@@ -315,17 +324,73 @@ private suspend fun pingHealth(): Pair<Boolean, String> = withContext(Dispatcher
     }
 }
 
+/* ========= التحقق من وجود UID في قاعدة البيانات =========
+ * مهم: عدّل endpoint في الباك-إند ليعيد JSON مثل:
+ * { "exists": true } لـ GET /auth/exists?uid=XXXX
+ */
+private suspend fun checkUidExists(uid: String): Boolean = withContext(Dispatchers.IO) {
+    fun get(urlStr: String): Pair<Int, String> {
+        val url = URL(urlStr)
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            connectTimeout = 12000
+            readTimeout = 12000
+            requestMethod = "GET"
+        }
+        val code = conn.responseCode
+        val body = try {
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+        } catch (_: Exception) { "" }
+        conn.disconnect()
+        return code to body
+    }
+
+    // مسارات مرشحة، غيّر/احذف غير المناسب حسب باك-إندك
+    val candidates = listOf(
+        "$BASE_URL/auth/exists?uid=$uid",
+        "$BASE_URL/users/exists?uid=$uid",
+        "$BASE_URL/user/exists?uid=$uid",
+        "$BASE_URL/api/users/exists?uid=$uid",
+        "$BASE_URL/users/$uid",     // قد يعيد 200 عند الوجود و 404 عند عدم الوجود
+        "$BASE_URL/api/users/$uid"
+    )
+
+    try {
+        for (u in candidates) {
+            val (code, body) = get(u)
+            if (code == 200) {
+                val norm = body.lowercase()
+                // تحقق بسيط بدون JSON parser إضافي
+                if (norm.contains("\"exists\":true") || norm.contains(":true") || norm.trim() == "true") return@withContext true
+                if (norm.contains(uid.lowercase()) && !norm.contains("not found") && !norm.contains("false")) return@withContext true
+            } else if (code == 404) {
+                return@withContext false
+            }
+        }
+        false
+    } catch (e: Exception) {
+        false
+    }
+}
+
 /* =========================
-   Root + PIN
+   Root + PIN + تدفق تسجيل الدخول
    ========================= */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppRoot(vm: AppViewModel = viewModel()) {
+    val ctx = LocalContext.current
+
+    // حالة تسجيل الدخول من التخزين المحلي
+    var loggedIn by remember { mutableStateOf(isLoggedIn(ctx)) }
     var current by rememberSaveable { mutableStateOf(Screen.HOME) }
+
+    // عند أول تشغيل، إن لم تكن مسجّلًا → انتقل لشاشة تسجيل الدخول
+    LaunchedEffect(Unit) { if (!loggedIn) current = Screen.LOGIN }
+
     val isOwner by vm.isOwner.collectAsState()
     val drawer = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val ctx = LocalContext.current
     var showPin by remember { mutableStateOf(false) }
 
     var taps by remember { mutableStateOf(0) }
@@ -334,52 +399,69 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
     ModalNavigationDrawer(
         drawerState = drawer,
         drawerContent = {
-            DrawerContent(current, isOwner) {
-                current = it
-                scope.launch { drawer.close() }
+            if (current != Screen.LOGIN) {
+                DrawerContent(current, isOwner) {
+                    current = it
+                    scope.launch { drawer.close() }
+                }
             }
         }
     ) {
         Scaffold(
             containerColor = Bg,
             topBar = {
-                TopBar(
-                    balanceFlow = vm.balance,
-                    onMenu = { scope.launch { drawer.open() } },
-                    onLogoTapped = {
-                        val now = System.currentTimeMillis()
-                        if (now - lastTap > 2000) taps = 0
-                        taps++; lastTap = now
-                        if (taps >= 5) { taps = 0; showPin = true }
-                    },
-                    onSearch = { current = Screen.SERVICES },
-                    onCloudCheck = {
-                        Toast.makeText(ctx, "جاري فحص السيرفر…", Toast.LENGTH_SHORT).show()
-                        scope.launch {
-                            val (ok, _) = pingHealth()
-                            Toast.makeText(
-                                ctx,
-                                if (ok) "السيرفر متصل ✅" else "تعذر الاتصال بالسيرفر ❌",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                if (current != Screen.LOGIN) {
+                    TopBar(
+                        balanceFlow = vm.balance,
+                        onMenu = { scope.launch { drawer.open() } },
+                        onLogoTapped = {
+                            val now = System.currentTimeMillis()
+                            if (now - lastTap > 2000) taps = 0
+                            taps++; lastTap = now
+                            if (taps >= 5) { taps = 0; showPin = true }
+                        },
+                        onSearch = { current = Screen.SERVICES },
+                        onCloudCheck = {
+                            Toast.makeText(ctx, "جاري فحص السيرفر…", Toast.LENGTH_SHORT).show()
+                            scope.launch {
+                                val (ok, _) = pingHealth()
+                                Toast.makeText(
+                                    ctx,
+                                    if (ok) "السيرفر متصل ✅" else "تعذر الاتصال بالسيرفر ❌",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         }
-                    }
-                )
+                    )
+                }
             },
-            bottomBar = { BottomNav(current, isOwner) { current = it } },
+            bottomBar = {
+                if (current != Screen.LOGIN) BottomNav(current, isOwner) { current = it }
+            },
             floatingActionButton = {
-                ExtendedFloatingActionButton(
-                    containerColor = Mint,
-                    contentColor = Color.Black,
-                    onClick = { current = Screen.SUPPORT },
-                    text = { Text("راسل الدعم", fontWeight = FontWeight.SemiBold) },
-                    icon = { Icon(Icons.Filled.ChatBubble, contentDescription = null) }
-                )
+                if (current != Screen.LOGIN) {
+                    ExtendedFloatingActionButton(
+                        containerColor = Mint,
+                        contentColor = Color.Black,
+                        onClick = { current = Screen.SUPPORT },
+                        text = { Text("راسل الدعم", fontWeight = FontWeight.SemiBold) },
+                        icon = { Icon(Icons.Filled.ChatBubble, contentDescription = null) }
+                    )
+                }
             },
             floatingActionButtonPosition = FabPosition.Center,
         ) { padding ->
             Box(Modifier.padding(padding)) {
                 when (current) {
+                    Screen.LOGIN   -> LoginScreen(
+                        onLoggedIn = {
+                            setLoggedIn(ctx, true)
+                            loggedIn = true
+                            Toast.makeText(ctx, "تم تسجيل الدخول بنجاح ✅", Toast.LENGTH_SHORT).show()
+                            // بعد تسجيل الدخول → الرئيسية
+                            current = Screen.HOME
+                        }
+                    )
                     Screen.HOME     -> HomeScreen(vm) { current = it }
                     Screen.SERVICES -> ServicesScreen(vm)
                     Screen.ORDERS   -> OrdersScreen(vm)
@@ -397,6 +479,110 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
             onDismiss = { showPin = false },
             onEnable = { if (it == OWNER_PIN) vm.enableOwner() },
             onDisable = { vm.disableOwner() }
+        )
+    }
+}
+
+/* =========================
+   شاشة تسجيل الدخول بالـUID فقط
+   ========================= */
+@Composable
+private fun LoginScreen(onLoggedIn: () -> Unit) {
+    val ctx = LocalContext.current
+    val uid = rememberUserUid()
+    val scope = rememberCoroutineScope()
+
+    var checking by remember { mutableStateOf(false) }
+    var status by remember { mutableStateOf<String?>(null) }
+    val clipboard = LocalClipboardManager.current
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Bg)
+            .padding(18.dp)
+    ) {
+        Spacer(Modifier.height(18.dp))
+        Text("تسجيل الدخول", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold)
+        Spacer(Modifier.height(8.dp))
+        Text("يتم تسجيل الدخول بالاعتماد على UID الخاص بك. إذا كان UID موجوداً في قاعدة البيانات سيتم تسجيل الدخول فورًا.", color = OnBg.copy(alpha = 0.8f))
+        Spacer(Modifier.height(18.dp))
+
+        // بطاقة UID
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp)) {
+                Text("معرّف المستخدم (UID):", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(Surface2)
+                        .padding(12.dp)
+                ) {
+                    Icon(Icons.Filled.Badge, contentDescription = null, tint = Accent)
+                    Spacer(Modifier.width(8.dp))
+                    Text(uid, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = {
+                        clipboard.setText(AnnotatedString(uid))
+                        Toast.makeText(ctx, "تم نسخ UID", Toast.LENGTH_SHORT).show()
+                    }) { Text("نسخ") }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = {
+                            if (checking) return@Button
+                            checking = true
+                            status = "جارِ التحقق من الحساب…"
+                            scope.launch {
+                                val (ok, _) = pingHealth()
+                                if (!ok) {
+                                    status = "تعذر الاتصال بالسيرفر ❌"
+                                    checking = false
+                                    return@launch
+                                }
+                                val exists = checkUidExists(uid)
+                                if (exists) {
+                                    status = "الحساب موجود ✅"
+                                    onLoggedIn()
+                                } else {
+                                    status = "UID غير موجود في قاعدة البيانات ❌"
+                                }
+                                checking = false
+                            }
+                        },
+                        enabled = !checking,
+                        shape = RoundedCornerShape(12.dp)
+                    ) { Text(if (checking) "جارِ الفحص…" else "تسجيل الدخول") }
+
+                    OutlinedButton(
+                        onClick = {
+                            clipboard.setText(AnnotatedString(uid))
+                            Toast.makeText(ctx, "أرسل UID للدعم لتفعيله", Toast.LENGTH_SHORT).show()
+                        },
+                        enabled = !checking,
+                        shape = RoundedCornerShape(12.dp)
+                    ) { Text("إرسال للدعم") }
+                }
+
+                status?.let {
+                    Spacer(Modifier.height(10.dp))
+                    Text(it, color = if (it.contains("✅")) Mint else MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(24.dp))
+        AssistChip(
+            onClick = {
+                Toast.makeText(ctx, "يمكنك دائمًا نسخ UID وإرساله للتفعيل.", Toast.LENGTH_SHORT).show()
+            },
+            label = { Text("تعليمات سريعة") },
+            leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) }
         )
     }
 }

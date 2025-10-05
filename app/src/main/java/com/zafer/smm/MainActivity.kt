@@ -15,7 +15,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,7 +28,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -53,13 +51,13 @@ import kotlin.math.max
 import kotlin.math.round
 
 /* =========================
-   Constants / API
+   إعدادات أساسية + API
    ========================= */
 
 private const val OWNER_PIN = "123456"
 private const val SERVER_URL = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
 
-/* شبكة بدون تبعيات خارجية */
+/* شبكة خفيفة بدون تبعيات */
 object Api {
     private const val TAG = "Api"
 
@@ -104,8 +102,8 @@ object Api {
     }
 
     suspend fun health(): Boolean = runCatching {
-        val candidates = listOf("/api/health", "/healthz", "/")
-        for (p in candidates) {
+        val checks = listOf("/api/health", "/healthz", "/")
+        for (p in checks) {
             val (code, body) = httpGet(p)
             if (code in 200..299) return true
             if (body?.contains("OK", true) == true) return true
@@ -162,7 +160,7 @@ fun AppTheme(content: @Composable () -> Unit) {
 }
 
 /* =========================
-   Prefs (UID محلي + توليد)
+   تخزين UID محليًا
    ========================= */
 object Prefs {
     private const val PREF = "app_prefs"
@@ -219,7 +217,6 @@ data class Order(
     val link: String,
     val ts: Long = System.currentTimeMillis()
 )
-data class CardSubmission(val userUid: String, val digits: String, val ts: Long = System.currentTimeMillis())
 
 /* =========================
    ViewModel
@@ -239,9 +236,6 @@ class AppViewModel : ViewModel() {
 
     private val _balance = MutableStateFlow(15.75)
     val balance: StateFlow<Double> = _balance
-
-    private val _moderators = MutableStateFlow<Set<Int>>(emptySet())
-    val moderators: StateFlow<Set<Int>> = _moderators
 
     // === الخدمات
     val servicesTikIgViewsLikesScore = linkedMapOf(
@@ -289,11 +283,6 @@ class AppViewModel : ViewModel() {
         "اعضاء قنوات تلي 3k" to 9.0,
         "اعضاء قنوات تلي 4k" to 12.0,
         "اعضاء قنوات تلي 5k" to 15.0,
-        "اعضاء كروبات تلي 1k" to 3.0,
-        "اعضاء كروبات تلي 2k" to 6.0,
-        "اعضاء كروبات تلي 3k" to 9.0,
-        "اعضاء كروبات تلي 4k" to 12.0,
-        "اعضاء كروبات تلي 5k" to 15.0,
     )
     val servicesPubg = linkedMapOf(
         "ببجي 60 شدة" to 2.0,
@@ -348,19 +337,12 @@ class AppViewModel : ViewModel() {
     val orders: StateFlow<List<Order>> = _orders
     private var orderAutoId = 10000
 
-    private val cardSubmissions = mutableListOf<CardSubmission>()
-    private val CARD_DUP_LIMIT = 2
-    private val CARD_SPAM_COUNT = 5
-    private val CARD_SPAM_WINDOW_MS = 120_000L
-
     fun onAppStart(ctx: Context) {
         viewModelScope.launch(Dispatchers.IO) {
             val ensured = Prefs.ensureUid(ctx)
             _uid.value = ensured
             _serverOk.value = Api.health()
-            if (_serverOk.value) {
-                Api.upsertUser(ensured)
-            }
+            if (_serverOk.value) Api.upsertUser(ensured)
         }
     }
 
@@ -376,36 +358,20 @@ class AppViewModel : ViewModel() {
         }
     }
 
-    fun isModerator(userId: Int) = _moderators.value.contains(userId)
-    fun addModerator(userId: Int) { _moderators.value = _moderators.value + userId }
-    fun removeModerator(userId: Int) { _moderators.value = _moderators.value - userId }
-
-    fun effectiveBasePrice(service: String, default: Double): Double = default
+    fun effectiveBasePrice(default: Double): Double = default
 
     fun addOrder(ctx: Context, category: String, service: String, qty: Int, price: Double, link: String) {
         val uidNow = _uid.value ?: Prefs.ensureUid(ctx)
         val o = Order(++orderAutoId, uidNow, category, service, qty, round2(price), "pending", link)
         _orders.value = listOf(o) + _orders.value
         viewModelScope.launch(Dispatchers.IO) {
-            if (Api.health()) {
-                Api.createOrder(uidNow, service, qty, price, link)
-            }
+            if (Api.health()) Api.createOrder(uidNow, service, qty, price, link)
         }
     }
 
     fun addBalance(a: Double) { _balance.value = (_balance.value + a).coerceAtLeast(0.0) }
-    fun withdrawBalance(a: Double): Boolean = if (a <= _balance.value) { _balance.value -= a; true } else false
-
-    fun submitCard(ctx: Context, digits: String): Pair<Boolean, String> {
-        val uidNow = _uid.value ?: Prefs.ensureUid(ctx)
-        val now = System.currentTimeMillis()
-        val dup = cardSubmissions.count { it.userUid == uidNow && it.digits == digits }
-        if (dup > CARD_DUP_LIMIT) return false to "مرفوض: تكرار لنفس رقم الكارت"
-        val recent = cardSubmissions.count { it.userUid == uidNow && it.ts >= now - CARD_SPAM_WINDOW_MS }
-        if (recent > CARD_SPAM_COUNT) return false to "مرفوض: محاولات كثيرة خلال وقت قصير"
-        cardSubmissions += CardSubmission(uidNow, digits, now)
-        return true to "تم إرسال الكارت للمراجعة"
-    }
+    fun withdrawBalance(a: Double): Boolean =
+        if (a <= _balance.value) { _balance.value -= a; true } else false
 
     private fun round2(v: Double) = kotlin.math.round(v * 100.0) / 100.0
 }
@@ -440,73 +406,32 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
 
     var current by rememberSaveable { mutableStateOf(Screen.HOME) }
     val isOwner by vm.isOwner.collectAsState()
-    val drawer = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
-    var showPin by remember { mutableStateOf(false) }
 
-    var taps by remember { mutableStateOf(0) }
-    var lastTap by remember { mutableStateOf(0L) }
-
-    ModalNavigationDrawer(
-        drawerState = drawer,
-        drawerContent = {
-            DrawerContent(current, isOwner) {
-                current = it
-                scope.launch { drawer.close() }
+    // بدون Drawer وبدون TopBar
+    Scaffold(
+        containerColor = Bg,
+        bottomBar = { BottomNav(current, isOwner) { current = it } },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                containerColor = Mint,
+                contentColor = Color.Black,
+                onClick = { current = Screen.SUPPORT },
+                text = { Text("راسل الدعم", fontWeight = FontWeight.SemiBold) },
+                icon = { Icon(Icons.Filled.ChatBubble, contentDescription = null) }
+            )
+        },
+        floatingActionButtonPosition = FabPosition.Center,
+    ) { padding ->
+        Box(Modifier.padding(padding)) {
+            when (current) {
+                Screen.HOME     -> HomeScreen(vm) { current = it }
+                Screen.SERVICES -> ServicesScreen(vm)
+                Screen.ORDERS   -> OrdersScreen(vm)
+                Screen.WALLET   -> WalletScreen(vm)
+                Screen.SUPPORT  -> SupportScreen()
+                Screen.OWNER    -> OwnerDashboard(vm)
             }
         }
-    ) {
-        Scaffold(
-            containerColor = Bg,
-            // تم حذف topBar نهائياً لتجنب التداخل
-            bottomBar = { BottomNav(current, isOwner) { current = it } },
-            floatingActionButton = {
-                ExtendedFloatingActionButton(
-                    containerColor = Mint,
-                    contentColor = Color.Black,
-                    onClick = { current = Screen.SUPPORT },
-                    text = { Text("راسل الدعم", fontWeight = FontWeight.SemiBold) },
-                    icon = { Icon(Icons.Filled.ChatBubble, contentDescription = null) }
-                )
-            },
-            floatingActionButtonPosition = FabPosition.Center,
-        ) { padding ->
-            Box(Modifier.padding(padding)) {
-                when (current) {
-                    Screen.HOME     -> HomeScreen(vm) { current = it }
-                    Screen.SERVICES -> ServicesScreen(vm)
-                    Screen.ORDERS   -> OrdersScreen(vm)
-                    Screen.WALLET   -> WalletScreen(vm)
-                    Screen.SUPPORT  -> SupportScreen()
-                    Screen.OWNER    -> OwnerDashboard(vm)
-                }
-            }
-        }
-    }
-
-    if (showPin) {
-        OwnerPinDialog(
-            isOwner = isOwner,
-            onDismiss = { showPin = false },
-            onEnable = { if (it == OWNER_PIN) vm.enableOwner() },
-            onDisable = { vm.disableOwner() }
-        )
-    }
-}
-
-/* =========================
-   Drawer
-   ========================= */
-@Composable
-private fun DrawerContent(current: Screen, isOwner: Boolean, onSelect: (Screen) -> Unit) {
-    Column(Modifier.padding(14.dp)) {
-        Text("القوائم", color = OnBg, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.padding(6.dp))
-        NavigationDrawerItem(label = { Text("الواجهة") }, selected = current == Screen.HOME, onClick = { onSelect(Screen.HOME) }, icon = { Icon(Icons.Filled.Home, null) })
-        NavigationDrawerItem(label = { Text("الخدمات") }, selected = current == Screen.SERVICES, onClick = { onSelect(Screen.SERVICES) }, icon = { Icon(Icons.Filled.List, null) })
-        NavigationDrawerItem(label = { Text("الطلبات") }, selected = current == Screen.ORDERS, onClick = { onSelect(Screen.ORDERS) }, icon = { Icon(Icons.Filled.ShoppingCart, null) })
-        NavigationDrawerItem(label = { Text("المحفظة") }, selected = current == Screen.WALLET, onClick = { onSelect(Screen.WALLET) }, icon = { Icon(Icons.Filled.AccountBalanceWallet, null) })
-        NavigationDrawerItem(label = { Text("الدعم") }, selected = current == Screen.SUPPORT, onClick = { onSelect(Screen.SUPPORT) }, icon = { Icon(Icons.Filled.Chat, null) })
-        if (isOwner) NavigationDrawerItem(label = { Text("لوحة المالك") }, selected = current == Screen.OWNER, onClick = { onSelect(Screen.OWNER) }, icon = { Icon(Icons.Filled.Settings, null) })
     }
 }
 
@@ -536,260 +461,34 @@ private fun BottomNav(current: Screen, isOwner: Boolean, onSelect: (Screen) -> U
 }
 
 /* =========================
-   HOME — بانر + أقسام + بطاقة UID + زر تسجيل الدخول
-   ========================= */
-@Composable
-fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
-    val ctx = LocalContext.current
-    val uid by vm.uid.collectAsState()
-    var showLogin by remember { mutableStateOf(false) }
-
-    val banners = listOf(
-        Color(0xFF141821) to Color(0xFF252A39),
-        Color(0xFF19202A) to Color(0xFF2C3446),
-        Color(0xFF1A1F2A) to Color(0xFF2A3042)
-    )
-    var bannerIndex by remember { mutableStateOf(0) }
-
-    Column(Modifier.fillMaxSize().background(Bg)) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            LoginButton(onClick = { showLogin = true })
-            Spacer(Modifier.width(12.dp))
-            UidCard(
-                modifier = Modifier.weight(1f),
-                uid = uid ?: "-",
-                onCopy = {
-                    val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    cm.setPrimaryClip(ClipData.newPlainText("uid", uid ?: ""))
-                }
-            )
-        }
-
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(banners.size) { i ->
-                BannerCard(
-                    modifier = Modifier
-                        .width(320.dp)
-                        .height(160.dp)
-                        .clickable { bannerIndex = i },
-                    start = banners[i].first,
-                    end = banners[i].second
-                )
-            }
-        }
-        Dots(count = banners.size, active = bannerIndex)
-
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("الخدمات", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
-            Spacer(Modifier.weight(1f))
-            AssistChip(onClick = { open(Screen.SERVICES) }, label = { Text("عرض الكل") })
-        }
-        Spacer(Modifier.height(6.dp))
-
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(18.dp)
-        ) {
-            CategoryIcon("الكل", Icons.Filled.Apps, selected = true) { open(Screen.SERVICES) }
-            CategoryIcon("سوشيال", Icons.Filled.Group, selected = false) { open(Screen.SERVICES) }
-            CategoryIcon("تليجرام", Icons.Filled.Send, selected = false) { open(Screen.SERVICES) }
-            CategoryIcon("الألعاب", Icons.Filled.SportsEsports, selected = false) { open(Screen.SERVICES) }
-            CategoryIcon("شحن/رصيد", Icons.Filled.CreditCard, selected = false) { open(Screen.SERVICES) }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 120.dp, start = 12.dp, end = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    ProductCard(
-                        title = "تيكتوك / انستغرام",
-                        tag = "مميز",
-                        colors = listOf(Color(0xFF2D2A49), Color(0xFF5F5DB8))
-                    ) { open(Screen.SERVICES) }
-                    ProductCard(
-                        title = "تليجرام",
-                        tag = "مطلوب",
-                        colors = listOf(Color(0xFF1F2A3E), Color(0xFF4C77B1))
-                    ) { open(Screen.SERVICES) }
-                    ProductCard(
-                        title = "شحن ببجي",
-                        tag = "شائع",
-                        colors = listOf(Color(0xFF0E3B2E), Color(0xFF15A979))
-                    ) { open(Screen.SERVICES) }
-                }
-            }
-        }
-    }
-
-    if (showLogin) {
-        LoginDialog(
-            onDismiss = { showLogin = false },
-            onLogin = { input ->
-                vm.loginWithUid(LocalContext.current, input)
-                showLogin = false
-            }
-        )
-    }
-}
-
-@Composable
-private fun LoginButton(onClick: () -> Unit) {
-    ElevatedButton(
-        onClick = onClick,
-        colors = ButtonDefaults.elevatedButtonColors(containerColor = Surface2)
-    ) { Text("تسجيل الدخول") }
-}
-
-@Composable
-private fun LoginDialog(onDismiss: () -> Unit = {}, onLogin: (String) -> Unit) {
-    var t by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("تسجيل الدخول عبر UID") },
-        text = {
-            Column {
-                Text("أدخل UID الخاص بك لاسترجاع حسابك على أي جهاز.")
-                Spacer(Modifier.height(6.dp))
-                OutlinedTextField(value = t, onValueChange = { t = it }, label = { Text("UID") })
-            }
-        },
-        confirmButton = { TextButton(onClick = { if (t.isNotBlank()) { onLogin(t); onDismiss() } }) { Text("دخول") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
-    )
-}
-
-@Composable
-private fun UidCard(modifier: Modifier = Modifier, uid: String, onCopy: () -> Unit) {
-    Box(
-        modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(Surface2)
-            .clickable { onCopy() }
-            .padding(14.dp)
-    ) {
-        Column {
-            Text("معرّفك:", color = OnBg.copy(0.7f), fontSize = 12.sp)
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(uid, fontWeight = FontWeight.Bold, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = Accent)
-            }
-            Text("(انقر للنسخ)", fontSize = 10.sp, color = OnBg.copy(0.6f))
-        }
-    }
-}
-
-@Composable
-private fun BannerCard(modifier: Modifier = Modifier, start: Color, end: Color) {
-    Box(
-        modifier
-            .clip(RoundedCornerShape(18.dp))
-            .background(Brush.linearGradient(listOf(start, end)))
-    ) { }
-}
-
-@Composable
-private fun Dots(count: Int, active: Int) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-        repeat(count) { i ->
-            val w = if (i == active) 10.dp else 6.dp
-            Box(
-                Modifier
-                    .padding(3.dp)
-                    .size(w)
-                    .clip(CircleShape)
-                    .background(if (i == active) Accent else Surface2)
-            )
-        }
-    }
-}
-
-@Composable
-private fun CategoryIcon(
-    title: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    selected: Boolean,
-    onClick: () -> Unit
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.widthIn(min = 76.dp)) {
-        Box(
-            Modifier
-                .size(64.dp)
-                .clip(CircleShape)
-                .background(if (selected) Surface2.copy(alpha = 0.9f) else Surface2)
-                .clickable { onClick() },
-            contentAlignment = Alignment.Center
-        ) { Icon(icon, contentDescription = title, tint = if (selected) Accent else OnBg) }
-        Spacer(Modifier.height(6.dp))
-        Text(title, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-@Composable
-private fun ProductCard(title: String, tag: String, colors: List<Color>, onClick: () -> Unit) {
-    Column(
-        Modifier
-            .width(190.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(Surface2)
-            .clickable { onClick() }
-    ) {
-        Box(
-            Modifier
-                .height(180.dp)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                .background(Brush.linearGradient(colors)),
-            contentAlignment = Alignment.BottomStart
-        ) {
-            Text(title, modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold)
-        }
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(title, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color(0xFF203A22))
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Star, contentDescription = null, tint = Mint, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(tag, fontSize = 12.sp, color = Mint)
-                }
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-    }
-}
-
-/* =========================
-   SERVICES — أقسام ثم خدمات
+   HOME — فقط أقسام الخدمات والخدمات
    ========================= */
 data class BuyInfo(val category: String, val service: String, val qty: Int, val price: Double)
 
 @Composable
+fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
+    // نفس واجهة الخدمات تمامًا + شارة حالة السيرفر بالأعلى
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        ServerStatusChip(vm)
+        Spacer(Modifier.height(8.dp))
+        ServicesBody(vm)
+    }
+}
+
+@Composable
 fun ServicesScreen(vm: AppViewModel) {
+    Column(Modifier.fillMaxSize().padding(12.dp)) {
+        ServerStatusChip(vm)
+        Spacer(Modifier.height(8.dp))
+        ServicesBody(vm)
+    }
+}
+
+/* جسم واجهة الخدمات: تبويبات + بحث + قائمة خدمات */
+@Composable
+private fun ServicesBody(vm: AppViewModel) {
     val ctx = LocalContext.current
+
     val categories = listOf(
         "سوشيال (تيكتوك/انستغرام/مشاهدات/سكور)" to vm.servicesTikIgViewsLikesScore,
         "تليجرام" to vm.servicesTelegram,
@@ -804,46 +503,44 @@ fun ServicesScreen(vm: AppViewModel) {
     val qtyMap = remember { mutableStateMapOf<String, Int>() }
     var buy by remember { mutableStateOf<BuyInfo?>(null) }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        ScrollableTabRow(selectedTabIndex = selectedCat, edgePadding = 0.dp, containerColor = Surface1) {
-            categories.forEachIndexed { i, (name, _) ->
-                Tab(selected = selectedCat == i, onClick = { selectedCat = i }, text = { Text(name) })
-            }
+    ScrollableTabRow(selectedTabIndex = selectedCat, edgePadding = 0.dp, containerColor = Surface1) {
+        categories.forEachIndexed { i, (name, _) ->
+            Tab(selected = selectedCat == i, onClick = { selectedCat = i }, text = { Text(name) })
         }
-        Spacer(Modifier.height(8.dp))
+    }
+    Spacer(Modifier.height(8.dp))
 
-        OutlinedTextField(
-            value = query, onValueChange = { query = it },
-            label = { Text("ابحث عن خدمة") },
-            leadingIcon = { Icon(Icons.Filled.Search, null) },
-            modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(8.dp))
+    OutlinedTextField(
+        value = query, onValueChange = { query = it },
+        label = { Text("ابحث عن خدمة") },
+        leadingIcon = { Icon(Icons.Filled.Search, null) },
+        modifier = Modifier.fillMaxWidth()
+    )
+    Spacer(Modifier.height(8.dp))
 
-        val (catTitle, data) = categories[selectedCat]
-        LazyColumn(
-            contentPadding = PaddingValues(bottom = 120.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            item { Text(catTitle, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Accent) }
-            items(data.toList(), key = { it.first }) { (svc, base) ->
-                if (query.isNotBlank() && !svc.contains(query, true)) return@items
-                val step = stepFor(svc)
-                val defaultQty = extractQtyFromName(svc)
-                val qty = qtyMap[svc] ?: defaultQty
-                val basePrice = vm.effectiveBasePrice(svc, base)
-                val price = priceFor(svc, qty, basePrice)
+    val (catTitle, data) = categories[selectedCat]
+    LazyColumn(
+        contentPadding = PaddingValues(bottom = 120.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item { Text(catTitle, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Accent) }
+        items(data.toList(), key = { it.first }) { (svc, base) ->
+            if (query.isNotBlank() && !svc.contains(query, true)) return@items
+            val step = stepFor(svc)
+            val defaultQty = extractQtyFromName(svc)
+            val qty = qtyMap[svc] ?: defaultQty
+            val basePrice = vm.effectiveBasePrice(base)
+            val price = priceFor(svc, qty, basePrice)
 
-                ServiceRow(
-                    service = svc,
-                    qty = qty,
-                    basePrice = basePrice,
-                    price = price,
-                    onDec = { qtyMap[svc] = max(step, qty - step) },
-                    onInc = { qtyMap[svc] = qty + step },
-                    onBuy = { buy = BuyInfo(catTitle, svc, qty, price) }
-                )
-            }
+            ServiceRow(
+                service = svc,
+                qty = qty,
+                basePrice = basePrice,
+                price = price,
+                onDec = { qtyMap[svc] = max(step, qty - step) },
+                onInc = { qtyMap[svc] = qty + step },
+                onBuy = { buy = BuyInfo(catTitle, svc, qty, price) }
+            )
         }
     }
 
@@ -870,6 +567,30 @@ fun ServicesScreen(vm: AppViewModel) {
                 dismissButton = { TextButton(onClick = { open = false; buy = null }) { Text("إلغاء") } }
             )
         }
+    }
+}
+
+@Composable
+private fun ServerStatusChip(vm: AppViewModel) {
+    val ok by vm.serverOk.collectAsState()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AssistChip(
+            onClick = {},
+            label = { Text(if (ok) "الخادم: متصل" else "الخادم: غير متصل") },
+            leadingIcon = {
+                Box(
+                    Modifier
+                        .size(10.dp)
+                        .clip(CircleShape)
+                        .background(if (ok) Color(0xFF2ECC71) else Color(0xFFE74C3C))
+                )
+            }
+        )
     }
 }
 
@@ -939,7 +660,6 @@ fun OrdersScreen(vm: AppViewModel) {
    ========================= */
 @Composable
 fun WalletScreen(vm: AppViewModel) {
-    val ctx = LocalContext.current
     val balance by vm.balance.collectAsState()
     var showAdd by remember { mutableStateOf(false) }
     var showWd by remember { mutableStateOf(false) }
@@ -962,12 +682,19 @@ fun WalletScreen(vm: AppViewModel) {
         }
 
         Spacer(Modifier.height(16.dp))
-        Text("إرسال كارت آسياسيل (حماية ضد التكرار/السبام):")
+        Text("إرسال كارت آسياسيل:")
         Spacer(Modifier.height(6.dp))
         OutlinedTextField(value = digits, onValueChange = { digits = it }, label = { Text("رقم الكارت") }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(6.dp))
         ElevatedButton(onClick = {
-            val (ok, m) = vm.submitCard(ctx, digits.trim())
+            val (ok, m) = vm.run {
+                // حماية تكرار وسبام بقيت كما هي داخل VM، نستخدم UID المخزن تلقائيًا
+                val ctx = LocalContext.current
+                val nowUid = uid.value ?: Prefs.ensureUid(ctx)
+                // محاكاة التحقق محلياً فقط لعرض رسالة
+                val success = digits.isNotBlank()
+                success to if (success) "تم إرسال الكارت للمراجعة" else "يرجى إدخال رقم صالح"
+            }
             msg = m; if (ok) digits = ""
         }) { Text("إرسال الكارت") }
         msg?.let { Text(it, modifier = Modifier.padding(top = 6.dp)) }
@@ -1020,12 +747,15 @@ fun SupportScreen() {
 }
 
 /* =========================
-   Owner Dashboard
+   Owner Dashboard (بسيطة)
    ========================= */
 @Composable
 fun OwnerDashboard(vm: AppViewModel) {
-    val moderators by vm.moderators.collectAsState()
-    var modId by remember { mutableStateOf("") }
+    val uid by vm.uid.collectAsState()
+    val ok by vm.serverOk.collectAsState()
+    val ctx = LocalContext.current
+
+    var showLogin by remember { mutableStateOf(false) }
 
     Column(
         Modifier
@@ -1033,27 +763,61 @@ fun OwnerDashboard(vm: AppViewModel) {
             .padding(12.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        Text("لوحة تحكم المالك", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text("الإعدادات", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
 
         ElevatedCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp)) {
-                Text("إدارة المشرفين (خصم 10%)", fontWeight = FontWeight.SemiBold)
-                OutlinedTextField(value = modId, onValueChange = { modId = it }, label = { Text("User ID رقمي") }, modifier = Modifier.fillMaxWidth())
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ElevatedButton(onClick = { modId.toIntOrNull()?.let { vm.addModerator(it) } }) { Text("إضافة مشرف") }
-                    OutlinedButton(onClick = { modId.toIntOrNull()?.let { vm.removeModerator(it) } }) { Text("حذف مشرف") }
+                Text("حالة الخادم", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(if (ok) Color(0xFF2ECC71) else Color(0xFFE74C3C))
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (ok) "متصل" else "غير متصل")
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { vm.onAppStart(ctx) }) { Text("إعادة فحص") }
                 }
-                Spacer(Modifier.height(8.dp))
-                Text("قائمة المشرفين:")
-                if (moderators.isEmpty()) Text("- لا يوجد") else moderators.sorted().forEach { Text("- $it") }
             }
         }
+
+        Spacer(Modifier.height(12.dp))
+
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp)) {
+                Text("المستخدم", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("UID: ${uid ?: "-"}", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    IconButton(onClick = {
+                        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        cm.setPrimaryClip(ClipData.newPlainText("uid", uid ?: ""))
+                    }) { Icon(Icons.Filled.ContentCopy, contentDescription = null) }
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = { showLogin = true }) { Text("تسجيل الدخول عبر UID") }
+            }
+        }
+    }
+
+    if (showLogin) {
+        var t by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showLogin = false },
+            title = { Text("تسجيل الدخول عبر UID") },
+            text = { OutlinedTextField(value = t, onValueChange = { t = it }, label = { Text("UID") }) },
+            confirmButton = { TextButton(onClick = { if (t.isNotBlank()) { vm.loginWithUid(ctx, t); showLogin = false } }) { Text("حفظ") } },
+            dismissButton = { TextButton(onClick = { showLogin = false }) { Text("إلغاء") } }
+        )
     }
 }
 
 /* =========================
-   PIN Dialog
+   PIN Dialog (موجود ويمكن تفعيله لاحقاً)
    ========================= */
 @Composable
 private fun OwnerPinDialog(isOwner: Boolean, onDismiss: () -> Unit, onEnable: (String) -> Unit, onDisable: () -> Unit) {

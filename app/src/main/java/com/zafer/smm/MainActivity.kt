@@ -1,5 +1,4 @@
 @file:Suppress("UnusedImport")
-@file:OptIn(androidx.compose.ui.unit.ExperimentalUnitApi::class)
 
 package com.zafer.smm
 
@@ -26,9 +25,9 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.ExperimentalUnitApi
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.TextUnitType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -143,7 +142,7 @@ fun AppRoot() {
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .statusBarsPadding()
-                .padding(top = 6.dp, end = 10.dp)
+                .padding(top = Dp(6f), end = Dp(10f))
         )
 
         // الشريط السفلي
@@ -181,7 +180,6 @@ fun AppRoot() {
     if (showOwnerDashboard && isOwner) {
         OwnerDashboard(
             onClose = {
-                // إغلاق اليدوي يُخفيها فقط حتى لا تُعرض الآن
                 showOwnerDashboard = false
                 saveOwnerFlags(ctx, owner = isOwner, dashOpen = false)
             }
@@ -213,15 +211,15 @@ private fun SupportScreen() {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(Dp(16f)),
         horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.Top
     ) {
-        Text("الدعم", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
+        Text("الدعم", fontSize = TextUnit(22f, TextUnitType.Sp), fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(Dp(12f)))
         Text("للتواصل أو الاستفسار اختر إحدى الطرق التالية:")
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(Dp(12f)))
         ContactCard(
             title = "واتساب",
             subtitle = "+964 776 341 0970",
@@ -230,7 +228,7 @@ private fun SupportScreen() {
             icon = Icons.Filled.Call
         )
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(Dp(10f)))
         ContactCard(
             title = "تيليجرام",
             subtitle = "@z396r",
@@ -253,18 +251,18 @@ private fun ContactCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(horizontal = 0.dp),
+            .padding(horizontal = Dp(0f)),
         colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(Dp(16f)),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.size(28.dp))
-            Spacer(Modifier.width(12.dp))
+            Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.size(Dp(28f)))
+            Spacer(Modifier.width(Dp(12f)))
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.SemiBold)
-                Text(subtitle, color = Dim, fontSize = 13.sp)
+                Text(subtitle, color = Dim, fontSize = TextUnit(13f, TextUnitType.Sp))
             }
             TextButton(onClick = onClick) { Text(actionText) }
         }
@@ -285,18 +283,18 @@ private fun ServerStatusPill(
     Row(
         modifier = modifier
             .background(Surface1, shape = MaterialTheme.shapes.medium)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = Dp(12f), vertical = Dp(6f)),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             Modifier
-                .size(8.dp)
+                .size(Dp(8f))
                 .background(clr, shape = MaterialTheme.shapes.small)
         )
-        Spacer(Modifier.width(6.dp))
-        Text(txt, fontSize = 12.sp, color = OnBg)
-        Spacer(Modifier.width(10.dp))
-        IconButton(onClick = onOpenSettings, modifier = Modifier.size(18.dp)) {
+        Spacer(Modifier.width(Dp(6f)))
+        Text(txt, fontSize = TextUnit(12f, TextUnitType.Sp), color = OnBg)
+        Spacer(Modifier.width(Dp(10f)))
+        IconButton(onClick = onOpenSettings, modifier = Modifier.size(Dp(18f))) {
             Icon(Icons.Filled.Settings, contentDescription = "الإعدادات", tint = OnBg)
         }
     }
@@ -359,7 +357,7 @@ private fun RowScope.NavItem(
         label = {
             Text(
                 text = label,
-                fontSize = 12.sp,
+                fontSize = TextUnit(12f, TextUnitType.Sp),
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
             )
         },
@@ -382,7 +380,7 @@ private fun SettingsDialog(uid: String, onOwnerLoginClick: () -> Unit, onDismiss
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(Dp(8f))) {
                 TextButton(onClick = onDismiss) { Text("إغلاق") }
             }
         },
@@ -390,17 +388,17 @@ private fun SettingsDialog(uid: String, onOwnerLoginClick: () -> Unit, onDismiss
         text = {
             Column {
                 Text("المعرّف الخاص بك (UID):", fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Dp(6f)))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(uid, color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(8.dp))
+                    Text(uid, color = Accent, fontSize = TextUnit(16f, TextUnitType.Sp), fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(Dp(8f)))
                     OutlinedButton(onClick = {
                         clip.setText(AnnotatedString(uid))
                     }) { Text("نسخ") }
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(Dp(16f)))
                 Divider(color = Dim.copy(alpha = 0.3f))
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(Dp(12f)))
                 // زر تسجيل المالك
                 ElevatedButton(
                     onClick = onOwnerLoginClick,
@@ -411,13 +409,13 @@ private fun SettingsDialog(uid: String, onOwnerLoginClick: () -> Unit, onDismiss
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Filled.VerifiedUser, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(Dp(8f)))
                     Text("تسجيل المالك")
                 }
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(Dp(6f)))
                 Text(
                     "خاص بالمالك فقط، يتطلب كلمة مرور.",
-                    fontSize = 12.sp,
+                    fontSize = TextUnit(12f, TextUnitType.Sp),
                     color = Dim
                 )
             }
@@ -452,8 +450,8 @@ private fun OwnerLoginDialog(
                     visualTransformation = PasswordVisualTransformation()
                 )
                 if (error != null) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(error!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    Spacer(Modifier.height(Dp(6f)))
+                    Text(error!!, color = MaterialTheme.colorScheme.error, fontSize = TextUnit(12f, TextUnitType.Sp))
                 }
             }
         },
@@ -518,31 +516,36 @@ private fun OwnerDashboard(onClose: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Surface1)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = Dp(12f), vertical = Dp(10f)),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onClose) {
                     Icon(Icons.Filled.Close, contentDescription = "إغلاق", tint = OnBg)
                 }
-                Spacer(Modifier.width(6.dp))
-                Text("لوحة تحكم المالك", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.width(Dp(6f)))
+                Text("لوحة تحكم المالك", fontSize = TextUnit(18f, TextUnitType.Sp), fontWeight = FontWeight.SemiBold)
             }
 
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(Dp(12f)),
+                verticalArrangement = Arrangement.spacedBy(Dp(10f))
             ) {
-                actions.chunked(2).forEach { rowItems ->
+                val chunk = 2
+                var i = 0
+                while (i < actions.size) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(Dp(10f)),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        rowItems.forEach { label ->
-                            val handleClick = {
-                                if (label == "فحص رصيد API") {
+                        val label1 = actions[i]
+                        OwnerActionButton(
+                            label = label1,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                if (label1 == "فحص رصيد API") {
                                     loading = true
                                     resultText = "جارِ الفحص..."
                                     showResult = true
@@ -551,18 +554,32 @@ private fun OwnerDashboard(onClose: () -> Unit) {
                                         resultText = text
                                         loading = false
                                     }
-                                } else {
-                                    // باقي الأزرار ستُربط لاحقاً
                                 }
                             }
+                        )
+                        if (i + 1 < actions.size) {
+                            val label2 = actions[i + 1]
                             OwnerActionButton(
-                                label = label,
+                                label = label2,
                                 modifier = Modifier.weight(1f),
-                                onClick = handleClick
+                                onClick = {
+                                    if (label2 == "فحص رصيد API") {
+                                        loading = true
+                                        resultText = "جارِ الفحص..."
+                                        showResult = true
+                                        scope.launch {
+                                            val (_, text) = fetchApiBalance()
+                                            resultText = text
+                                            loading = false
+                                        }
+                                    }
+                                }
                             )
+                        } else {
+                            Spacer(modifier = Modifier.weight(1f))
                         }
-                        if (rowItems.size == 1) Spacer(Modifier.weight(1f))
                     }
+                    i += chunk
                 }
             }
         }
@@ -578,8 +595,8 @@ private fun OwnerDashboard(onClose: () -> Unit) {
             text = {
                 if (loading) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(22.dp))
-                        Spacer(Modifier.width(10.dp))
+                        CircularProgressIndicator(modifier = Modifier.size(Dp(22f)))
+                        Spacer(Modifier.width(Dp(10f)))
                         Text(resultText)
                     }
                 } else {
@@ -598,20 +615,20 @@ private fun OwnerActionButton(
 ) {
     ElevatedCard(
         modifier = modifier
-            .heightIn(min = 64.dp)
+            .heightIn(min = Dp(64f))
             .clickable { onClick() },
         colors = CardDefaults.elevatedCardColors(containerColor = Surface1),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = Dp(4f))
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(Dp(14f)),
             contentAlignment = Alignment.CenterStart
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(Dp(10f))
             ) {
                 Icon(
                     Icons.Filled.Settings,
@@ -621,7 +638,7 @@ private fun OwnerActionButton(
                 Text(
                     label,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp
+                    fontSize = TextUnit(14f, TextUnitType.Sp)
                 )
             }
         }
@@ -711,11 +728,9 @@ private suspend fun fetchApiBalance(): Pair<Boolean, String> = withContext(Dispa
             val text = stream?.use { InputStreamReader(it, Charsets.UTF_8).readText() } ?: ""
             if (code in 200..299) {
                 return@withContext true to (text.ifBlank { "تم بنجاح، بدون محتوى." })
-            } else {
-                // جرّب المسار التالي
             }
         } catch (_: Exception) {
-            // استمر للمسار التالي
+            // جرّب المسار التالي
         }
     }
     false to "تعذر الحصول على الرصيد من الخادم. تأكد من وجود مسار رصيد صالح على الخادم."

@@ -383,7 +383,6 @@ private suspend fun checkUidExists(uid: String): Boolean = withContext(Dispatche
 
 /* ========= تسجيل UID جديد تلقائيًا إذا لم يكن موجودًا ========= */
 private suspend fun registerUidIfMissing(uid: String): Boolean = withContext(Dispatchers.IO) {
-    // نحاول مسارات شائعة لإنشاء المستخدم
     val payload = """{"uid":"$uid","device_model":"${Build.MODEL}","platform":"android"}"""
     val candidates = listOf(
         Triple("$BASE_URL/auth/register", "POST", """{"uid":"$uid"}"""),
@@ -396,9 +395,7 @@ private suspend fun registerUidIfMissing(uid: String): Boolean = withContext(Dis
         for ((u, m, b) in candidates) {
             val (code, body) = httpJson(u, m, b)
             if (code in 200..201) return@withContext true
-            // أحيانًا يرجع 409 إذا موجود مسبقًا — نعتبره نجاح
             if (code == 409) return@withContext true
-            // بعض الـAPIs تعيد 200 مع نص "exists"
             if (code == 200 && body.lowercase().contains("exists")) return@withContext true
         }
         false
@@ -745,7 +742,9 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit, onOpenLogin: () -> Unit
         Dots(count = banners.size, active = bannerIndex)
 
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("الخدمات", fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
             Spacer(Modifier.weight(1f))
             AssistChip(onClick = { open(Screen.SERVICES) }, label = { Text("عرض الكل") })
@@ -760,10 +759,10 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit, onOpenLogin: () -> Unit
             horizontalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             CategoryIcon("الكل", Icons.Filled.Apps, selected = true) { open(Screen.SERVICES) }
-            CategoryIcon("سوشيال", Icons.Filled.Group) { open(Screen.SERVICES) }
-            CategoryIcon("تليجرام", Icons.Filled.Send) { open(Screen.SERVICES) }
-            CategoryIcon("الألعاب", Icons.Filled.SportsEsports) { open(Screen.SERVICES) }
-            CategoryIcon("شحن/رصيد", Icons.Filled.CreditCard) { open(Screen.SERVICES) }
+            CategoryIcon("سوشيال", Icons.Filled.Group, selected = false) { open(Screen.SERVICES) }     // ← تمت إضافة selected
+            CategoryIcon("تليجرام", Icons.Filled.Send, selected = false) { open(Screen.SERVICES) }      // ← تمت إضافة selected
+            CategoryIcon("الألعاب", Icons.Filled.SportsEsports, selected = false) { open(Screen.SERVICES) } // ← تمت إضافة selected
+            CategoryIcon("شحن/رصيد", Icons.Filled.CreditCard, selected = false) { open(Screen.SERVICES) }   // ← تمت إضافة selected
         }
 
         Spacer(Modifier.height(10.dp))
@@ -825,7 +824,6 @@ private fun UserIdRow(uid: String, onOpenLogin: () -> Unit) {
             }
         }
         Spacer(Modifier.width(8.dp))
-        // زر صغير ومرتب لتسجيل الدخول/التبديل
         ElevatedButton(
             onClick = onOpenLogin,
             shape = RoundedCornerShape(12.dp)
@@ -888,7 +886,7 @@ private fun ProductCard(title: String, tag: String, colors: List<Color>, onClick
                 .height(180.dp)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                .background(Brush.linearGradient(colors)),
+            .background(Brush.linearGradient(colors)),
             contentAlignment = Alignment.BottomStart
         ) {
             Text(title, modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold)

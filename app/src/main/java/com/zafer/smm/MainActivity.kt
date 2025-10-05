@@ -32,6 +32,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
+import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
@@ -41,7 +42,7 @@ import kotlin.random.Random
    إعدادات عامة
    ========================= */
 private const val API_BASE =
-    "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // عدّلها إن لزم
+    "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
 
 /* =========================
    Theme
@@ -84,6 +85,12 @@ class MainActivity : ComponentActivity() {
    ========================= */
 private enum class Tab { HOME, SUPPORT, WALLET, ORDERS, SERVICES }
 
+/* مفاتيح التخزين المحلي */
+private const val PREFS = "app_prefs"
+private const val KEY_UID = "uid"
+private const val KEY_OWNER_MODE = "owner_mode"
+private const val KEY_OWNER_DASH_OPEN = "owner_dashboard_open"
+
 @Composable
 fun AppRoot() {
     val ctx = LocalContext.current
@@ -96,10 +103,10 @@ fun AppRoot() {
     // حالة السيرفر
     var online by remember { mutableStateOf<Boolean?>(null) }
 
-    // حالة المالك/لوحته
-    var isOwner by remember { mutableStateOf(false) }        // <-- أزلنا rememberSaveable
+    // حالة المالك/لوحته (محفوظة في SharedPreferences لتبقى بعد إعادة فتح التطبيق)
+    var isOwner by remember { mutableStateOf(loadOwnerMode(ctx)) }
+    var showOwnerDashboard by remember { mutableStateOf(loadOwnerDashOpen(ctx)) }
     var askOwnerPin by remember { mutableStateOf(false) }
-    var showOwnerDashboard by remember { mutableStateOf(false) }
 
     // فحص السيرفر دوري + تسجيل UID
     LaunchedEffect(Unit) {
@@ -160,16 +167,23 @@ fun AppRoot() {
             onSubmit = { pin ->
                 if (pin == "2000") {
                     isOwner = true
-                    askOwnerPin = false
                     showOwnerDashboard = true
+                    saveOwnerFlags(ctx, owner = true, dashOpen = true)
+                    askOwnerPin = false
                 }
             }
         )
     }
 
-    // واجهة لوحة تحكم المالك (أزرار فقط)
+    // واجهة لوحة تحكم المالك (تبقى محفوظة حتى بعد إغلاق التطبيق إذا كانت مفتوحة)
     if (showOwnerDashboard && isOwner) {
-        OwnerDashboard(onClose = { showOwnerDashboard = false })
+        OwnerDashboard(
+            onClose = {
+                // إغلاق اليدوي يُخفيها فقط حتى لا تُعرض الآن
+                showOwnerDashboard = false
+                saveOwnerFlags(ctx, owner = isOwner, dashOpen = false)
+            }
+        )
     }
 }
 
@@ -410,7 +424,7 @@ private fun SettingsDialog(uid: String, onOwnerLoginClick: () -> Unit, onDismiss
 }
 
 /* =========================
-   نافذة إدخال كلمة مرور المالك (بدون KeyboardOptions)
+   نافذة إدخال كلمة مرور المالك
    ========================= */
 @Composable
 private fun OwnerLoginDialog(
@@ -433,7 +447,7 @@ private fun OwnerLoginDialog(
                     },
                     label = { Text("كلمة المرور") },
                     singleLine = true,
-                    visualTransformation = PasswordVisualTransformation() // أزلنا KeyboardOptions
+                    visualTransformation = PasswordVisualTransformation()
                 )
                 if (error != null) {
                     Spacer(Modifier.height(6.dp))
@@ -458,10 +472,15 @@ private fun OwnerLoginDialog(
 }
 
 /* =========================
-   لوحة تحكم المالك — أزرار فقط
+   لوحة تحكم المالك — أزرار فقط + فحص رصيد API
    ========================= */
 @Composable
 private fun OwnerDashboard(onClose: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var showResult by remember { mutableStateOf(false) }
+    var resultText by remember { mutableStateOf("...") }
+    var loading by remember { mutableStateOf(false) }
+
     val actions = listOf(
         "تعديل الأسعار والكميات",
         "الطلبات المعلقة (الخدمات)",
@@ -486,7 +505,6 @@ private fun OwnerDashboard(onClose: () -> Unit) {
         "المتصدرين 🎉"
     )
 
-    // صفحة كاملة فوق التطبيق
     Surface(
         modifier = Modifier
             .fillMaxSize()
@@ -494,7 +512,6 @@ private fun OwnerDashboard(onClose: () -> Unit) {
         color = Bg
     ) {
         Column(Modifier.fillMaxSize()) {
-            // شريط علوي بسيط داخل الصفحة نفسها
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -509,7 +526,6 @@ private fun OwnerDashboard(onClose: () -> Unit) {
                 Text("لوحة تحكم المالك", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
             }
 
-            // شبكة أزرار بشكل صفوف (عمودين)
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -523,9 +539,24 @@ private fun OwnerDashboard(onClose: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         rowItems.forEach { label ->
+                            val handleClick = {
+                                if (label == "فحص رصيد API") {
+                                    loading = true
+                                    resultText = "جارِ الفحص..."
+                                    showResult = true
+                                    scope.launch {
+                                        val (_, text) = fetchApiBalance()
+                                        resultText = text
+                                        loading = false
+                                    }
+                                } else {
+                                    // باقي الأزرار ستُربط لاحقاً
+                                }
+                            }
                             OwnerActionButton(
                                 label = label,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                onClick = handleClick
                             )
                         }
                         if (rowItems.size == 1) Spacer(Modifier.weight(1f))
@@ -534,14 +565,39 @@ private fun OwnerDashboard(onClose: () -> Unit) {
             }
         }
     }
+
+    if (showResult) {
+        AlertDialog(
+            onDismissRequest = { showResult = false },
+            confirmButton = {
+                TextButton(onClick = { showResult = false }) { Text("إغلاق") }
+            },
+            title = { Text("نتيجة فحص رصيد API") },
+            text = {
+                if (loading) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text(resultText)
+                    }
+                } else {
+                    Text(resultText)
+                }
+            }
+        )
+    }
 }
 
 @Composable
-private fun OwnerActionButton(label: String, modifier: Modifier = Modifier) {
+private fun OwnerActionButton(
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
     ElevatedCard(
         modifier = modifier
             .heightIn(min = 64.dp)
-            .clickable { /* سيُربط لاحقاً */ },
+            .clickable { onClick() },
         colors = CardDefaults.elevatedCardColors(containerColor = Surface1),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
     ) {
@@ -571,15 +627,31 @@ private fun OwnerActionButton(label: String, modifier: Modifier = Modifier) {
 }
 
 /* =========================
-   منطق UID + الشبكة
+   منطق UID + الشبكة + تخزين حالة المالك
    ========================= */
+private fun prefs(ctx: Context) =
+    ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
 private fun loadOrCreateUid(ctx: Context): String {
-    val sp = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-    val existing = sp.getString("uid", null)
+    val sp = prefs(ctx)
+    val existing = sp.getString(KEY_UID, null)
     if (existing != null) return existing
     val fresh = "U" + (100000..999999).random(Random(System.currentTimeMillis()))
-    sp.edit().putString("uid", fresh).apply()
+    sp.edit().putString(KEY_UID, fresh).apply()
     return fresh
+}
+
+private fun loadOwnerMode(ctx: Context): Boolean =
+    prefs(ctx).getBoolean(KEY_OWNER_MODE, false)
+
+private fun loadOwnerDashOpen(ctx: Context): Boolean =
+    prefs(ctx).getBoolean(KEY_OWNER_DASH_OPEN, false)
+
+private fun saveOwnerFlags(ctx: Context, owner: Boolean, dashOpen: Boolean) {
+    prefs(ctx).edit()
+        .putBoolean(KEY_OWNER_MODE, owner)
+        .putBoolean(KEY_OWNER_DASH_OPEN, dashOpen)
+        .apply()
 }
 
 private suspend fun pingHealth(): Boolean? = withContext(Dispatchers.IO) {
@@ -613,4 +685,36 @@ private suspend fun tryUpsertUid(uid: String) = withContext(Dispatchers.IO) {
     } catch (_: Exception) {
         // تجاهل الفشل — لا يؤثر على البناء
     }
+}
+
+/* =========================
+   فحص رصيد API — يحاول عدة مسارات
+   ========================= */
+private suspend fun fetchApiBalance(): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+    val paths = listOf(
+        "$API_BASE/api/smm/balance",
+        "$API_BASE/api/balance",
+        "$API_BASE/api/panel/balance"
+    )
+    for (p in paths) {
+        try {
+            val url = URL(p)
+            val con = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 6000
+                readTimeout = 6000
+            }
+            val code = con.responseCode
+            val stream = if (code in 200..299) con.inputStream else con.errorStream
+            val text = stream?.use { InputStreamReader(it, Charsets.UTF_8).readText() } ?: ""
+            if (code in 200..299) {
+                return@withContext true to (text.ifBlank { "تم بنجاح، بدون محتوى." })
+            } else {
+                // جرّب المسار التالي
+            }
+        } catch (_: Exception) {
+            // استمر للمسار التالي
+        }
+    }
+    false to "تعذر الحصول على الرصيد من الخادم. تأكد من وجود مسار رصيد صالح على الخادم."
 }

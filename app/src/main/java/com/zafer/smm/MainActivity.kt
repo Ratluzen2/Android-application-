@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -31,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,7 +46,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.Charset
@@ -635,6 +634,8 @@ private fun BottomNav(current: Screen, isOwner: Boolean, onSelect: (Screen) -> U
 fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
     val ctx = LocalContext.current
     val uid by vm.uid.collectAsState()
+    var showLogin by remember { mutableStateOf(false) }
+
     val banners = listOf(
         Color(0xFF141821) to Color(0xFF252A39),
         Color(0xFF19202A) to Color(0xFF2C3446),
@@ -650,12 +651,7 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            LoginButton { show ->
-                if (show) LoginDialog(
-                    onDismiss = {},
-                    onLogin = { input -> vm.loginWithUid(ctx, input) }
-                )
-            }
+            LoginButton(onClick = { showLogin = true })
             Spacer(Modifier.width(12.dp))
             UidCard(uid = uid ?: "-") {
                 // نسخ إلى الحافظة
@@ -736,12 +732,23 @@ fun HomeScreen(vm: AppViewModel, open: (Screen) -> Unit) {
             }
         }
     }
+
+    // حوار تسجيل الدخول (ضمن السياق المركب)
+    if (showLogin) {
+        LoginDialog(
+            onDismiss = { showLogin = false },
+            onLogin = { input ->
+                vm.loginWithUid(ctx, input)
+                showLogin = false
+            }
+        )
+    }
 }
 
 @Composable
-private fun LoginButton(onShowDialog: (Boolean) -> Unit) {
+private fun LoginButton(onClick: () -> Unit) {
     ElevatedButton(
-        onClick = { onShowDialog(true) },
+        onClick = onClick,
         colors = ButtonDefaults.elevatedButtonColors(containerColor = Surface2)
     ) { Text("تسجيل الدخول") }
 }

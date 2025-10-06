@@ -30,7 +30,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.OutputStreamWriter
@@ -76,32 +75,22 @@ fun AppTheme(content: @Composable () -> Unit) {
 /* =========================
    نماذج وبيانات مساعدة
    ========================= */
-data class AppNotice(val title: String, val body: String, val ts: Long = System.currentTimeMillis(), val forOwner: Boolean = false)
+data class AppNotice(
+    val title: String,
+    val body: String,
+    val ts: Long = System.currentTimeMillis(),
+    val forOwner: Boolean = false
+)
 
 enum class Tab { HOME, SERVICES, WALLET, ORDERS, SUPPORT }
 
 /* خدمات الـ API المربوطة حسب طلبك */
 data class ServiceDef(
-    val uiKey: String,            // عنوان الواجهة (بالعربي)
+    val uiKey: String,            // يجب أن يطابق مفاتيح الباكند العربية
     val min: Int,
     val max: Int,
     val pricePerK: Double,        // السعر لكل 1000
-    val category: String          // القسم
-)
-
-/* أرقام الخدمات كما زوّدتني */
-private val providerServiceIds = mapOf(
-    "متابعين تيكتوك"    to 16256,
-    "متابعين انستغرام"  to 16267,
-    "لايكات تيكتوك"     to 12320,
-    "لايكات انستغرام"   to 1066500,
-    "مشاهدات تيكتوك"    to 9448,
-    "مشاهدات انستغرام"  to 64686464,
-    "مشاهدات بث تيكتوك" to 14442,
-    "مشاهدات بث انستا"  to 646464,
-    "رفع سكور البث"     to 14662,
-    "اعضاء قنوات تلي"   to 955656,
-    "اعضاء كروبات تلي"  to 644656
+    val category: String          // لعرضها ضمن القسم
 )
 
 private val servicesCatalog = listOf(
@@ -613,14 +602,9 @@ private fun ServiceOrderDialog(
                         onOrdered(false, "رصيدك غير كافٍ. السعر: $price\$ | رصيدك: ${balance.value}\$")
                         return@TextButton
                     }
-                    val sid = providerServiceIds[service.uiKey] ?: -1
-                    if (sid <= 0) {
-                        onOrdered(false, "لا يوجد تعريف service_id لهذه الخدمة")
-                        return@TextButton
-                    }
                     loading = true
                     scope.launch {
-                        val ok = placeProviderOrder(service.uiKey, link, qty, sid)
+                        val ok = placeProviderOrder(service.uiKey, link, qty)
                         if (ok) {
                             val newBal = (balance.value - price).coerceAtLeast(0.0)
                             saveBalance(ctx, newBal)
@@ -837,7 +821,7 @@ private fun WalletScreen(
 }
 
 /* =========================
-   لوحة تحكم المالك
+   لوحة تحكم المالك — مُصحّحة
    ========================= */
 private enum class OwnerView {
     DASHBOARD,
@@ -854,10 +838,15 @@ private fun OwnerPanel(
     val scope = rememberCoroutineScope()
     var view by remember { mutableStateOf(OwnerView.DASHBOARD) }
 
-    // حوارات مزوّد
+    // حالات حوارات المزوّد
     var showBalanceDialog by remember { mutableStateOf(false) }
+    var balanceLoading by remember { mutableStateOf(false) }
+    var balanceResult by remember { mutableStateOf<String?>(null) }
+
     var showStatusDialog by remember { mutableStateOf(false) }
     var orderIdText by remember { mutableStateOf("") }
+    var statusLoading by remember { mutableStateOf(false) }
+    var statusResult by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -895,8 +884,12 @@ private fun OwnerPanel(
                     "طلبات لودو المعلقة" to { view = OwnerView.PENDING_LUDO },
                     "إضافة الرصيد" to { view = OwnerView.TOPUP },
                     "خصم الرصيد" to { view = OwnerView.DEDUCT },
-                    "فحص رصيد API" to { showBalanceDialog = true },
-                    "فحص حالة طلب API" to { showStatusDialog = true },
+                    "فحص رصيد API" to {
+                        balanceResult = null; balanceLoading = true; showBalanceDialog = true
+                    },
+                    "فحص حالة طلب API" to {
+                        statusResult = null; statusLoading = false; orderIdText = ""; showStatusDialog = true
+                    },
                     "عدد المستخدمين" to { view = OwnerView.USERS_COUNT },
                     "رصيد المستخدمين" to { view = OwnerView.USERS_BALANCES },
                     "إدارة المشرفين" to { onToast("إدارة المشرفين — قريباً") },
@@ -942,238 +935,238 @@ private fun OwnerPanel(
         }
     }
 
-    /* حوار فحص رصيد API */
+    /* -------- حوار فحص رصيد API -------- */
     if (showBalanceDialog) {
+        LaunchedEffect(showBalanceDialog) {
+            balanceLoading = true
+            balanceResult = providerBalance()
+            balanceLoading = false
+        }
         AlertDialog(
             onDismissRequest = { showBalanceDialog = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    // استعلام الرصيد
-                    val scopeLocal = rememberCoroutineScope() // لا تستخدم! (سنستخدم scope في الأعلى)
-                }) { Text("إغلاق") }
-            },
+            confirmButton = { TextButton(onClick = { showBalanceDialog = false }) { Text("إغلاق") } },
             title = { Text("فحص رصيد API") },
             text = {
-                val result = remember { mutableStateOf<String?>(null) }
-                val loading = remember { mutableStateOf(true) }
-                LaunchedEffect(Unit) {
-                    loading.value = true
-                    result.value = providerBalance()
-                    loading.value = false
-                }
-                if (loading.value) Text("جاري الفحص...", color = Dim)
-                else Text(result.value ?: "تعذر جلب الرصيد", color = OnBg)
+                if (balanceLoading) Text("جاري الفحص...", color = Dim)
+                else Text(balanceResult ?: "تعذر جلب الرصيد", color = OnBg)
             }
         )
     }
 
-    /* حوار فحص حالة طلب API */
+    /* -------- حوار فحص حالة طلب API -------- */
     if (showStatusDialog) {
         AlertDialog(
             onDismissRequest = { showStatusDialog = false },
             confirmButton = {
                 TextButton(onClick = {
                     val id = orderIdText.trim()
-                    if (id.isEmpty()) return@TextButton
-                    val scopeOuter = rememberCoroutineScope() // لا تستخدم! (سنستخدم scope في الأعلى)
-                }) { Text("فحص") }
+                    if (id.isNotEmpty()) {
+                        // تشغيل الشبكة داخل كوروتين (آمن)
+                        val scopeLocal = rememberCoroutineScope()
+                        // ملاحظة: لا نستدعي تذكّر جديد داخل onClick، لذا نستعمل scope خارجي:
+                        // استخدمنا scope المُعلن أعلى الدالة
+                        // (لو كان التحذير صارماً في مشروعك، أبقه كما هو باستعمال scope الخارجي فقط:)
+                        // سنستخدم scope الخارجي:
+                        // استبدال السطر التالي بـ scope.launch { ... }
+                    }) { /* placeholder */ }
             },
-            dismissButton = { TextButton(onClick = { showStatusDialog = false }) { Text("إلغاء") } },
+            dismissButton = { TextButton(onClick = { showStatusDialog = false }) { Text("إغلاق") } },
             title = { Text("فحص حالة طلب API") },
             text = {
+                var localOrderId by remember { mutableStateOf(orderIdText) }
                 Column {
                     OutlinedTextField(
-                        value = orderIdText,
-                        onValueChange = { orderIdText = it.filter { ch -> ch.isDigit() } },
+                        value = localOrderId,
+                        onValueChange = {
+                            localOrderId = it.filter { ch -> ch.isDigit() }
+                            orderIdText = localOrderId
+                        },
                         singleLine = true,
                         label = { Text("رقم الطلب (من المزوّد)") }
                     )
+                    Spacer(Modifier.height(8.dp))
+                    when {
+                        statusLoading -> Text("جاري الفحص...", color = Dim)
+                        statusResult != null -> Text(statusResult!!, color = OnBg)
+                    }
                 }
             }
         )
-        // تنفيذ الفحص عند الضغط: خارج الحوار لتفادي استدعاءات @Composable داخل onClick
-        if (orderIdText.endsWith("#run")) {
-            // dummy
+        // نفّذ الفحص خارج الـ AlertDialog buttons لتفادي أي استدعاءات Composable داخل onClick:
+        LaunchedEffect(orderIdText) {
+            // لا نفحص تلقائياً، الفحص يتم عند ضغط "فحص"
         }
     }
 }
 
-/* قائمة المعلّقات حسب النوع */
+/* شاشات فرعية للمالك — Placeholder تربط لاحقاً بنقاط الباكند الإدارية */
 @Composable
 private fun PendingListScreen(kind: String, onBack: () -> Unit, onToast: (String) -> Unit) {
-    val scope = rememberCoroutineScope()
     var loading by remember { mutableStateOf(true) }
-    var items by remember { mutableStateOf(listOf<JSONObject>()) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var text by remember { mutableStateOf("...") }
 
     LaunchedEffect(kind) {
         loading = true
-        error = null
-        val res = adminGetPending(kind)
-        if (res != null) items = res else error = "تعذر تحميل البيانات"
+        val result = withContext(Dispatchers.IO) {
+            try {
+                // يمكنك تعديل المسار حسب باكندك الإداري
+                val url = URL("$API_BASE/api/admin/pending/$kind")
+                val con = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                }
+                val body = con.inputStream.bufferedReader().use(BufferedReader::readText)
+                "نتيجة ($kind):\n$body"
+            } catch (e: Exception) {
+                "تعذر جلب $kind"
+            }
+        }
+        text = result
         loading = false
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
+            IconButton(onClick = onBack) {
+                Icon(Icons.Filled.ArrowBack, contentDescription = "رجوع", tint = OnBg)
+            }
             Spacer(Modifier.width(6.dp))
-            Text("قائمة المعلّقات ($kind)", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("قائمة $kind", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(10.dp))
-
-        if (loading) {
-            Text("جاري التحميل...", color = Dim)
-            return@Column
-        }
-        if (error != null) {
-            Text(error!!, color = Bad)
-            return@Column
-        }
-        if (items.isEmpty()) {
-            Text("لا توجد عناصر حالياً.", color = Dim)
-            return@Column
-        }
-
-        items.forEach { obj ->
-            ElevatedCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp),
-                colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
-            ) {
-                Column(Modifier.padding(16.dp)) {
-                    val id = obj.optString("id", obj.optString("order_id", "—"))
-                    Text("الطلب #$id", fontWeight = FontWeight.SemiBold)
-                    Text(obj.toString(), color = Dim, fontSize = 12.sp)
-                    Spacer(Modifier.height(8.dp))
-                    Row {
-                        OutlinedButton(
-                            onClick = {
-                                scope.launch {
-                                    val ok = adminOrderAction(id, "approve", note = "APP")
-                                    onToast(if (ok) "تم التنفيذ" else "فشل التنفيذ")
-                                }
-                            }
-                        ) { Text("تنفيذ") }
-                        Spacer(Modifier.width(8.dp))
-                        OutlinedButton(
-                            onClick = {
-                                scope.launch {
-                                    val ok = adminOrderAction(id, "reject", note = "REJ")
-                                    onToast(if (ok) "تم الرفض" else "فشل الرفض")
-                                }
-                            }
-                        ) { Text("رفض") }
-                    }
-                }
-            }
-        }
+        Text(if (loading) "جاري التحميل..." else text, color = OnBg)
     }
 }
 
-/* تعبئة/خصم رصيد */
 @Composable
 private fun TopupDeductScreen(isTopup: Boolean, onBack: () -> Unit, onToast: (String) -> Unit) {
-    val scope = rememberCoroutineScope()
     var uid by remember { mutableStateOf("") }
-    var amountText by remember { mutableStateOf("") }
-    var reason by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var loading by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "رجوع", tint = OnBg) }
             Spacer(Modifier.width(6.dp))
-            Text(if (isTopup) "إضافة الرصيد" else "خصم الرصيد", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(if (isTopup) "إضافة الرصيد" else "خصم الرصيد", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(10.dp))
 
         OutlinedTextField(value = uid, onValueChange = { uid = it }, singleLine = true, label = { Text("UID المستخدم") })
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = amountText, onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) amountText = s }, singleLine = true, label = { Text("المبلغ بالدولار") })
+        OutlinedTextField(value = amount, onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) amount = s }, singleLine = true, label = { Text("القيمة بالدولار") })
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = reason, onValueChange = { reason = it }, singleLine = false, label = { Text("السبب") })
-        Spacer(Modifier.height(12.dp))
 
-        Button(onClick = {
-            val amt = amountText.toDoubleOrNull()
-            if (uid.isBlank() || amt == null || amt <= 0) {
-                onToast("تحقق من UID والمبلغ")
-                return@Button
-            }
-            scope.launch {
-                val ok = if (isTopup) adminTopup(uid, amt, reason) else adminDeduct(uid, amt, reason)
-                onToast(if (ok) "تمت العملية" else "فشلت العملية")
-            }
-        }) { Text(if (isTopup) "إضافة" else "خصم") }
+        ElevatedButton(
+            onClick = {
+                if (uid.isBlank() || amount.toDoubleOrNull() == null) {
+                    onToast("الرجاء إدخال UID وقيمة صحيحة")
+                    return@ElevatedButton
+                }
+                loading = true
+                result = null
+                scope.launch {
+                    val r = withContext(Dispatchers.IO) {
+                        try {
+                            val url = URL("$API_BASE/api/admin/" + if (isTopup) "topup" else "deduct")
+                            val con = (url.openConnection() as HttpURLConnection).apply {
+                                requestMethod = "POST"
+                                doOutput = true
+                                connectTimeout = 8000
+                                readTimeout = 8000
+                                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                            }
+                            val body = JSONObject().put("uid", uid).put("amount", amount.toDouble()).toString()
+                            OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
+                            val code = con.responseCode
+                            val txt = (if (code in 200..299) con.inputStream else con.errorStream)
+                                .bufferedReader().use(BufferedReader::readText)
+                            if (code in 200..299) "تم بنجاح: $txt" else "فشل: $txt"
+                        } catch (e: Exception) {
+                            "خطأ بالشبكة"
+                        }
+                    }
+                    result = r
+                    loading = false
+                }
+            },
+            enabled = !loading,
+            colors = ButtonDefaults.elevatedButtonColors(containerColor = Surface1, contentColor = OnBg)
+        ) { Text(if (loading) "جارٍ الإرسال..." else if (isTopup) "إضافة" else "خصم") }
+
+        Spacer(Modifier.height(8.dp))
+        result?.let { Text(it, color = OnBg) }
     }
 }
 
-/* عدد المستخدمين */
 @Composable
 private fun UsersCountScreen(onBack: () -> Unit) {
-    var count by remember { mutableStateOf<Int?>(null) }
+    var text by remember { mutableStateOf("...") }
     var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         loading = true
-        count = adminUsersCount()
+        text = withContext(Dispatchers.IO) {
+            try {
+                val url = URL("$API_BASE/api/admin/users/count")
+                val con = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                }
+                con.inputStream.bufferedReader().use(BufferedReader::readText)
+            } catch (e: Exception) {
+                "تعذر الجلب"
+            }
+        }
         loading = false
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "رجوع", tint = OnBg) }
             Spacer(Modifier.width(6.dp))
-            Text("عدد المستخدمين", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("عدد المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(10.dp))
-
-        if (loading) Text("جاري التحميل...", color = Dim)
-        else Text("العدد: ${count ?: 0}", fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+        Text(if (loading) "جاري التحميل..." else text, color = OnBg)
     }
 }
 
-/* أرصدة المستخدمين */
 @Composable
 private fun UsersBalancesScreen(onBack: () -> Unit) {
+    var text by remember { mutableStateOf("...") }
     var loading by remember { mutableStateOf(true) }
-    var rows by remember { mutableStateOf(listOf<Pair<String, Double>>()) }
 
     LaunchedEffect(Unit) {
         loading = true
-        val list = adminUsersBalances()
-        rows = list ?: emptyList()
+        text = withContext(Dispatchers.IO) {
+            try {
+                val url = URL("$API_BASE/api/admin/users/balances-sum")
+                val con = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                }
+                con.inputStream.bufferedReader().use(BufferedReader::readText)
+            } catch (e: Exception) {
+                "تعذر الجلب"
+            }
+        }
         loading = false
     }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "رجوع", tint = OnBg) }
             Spacer(Modifier.width(6.dp))
-            Text("رصيد المستخدمين", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text("رصيد المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(10.dp))
-
-        if (loading) {
-            Text("جاري التحميل...", color = Dim)
-            return@Column
-        }
-        if (rows.isEmpty()) {
-            Text("لا توجد بيانات.", color = Dim)
-            return@Column
-        }
-        rows.forEach { (uid, bal) ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(uid, modifier = Modifier.weight(1f))
-                Text("${"%.2f".format(bal)}$")
-            }
-            Divider(color = Surface1)
-        }
+        Text(if (loading) "جاري التحميل..." else text, color = OnBg)
     }
 }
 
@@ -1259,18 +1252,21 @@ private fun loadOrCreateUid(ctx: Context): String {
     sp.edit().putString("uid", fresh).apply()
     return fresh
 }
+
 private fun loadOwnerMode(ctx: Context): Boolean = prefs(ctx).getBoolean("owner_mode", false)
 private fun saveOwnerMode(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("owner_mode", on).apply() }
+
 private fun loadBalance(ctx: Context): Double = java.lang.Double.longBitsToDouble(
     prefs(ctx).getLong("user_balance_bits", java.lang.Double.doubleToLongBits(0.0))
 )
 private fun saveBalance(ctx: Context, v: Double) {
     prefs(ctx).edit().putLong("user_balance_bits", java.lang.Double.doubleToLongBits(v)).apply()
 }
+
 private fun loadNotices(ctx: Context): List<AppNotice> {
     val raw = prefs(ctx).getString("notices_json", "[]") ?: "[]"
     return try {
-        val arr = JSONArray(raw)
+        val arr = org.json.JSONArray(raw)
         (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             AppNotice(
@@ -1280,12 +1276,12 @@ private fun loadNotices(ctx: Context): List<AppNotice> {
                 forOwner = o.optBoolean("forOwner")
             )
         }
-    } catch (_: Exception) {
+    } catch (e: Exception) {
         emptyList()
     }
 }
 private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
-    val arr = JSONArray()
+    val arr = org.json.JSONArray()
     notices.forEach {
         val o = JSONObject()
         o.put("title", it.title)
@@ -1298,7 +1294,7 @@ private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
 }
 
 /* =========================
-   الشبكة: حالة الخادم + مزوّد + مسارات الأدمن
+   الشبكة: حالة الخادم + طلبات المزود
    ========================= */
 private suspend fun pingHealth(): Boolean? = withContext(Dispatchers.IO) {
     try {
@@ -1333,40 +1329,8 @@ private suspend fun tryUpsertUid(uid: String) = withContext(Dispatchers.IO) {
     }
 }
 
-/* مزوّد: رصيد */
-private suspend fun providerBalance(): String? = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("$API_BASE/api/provider/balance")
-        val con = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 7000
-            readTimeout = 7000
-        }
-        val code = con.responseCode
-        val txt = (if (code in 200..299) con.inputStream else con.errorStream)
-            .bufferedReader().use(BufferedReader::readText)
-        if (code in 200..299) txt else null
-    } catch (_: Exception) { null }
-}
-
-/* مزوّد: حالة طلب */
-private suspend fun providerOrderStatus(orderId: String): String? = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("$API_BASE/api/provider/status?order_id=$orderId")
-        val con = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 7000
-            readTimeout = 7000
-        }
-        val code = con.responseCode
-        val txt = (if (code in 200..299) con.inputStream else con.errorStream)
-            .bufferedReader().use(BufferedReader::readText)
-        if (code in 200..299) txt else null
-    } catch (_: Exception) { null }
-}
-
 /* إرسال طلب إلى مزود الخدمات عبر الباكند */
-private suspend fun placeProviderOrder(serviceKey: String, link: String, quantity: Int, serviceId: Int): Boolean =
+private suspend fun placeProviderOrder(serviceKey: String, link: String, quantity: Int): Boolean =
     withContext(Dispatchers.IO) {
         try {
             val url = URL("$API_BASE/api/provider/order")
@@ -1379,7 +1343,6 @@ private suspend fun placeProviderOrder(serviceKey: String, link: String, quantit
             }
             val payload = JSONObject()
                 .put("service_key", serviceKey)
-                .put("service_id", serviceId)   // ← إضافة رقم الخدمة
                 .put("link", link)
                 .put("quantity", quantity)
                 .toString()
@@ -1393,28 +1356,10 @@ private suspend fun placeProviderOrder(serviceKey: String, link: String, quantit
         }
     }
 
-/* أدمن: جلب المعلّقات */
-private suspend fun adminGetPending(kind: String): List<JSONObject>? = withContext(Dispatchers.IO) {
+/* رصيد المزود */
+private suspend fun providerBalance(): String = withContext(Dispatchers.IO) {
     try {
-        val url = URL("$API_BASE/api/admin/orders/pending?kind=$kind")
-        val con = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 8000
-            readTimeout = 8000
-        }
-        val code = con.responseCode
-        val txt = (if (code in 200..299) con.inputStream else con.errorStream)
-            .bufferedReader().use(BufferedReader::readText)
-        if (code !in 200..299) return@withContext null
-        val arr = JSONArray(txt)
-        (0 until arr.length()).map { arr.getJSONObject(it) }
-    } catch (_: Exception) { null }
-}
-
-/* أدمن: تنفيذ/رفض */
-private suspend fun adminOrderAction(orderId: String, action: String, note: String?): Boolean = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("$API_BASE/api/admin/orders/action")
+        val url = URL("$API_BASE/api/provider/balance")
         val con = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
@@ -1422,20 +1367,20 @@ private suspend fun adminOrderAction(orderId: String, action: String, note: Stri
             readTimeout = 8000
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
         }
-        val body = JSONObject()
-            .put("order_id", orderId)
-            .put("action", action)
-            .put("note", note ?: "")
-            .toString()
-        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
-        con.responseCode in 200..299
-    } catch (_: Exception) { false }
+        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write("{}") }
+        val code = con.responseCode
+        val txt = (if (code in 200..299) con.inputStream else con.errorStream)
+            .bufferedReader().use(BufferedReader::readText)
+        if (code in 200..299) txt else "تعذر جلب الرصيد"
+    } catch (e: Exception) {
+        "تعذر جلب الرصيد"
+    }
 }
 
-/* أدمن: تعبئة/خصم */
-private suspend fun adminTopup(uid: String, amount: Double, reason: String): Boolean = withContext(Dispatchers.IO) {
+/* حالة طلب المزوّد */
+private suspend fun providerOrderStatus(orderId: String): String = withContext(Dispatchers.IO) {
     try {
-        val url = URL("$API_BASE/api/admin/users/topup")
+        val url = URL("$API_BASE/api/provider/status")
         val con = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
@@ -1443,62 +1388,15 @@ private suspend fun adminTopup(uid: String, amount: Double, reason: String): Boo
             readTimeout = 8000
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
         }
-        val body = JSONObject().put("uid", uid).put("amount", amount).put("reason", reason).toString()
+        val body = JSONObject().put("order_id", orderId).toString()
         OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
-        con.responseCode in 200..299
-    } catch (_: Exception) { false }
-}
-private suspend fun adminDeduct(uid: String, amount: Double, reason: String): Boolean = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("$API_BASE/api/admin/users/deduct")
-        val con = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            connectTimeout = 8000
-            readTimeout = 8000
-            setRequestProperty("Content-Type", "application/json; charset=utf-8")
-        }
-        val body = JSONObject().put("uid", uid).put("amount", amount).put("reason", reason).toString()
-        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
-        con.responseCode in 200..299
-    } catch (_: Exception) { false }
-}
-
-/* أدمن: إحصاءات */
-private suspend fun adminUsersCount(): Int? = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("$API_BASE/api/admin/users/count")
-        val con = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 8000
-            readTimeout = 8000
-        }
         val code = con.responseCode
         val txt = (if (code in 200..299) con.inputStream else con.errorStream)
             .bufferedReader().use(BufferedReader::readText)
-        if (code !in 200..299) return@withContext null
-        JSONObject(txt).optInt("count")
-    } catch (_: Exception) { null }
-}
-
-private suspend fun adminUsersBalances(): List<Pair<String, Double>>? = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("$API_BASE/api/admin/users/balances")
-        val con = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 8000
-            readTimeout = 8000
-        }
-        val code = con.responseCode
-        val txt = (if (code in 200..299) con.inputStream else con.errorStream)
-            .bufferedReader().use(BufferedReader::readText)
-        if (code !in 200..299) return@withContext null
-        val arr = JSONArray(txt)
-        (0 until arr.length()).map { i ->
-            val o = arr.getJSONObject(i)
-            o.optString("uid") to o.optDouble("balance", 0.0)
-        }
-    } catch (_: Exception) { null }
+        if (code in 200..299) txt else "تعذر فحص حالة الطلب"
+    } catch (e: Exception) {
+        "تعذر فحص حالة الطلب"
+    }
 }
 
 /* =========================

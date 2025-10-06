@@ -27,14 +27,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardOptions
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.*
 import org.json.JSONObject
 import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
@@ -138,12 +135,7 @@ fun AppRoot() {
             Tab.WALLET   -> EmptyScreen()
             Tab.ORDERS   -> EmptyScreen()
             Tab.SERVICES -> EmptyScreen()
-            Tab.OWNER    -> OwnerDashboard(
-                onBackToNormal = {
-                    // في طلبك: إبقائها مفتوحة حتى عند الإغلاق — إذن لا نخرج تلقائياً
-                    // سنكتفي بزر داخل الإعدادات لتعطيل المالك إن رغبت.
-                }
-            )
+            Tab.OWNER    -> OwnerDashboard()
         }
 
         // حالة السيرفر أعلى يمين + زر إعدادات (يعرض UID + تسجيل المالك)
@@ -176,7 +168,6 @@ fun AppRoot() {
             onOwnerLogin = { pin ->
                 if (pin == OWNER_PIN) {
                     isOwner = true
-                    // افتح لوحة المالك مباشرة واحفظ ذلك
                     saveOwnerMode(LocalContext.current, true)
                 }
             },
@@ -249,7 +240,7 @@ private fun ContactCard(
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() },
+        .clickable { onClick() },
         colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
     ) {
         Row(
@@ -333,7 +324,6 @@ private fun BottomNavBar(
             icon = Icons.Filled.ShoppingCart,
             label = "الطلبات"
         )
-        // تبويب المالك يظهر فقط عند التفعيل
         if (isOwner) {
             NavItem(
                 selected = current == Tab.OWNER,
@@ -439,8 +429,7 @@ private fun SettingsDialog(
                 OutlinedTextField(
                     value = pin,
                     onValueChange = { pin = it },
-                    placeholder = { Text("PIN") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                    placeholder = { Text("PIN") }
                 )
             },
             confirmButton = {
@@ -455,20 +444,20 @@ private fun SettingsDialog(
 }
 
 /* =========================
-   لوحة تحكم المالك (أزرار فقط + زرَّي الـ API يعملان)
+   لوحة تحكم المالك (أزرار + استدعاءات API)
    ========================= */
 @Composable
-private fun OwnerDashboard(onBackToNormal: () -> Unit) {
-    val ctx = LocalContext.current
+private fun OwnerDashboard() {
     val scope = rememberCoroutineScope()
 
-    var checking by remember { mutableStateOf(false) }
-    var dialog by remember { mutableStateOf<Triple<String, String?, String?>?>(null) } // title, msg, raw
+    var showMsg by remember { mutableStateOf<Triple<String, String?, String?>?>(null) }
+
+    // حوار إدخال رقم الطلب
     var askOrder by remember { mutableStateOf(false) }
     var orderId by remember { mutableStateOf("") }
 
     fun showInfo(title: String, msg: String?, raw: String? = null) {
-        dialog = Triple(title, msg, raw)
+        showMsg = Triple(title, msg, raw)
     }
 
     Column(
@@ -481,51 +470,61 @@ private fun OwnerDashboard(onBackToNormal: () -> Unit) {
         Text("لوحة تحكم المالك", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
 
-        // شبكة أزرار
-        FlowRow(spacing = 10.dp, runSpacing = 10.dp) {
-            OwnerButton("تعديل الأسعار والكميات") {}
-            OwnerButton("الطلبات المعلقة (الخدمات)") {}
-            OwnerButton("الكارتات المعلقة") {}
-            OwnerButton("طلبات شدات ببجي") {}
-            OwnerButton("طلبات شحن الايتونز") {}
-            OwnerButton("طلبات الارصدة المعلقة") {}
-            OwnerButton("طلبات لودو المعلقة") {}
-            OwnerButton("إضافة الرصيد") {}
-            OwnerButton("خصم الرصيد") {}
+        // عرض الأزرار عموديًا لتفادي مشاكل التخطيط
+        val buttons = listOf(
+            "تعديل الأسعار والكميات",
+            "الطلبات المعلقة (الخدمات)",
+            "الكارتات المعلقة",
+            "طلبات شدات ببجي",
+            "طلبات شحن الايتونز",
+            "طلبات الارصدة المعلقة",
+            "طلبات لودو المعلقة",
+            "إضافة الرصيد",
+            "خصم الرصيد",
+            "فحص رصيد API",
+            "فحص حالة طلب API",
+            "عدد المستخدمين",
+            "رصيد المستخدمين",
+            "إدارة المشرفين",
+            "حظر المستخدم",
+            "الغاء حظر المستخدم",
+            "اعلان البوت",
+            "أكواد خدمات API",
+            "نظام الإحالة",
+            "شرح الخصومات",
+            "المتصدرين 🎉"
+        )
 
-            // فحص رصيد API — يعمل
-            OwnerButton("فحص رصيد API") {
-                if (checking) return@OwnerButton
-                checking = true
-                scope.launch {
-                    val res = checkProviderBalance()
-                    checking = false
-                    if (res.first) {
-                        val j = res.second!!
-                        val bal = j.optString("balance", "?")
-                        val cur = j.optString("currency", "")
-                        showInfo("رصيد المزود", "الرصيد: $bal $cur", res.third)
-                    } else {
-                        showInfo("فشل", "تعذر الحصول على الرصيد من الخادم.\n${res.errorOrReason()}", res.third)
+        buttons.forEach { title ->
+            OwnerButton(
+                title = title,
+                onClick = {
+                    when (title) {
+                        "فحص رصيد API" -> {
+                            scope.launch {
+                                val res = checkProviderBalance()
+                                if (res.first) {
+                                    val j = res.second!!
+                                    val bal = j.optString("balance", "?")
+                                    val cur = j.optString("currency", "")
+                                    showInfo("رصيد المزود", "الرصيد: $bal $cur", res.third)
+                                } else {
+                                    val reason = res.third ?: "فشل غير معروف"
+                                    showInfo("فشل", "تعذر الحصول على الرصيد من الخادم.\n$reason", res.third)
+                                }
+                            }
+                        }
+                        "فحص حالة طلب API" -> {
+                            askOrder = true
+                        }
+                        else -> {
+                            // أزرار placeholder لربطها لاحقًا
+                            showInfo(title, "سيتم ربط هذا الزر لاحقًا.")
+                        }
                     }
                 }
-            }
-
-            // فحص حالة طلب API — يعمل + يطلب رقم الطلب
-            OwnerButton("فحص حالة طلب API") {
-                askOrder = true
-            }
-
-            OwnerButton("عدد المستخدمين") {}
-            OwnerButton("رصيد المستخدمين") {}
-            OwnerButton("إدارة المشرفين") {}
-            OwnerButton("حظر المستخدم") {}
-            OwnerButton("الغاء حظر المستخدم") {}
-            OwnerButton("اعلان البوت") {}
-            OwnerButton("أكواد خدمات API") {}
-            OwnerButton("نظام الإحالة") {}
-            OwnerButton("شرح الخصومات") {}
-            OwnerButton("المتصدرين 🎉") {}
+            )
+            Spacer(Modifier.height(10.dp))
         }
     }
 
@@ -538,107 +537,7 @@ private fun OwnerDashboard(onBackToNormal: () -> Unit) {
                 OutlinedTextField(
                     value = orderId,
                     onValueChange = { orderId = it },
-                    placeholder = { Text("مثال: 123456") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (orderId.isNotBlank()) {
-                        // استعلام
-                        val id = orderId.trim()
-                        orderId = ""
-                        askOrder = false
-                        // نفذ الطلب
-                        val scope2 = rememberCoroutineScope() // داخل Dialog غير مناسب؛ ننفذ خارجه
-                    }
-                }) { Text("تحقق") }
-            },
-            dismissButton = { TextButton(onClick = { askOrder = false }) { Text("إلغاء") } }
-        )
-    }
-
-    // workaround: إطلاق الكوروتين لفحص الطلب خارج Dialog
-    LaunchedEffect(askOrder) {
-        // لا شيء هنا
-    }
-
-    // نافذة نتيجة عامة
-    dialog?.let { (title, msg, raw) ->
-        AlertDialog(
-            onDismissRequest = { dialog = null },
-            title = { Text(title) },
-            text = {
-                Column {
-                    Text(msg ?: "")
-                    raw?.let {
-                        Spacer(Modifier.height(8.dp))
-                        Text("Raw:", fontWeight = FontWeight.SemiBold, color = Dim, fontSize = 12.sp)
-                        Text(it.take(600), fontSize = 12.sp, color = Dim)
-                    }
-                }
-            },
-            confirmButton = { TextButton(onClick = { dialog = null }) { Text("إغلاق") } }
-        )
-    }
-
-    // نطلق فحص حالة الطلب عندما يغلق المستخدم حوار الإدخال (تحقّق)
-    // لتحقيق ذلك ببساطة سنستخدم rememberUpdatedState + متغير وسيط
-    var pendingOrderId by remember { mutableStateOf<String?>(null) }
-    // عندما يضغط "تحقق" داخل الحوار:
-    if (!askOrder && pendingOrderId != null) {
-        val id = pendingOrderId!!
-        pendingOrderId = null
-        // نفذ الطلب
-        val scope3 = rememberCoroutineScope()
-    }
-
-    // بدلاً من التعقيد بالأعلى: نضيف Dialog إدخال الطلب مع التنفيذ الصحيح:
-    if (askOrder) {
-        // Already handled above
-    }
-
-    // طريقة صحيحة لفحص الطلب بعد إدخال الرقم:
-    // إضافة helper effect:
-    var triggerOrderCheck by remember { mutableStateOf<String?>(null) }
-    if (askOrder.not() && triggerOrderCheck != null) {
-        val idToCheck = triggerOrderCheck!!
-        triggerOrderCheck = null
-        // نفذ الآن
-        LaunchedEffect(idToCheck) {
-            val res = checkOrderStatus(idToCheck)
-            if (res.first) {
-                val j = res.second!!
-                val status = j.optString("status", "?")
-                val remains = j.optString("remains", "?")
-                val charge = j.optString("charge", "?")
-                val currency = j.optString("currency", "")
-                showInfo(
-                    "حالة الطلب",
-                    "الحالة: $status\nالمتبقي: $remains\nالتكلفة: $charge $currency",
-                    res.third
-                )
-            } else {
-                showInfo(
-                    "فشل",
-                    "تعذر فحص حالة الطلب.\n${res.errorOrReason()}",
-                    res.third
-                )
-            }
-        }
-    }
-
-    // نعيد بناء حوار إدخال الطلب بشكل يطلق triggerOrderCheck:
-    if (askOrder) {
-        AlertDialog(
-            onDismissRequest = { askOrder = false },
-            title = { Text("أدخل رقم الطلب") },
-            text = {
-                OutlinedTextField(
-                    value = orderId,
-                    onValueChange = { orderId = it },
-                    placeholder = { Text("مثال: 123456") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    placeholder = { Text("مثال: 123456") }
                 )
             },
             confirmButton = {
@@ -647,11 +546,52 @@ private fun OwnerDashboard(onBackToNormal: () -> Unit) {
                     if (id.isNotEmpty()) {
                         askOrder = false
                         orderId = ""
-                        triggerOrderCheck = id
+                        // نفذ الطلب الآن
+                        scope.launch {
+                            val res = checkOrderStatus(id)
+                            if (res.first) {
+                                val j = res.second!!
+                                val status = j.optString("status", "?")
+                                val remains = j.optString("remains", "?")
+                                val charge = j.optString("charge", "?")
+                                val currency = j.optString("currency", "")
+                                showInfo(
+                                    "حالة الطلب",
+                                    "الحالة: $status\nالمتبقي: $remains\nالتكلفة: $charge $currency",
+                                    res.third
+                                )
+                            } else {
+                                val reason = res.third ?: "فشل غير معروف"
+                                showInfo(
+                                    "فشل",
+                                    "تعذر فحص حالة الطلب.\n$reason",
+                                    res.third
+                                )
+                            }
+                        }
                     }
                 }) { Text("تحقق") }
             },
             dismissButton = { TextButton(onClick = { askOrder = false }) { Text("إلغاء") } }
+        )
+    }
+
+    // نافذة نتيجة عامة
+    showMsg?.let { (title, msg, raw) ->
+        AlertDialog(
+            onDismissRequest = { showMsg = null },
+            title = { Text(title) },
+            text = {
+                Column {
+                    Text(msg ?: "")
+                    raw?.let {
+                        Spacer(Modifier.height(8.dp))
+                        Text("Raw:", fontWeight = FontWeight.SemiBold, color = Dim, fontSize = 12.sp)
+                        Text(it.take(800), fontSize = 12.sp, color = Dim)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showMsg = null }) { Text("إغلاق") } }
         )
     }
 }
@@ -666,24 +606,10 @@ private fun OwnerButton(title: String, onClick: () -> Unit) {
             contentColor = OnBg
         ),
         modifier = Modifier
-            .widthIn(min = 200.dp)
+            .fillMaxWidth()
             .height(48.dp)
     ) {
         Text(title, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-/** FlowRow بديل بسيط باستخدام Wrap + Column */
-@Composable
-private fun FlowRow(
-    spacing: Dp,
-    runSpacing: Dp,
-    content: @Composable () -> Unit
-) {
-    Column {
-        // محتوى بسيط: نعرضه عمودياً؛ (لتبسيط البناء وعدم إدخال تبعيات Accompanist)
-        // يمكنك لاحقاً استبداله بLazyVerticalGrid إن رغبت.
-        content()
     }
 }
 
@@ -754,15 +680,6 @@ private suspend fun tryUpsertUid(uid: String) = withContext(Dispatchers.IO) {
 /* =========================
    استدعاءات الباكند للمزوّد KD1S عبر باكندك
    ========================= */
-private data class ApiResult(
-    val ok: Boolean,
-    val json: JSONObject? = null,
-    val raw: String? = null,
-    val error: String? = null
-) {
-    fun errorOrReason(): String = error ?: raw ?: "خطأ غير معروف"
-}
-
 private suspend fun checkProviderBalance(): Triple<Boolean, JSONObject?, String?> = withContext(Dispatchers.IO) {
     val url = URL("$API_BASE/api/provider/balance")
     try {

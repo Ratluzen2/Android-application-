@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -28,12 +29,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.OutputStreamWriter
@@ -101,7 +102,7 @@ fun AppRoot() {
 
     // وضع المالك — محفوظ في SharedPreferences ليبقى بعد إغلاق التطبيق
     var ownerMode by rememberSaveable { mutableStateOf(loadOwnerMode(ctx)) }
-    var ownerOpen by rememberSaveable { mutableStateOf(ownerMode) } // يُبقي لوحة المالك مفتوحة بين الجلسات
+    var ownerOpen by rememberSaveable { mutableStateOf(ownerMode) } // إبقاء لوحة المالك مفتوحة بين الجلسات
 
     // فحص السيرفر دوري + تسجيل UID
     LaunchedEffect(Unit) {
@@ -136,7 +137,7 @@ fun AppRoot() {
             onOpenSettings = { settingsOpen = true },
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .statusBarsPadding()  // يمنع التداخل مع شريط الحالة
+                .statusBarsPadding()
                 .padding(top = 6.dp, end = 10.dp)
         )
 
@@ -151,7 +152,7 @@ fun AppRoot() {
         if (ownerOpen) {
             OwnerDashboard(
                 onClose = {
-                    // نغلق الواجهة فقط إذا لم نكن نريد إبقاءها دائماً.
+                    // إغلاق يدوي فقط (لا نغيّر وضع المالك)
                     ownerOpen = false
                 },
                 onLogoutOwner = {
@@ -194,7 +195,7 @@ private fun EmptyScreen() {
     )
 }
 
-/* شاشة الدعم */
+/* شاشة الدعم (واتساب/تيليجرام) */
 @Composable
 private fun SupportScreen() {
     val uri = LocalUriHandler.current
@@ -465,6 +466,8 @@ private fun OwnerDashboard(
     onClose: () -> Unit,
     onLogoutOwner: () -> Unit
 ) {
+    val scope = rememberCoroutineScope()
+
     var showBalanceResult by rememberSaveable { mutableStateOf<String?>(null) }
     var showOrderDialog by rememberSaveable { mutableStateOf(false) }
     var orderIdInput by rememberSaveable { mutableStateOf("") }
@@ -495,7 +498,7 @@ private fun OwnerDashboard(
 
             Spacer(Modifier.height(12.dp))
 
-            // أزرار فقط (Placeholders) — الشكل فقط الآن
+            // أزرار فقط (شكل)
             OwnerButton("تعديل الأسعار والكميات")
             OwnerButton("الطلبات المعلقة (الخدمات)")
             OwnerButton("الكارتات المعلقة")
@@ -508,12 +511,9 @@ private fun OwnerDashboard(
 
             // فحص رصيد API — فعّال
             OwnerButton("فحص رصيد API") {
-                // نداء الشبكة خارج الـ UI (بدون @Composable call)
-                // نفتح Dialog بالنتيجة عبر state
-                launchIoThenShow {
-                    checkProviderBalance()
-                } { result ->
-                    showBalanceResult = result
+                scope.launch {
+                    val res = checkProviderBalance()
+                    showBalanceResult = res
                 }
             }
 
@@ -567,11 +567,9 @@ private fun OwnerDashboard(
                 TextButton(onClick = {
                     val id = orderIdInput.trim()
                     if (id.isNotEmpty()) {
-                        // نفّذ الطلب على IO وأظهر النتيجة في Dialog آخر
-                        launchIoThenShow {
-                            checkOrderStatus(id)
-                        } { result ->
-                            orderStatusResult = result
+                        scope.launch {
+                            val res = checkOrderStatus(id)
+                            orderStatusResult = res
                         }
                     }
                     showOrderDialog = false
@@ -600,10 +598,8 @@ private fun OwnerButton(title: String, onClick: (() -> Unit)? = null) {
         containerColor = Surface1,
         contentColor = OnBg
     )
-    val action = onClick ?: {}
-
     ElevatedButton(
-        onClick = action,
+        onClick = { onClick?.invoke() },
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 6.dp),
@@ -612,23 +608,6 @@ private fun OwnerButton(title: String, onClick: (() -> Unit)? = null) {
         Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = Accent)
         Spacer(Modifier.width(8.dp))
         Text(title, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-/* =========================
-   Helpers (لا @Composable داخل onClick)
-   ========================= */
-@Composable
-private fun <T> launchIoThenShow(
-    task: suspend () -> T,
-    show: (T) -> Unit
-) {
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) {
-        scope.launch {
-            val res = withContext(Dispatchers.IO) { task() }
-            show(res)
-        }
     }
 }
 

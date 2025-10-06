@@ -11,12 +11,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,20 +28,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import java.io.BufferedReader
-import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
-import java.net.URLEncoder
 import java.net.URL
 import kotlin.random.Random
 
@@ -48,9 +46,6 @@ import kotlin.random.Random
    ========================= */
 private const val API_BASE =
     "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // عدّلها إن لزم
-private const val PREFS_NAME = "app_prefs"
-private const val KEY_UID = "uid"
-private const val KEY_OWNER = "owner_mode"
 private const val OWNER_PIN = "2000"
 
 /* =========================
@@ -97,29 +92,28 @@ private enum class Tab { HOME, SUPPORT, WALLET, ORDERS, SERVICES }
 @Composable
 fun AppRoot() {
     val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
 
     // UID — يُنشأ تلقائياً ويُرسل للخادم مرة واحدة
-    var uid by remember { mutableStateOf(loadOrCreateUid(ctx)) }
-    var settingsOpen by remember { mutableStateOf(false) }
-
-    // وضع المالك — يبقى محفوظ بعد إعادة فتح التطبيق
-    var ownerMode by remember { mutableStateOf(getOwnerMode(ctx)) }
-    var showOwnerDashboard by remember { mutableStateOf(ownerMode) }
+    var uid by rememberSaveable { mutableStateOf(loadOrCreateUid(ctx)) }
 
     // حالة السيرفر
-    var online by remember { mutableStateOf<Boolean?>(null) }
+    var online by rememberSaveable { mutableStateOf<Boolean?>(null) }
+
+    // وضع المالك — محفوظ في SharedPreferences ليبقى بعد إغلاق التطبيق
+    var ownerMode by rememberSaveable { mutableStateOf(loadOwnerMode(ctx)) }
+    var ownerOpen by rememberSaveable { mutableStateOf(ownerMode) } // يُبقي لوحة المالك مفتوحة بين الجلسات
 
     // فحص السيرفر دوري + تسجيل UID
     LaunchedEffect(Unit) {
-        scope.launch { tryUpsertUid(uid) }
+        tryUpsertUid(uid)
         while (true) {
             online = pingHealth()
             delay(20_000)
         }
     }
 
-    var current by remember { mutableStateOf(Tab.HOME) }
+    var current by rememberSaveable { mutableStateOf(Tab.HOME) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
 
     // الحاوية الرئيسية
     Box(
@@ -127,7 +121,7 @@ fun AppRoot() {
             .fillMaxSize()
             .background(Bg)
     ) {
-        // محتوى كل تبويب
+        // محتوى التبويبات
         when (current) {
             Tab.HOME     -> EmptyScreen()
             Tab.SUPPORT  -> SupportScreen()
@@ -142,7 +136,7 @@ fun AppRoot() {
             onOpenSettings = { settingsOpen = true },
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .statusBarsPadding()
+                .statusBarsPadding()  // يمنع التداخل مع شريط الحالة
                 .padding(top = 6.dp, end = 10.dp)
         )
 
@@ -153,18 +147,17 @@ fun AppRoot() {
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 
-        // لوحة المالك — تبقى ظاهرة إذا كان المالك مسجل
-        if (showOwnerDashboard) {
+        // لوحة المالك (تظهر فوق الواجهة وتبقى مفتوحة إن كان ownerOpen = true)
+        if (ownerOpen) {
             OwnerDashboard(
                 onClose = {
-                    // زر للخروج من وضع المالك (تعطيل دائم حتى إعادة التسجيل)
-                    showOwnerDashboard = false
-                    ownerMode = false
-                    setOwnerMode(ctx, false)
+                    // نغلق الواجهة فقط إذا لم نكن نريد إبقاءها دائماً.
+                    ownerOpen = false
                 },
-                onKeepOpen = {
-                    // إبقاءها مفتوحة (لا تغيير للحالة)
-                    showOwnerDashboard = true
+                onLogoutOwner = {
+                    ownerMode = false
+                    saveOwnerMode(ctx, false)
+                    ownerOpen = false
                 }
             )
         }
@@ -174,20 +167,23 @@ fun AppRoot() {
         SettingsDialog(
             uid = uid,
             isOwner = ownerMode,
-            onOwnerLoginSuccess = {
+            onDismiss = { settingsOpen = false },
+            onOwnerLogin = {
                 ownerMode = true
-                setOwnerMode(ctx, true)
-                settingsOpen = false
-                // افتح اللوحة فورًا
-                showOwnerDashboard = true
+                saveOwnerMode(ctx, true)
+                ownerOpen = true // افتح لوحة المالك فوراً
             },
-            onDismiss = { settingsOpen = false }
+            onOwnerLogout = {
+                ownerMode = false
+                saveOwnerMode(ctx, false)
+                ownerOpen = false
+            }
         )
     }
 }
 
 /* =========================
-   عناصر الواجهة
+   عناصر الواجهة الأساسية
    ========================= */
 @Composable
 private fun EmptyScreen() {
@@ -198,9 +194,7 @@ private fun EmptyScreen() {
     )
 }
 
-/* -------------------------
-   شاشة الدعم (واتساب + تيليجرام)
-   ------------------------- */
+/* شاشة الدعم */
 @Composable
 private fun SupportScreen() {
     val uri = LocalUriHandler.current
@@ -376,11 +370,14 @@ private fun RowScope.NavItem(
 private fun SettingsDialog(
     uid: String,
     isOwner: Boolean,
-    onOwnerLoginSuccess: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onOwnerLogin: () -> Unit,
+    onOwnerLogout: () -> Unit
 ) {
     val clip: ClipboardManager = LocalClipboardManager.current
-    var openPin by remember { mutableStateOf(false) }
+    var askPin by rememberSaveable { mutableStateOf(false) }
+    var pin by rememberSaveable { mutableStateOf("") }
+    var pinError by rememberSaveable { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -395,15 +392,59 @@ private fun SettingsDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(uid, color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = {
-                        clip.setText(AnnotatedString(uid))
-                    }) { Text("نسخ") }
+                    OutlinedButton(onClick = { clip.setText(AnnotatedString(uid)) }) { Text("نسخ") }
                 }
-                Spacer(Modifier.height(14.dp))
-                ElevatedButton(
-                    onClick = { openPin = true },
-                    enabled = !isOwner
-                ) { Text(if (isOwner) "المالك مسجل" else "تسجيل المالك") }
+
+                Spacer(Modifier.height(18.dp))
+                Divider()
+                Spacer(Modifier.height(12.dp))
+
+                Text("وضع المالك", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+
+                if (!isOwner) {
+                    Button(
+                        onClick = { askPin = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color.Black)
+                    ) { Text("تسجيل المالك") }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Verified, contentDescription = null, tint = Good)
+                        Spacer(Modifier.width(8.dp))
+                        Text("أنت في وضع المالك الآن", color = Good)
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = onOwnerLogout) { Text("الخروج من وضع المالك") }
+                }
+
+                if (askPin) {
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = pin,
+                        onValueChange = { pin = it; pinError = null },
+                        label = { Text("كلمة المرور") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        singleLine = true,
+                        isError = pinError != null
+                    )
+                    pinError?.let { Text(it, color = Bad, fontSize = 12.sp) }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { askPin = false; pin = ""; pinError = null }) { Text("إلغاء") }
+                        Button(
+                            onClick = {
+                                if (pin == OWNER_PIN) {
+                                    onOwnerLogin()
+                                    askPin = false
+                                    pin = ""
+                                } else {
+                                    pinError = "كلمة المرور غير صحيحة"
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color.Black)
+                        ) { Text("تأكيد") }
+                    }
+                }
 
                 Spacer(Modifier.height(10.dp))
                 Text(
@@ -414,237 +455,203 @@ private fun SettingsDialog(
             }
         }
     )
-
-    if (openPin) {
-        OwnerPinDialog(
-            onSuccess = {
-                openPin = false
-                onOwnerLoginSuccess()
-            },
-            onClose = { openPin = false }
-        )
-    }
-}
-
-@Composable
-private fun OwnerPinDialog(
-    onSuccess: () -> Unit,
-    onClose: () -> Unit
-) {
-    var pin by remember { mutableStateOf("") }
-    var err by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = onClose,
-        confirmButton = {
-            TextButton(onClick = {
-                if (pin == OWNER_PIN) onSuccess() else err = "الرمز غير صحيح"
-            }) { Text("تأكيد") }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text("إلغاء") } },
-        title = { Text("تسجيل المالك") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = pin,
-                    onValueChange = { pin = it },
-                    label = { Text("أدخل كلمة مرور المالك") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    singleLine = true
-                )
-                if (err != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(err!!, color = Bad, fontSize = 12.sp)
-                }
-            }
-        }
-    )
 }
 
 /* =========================
-   لوحة تحكم المالك — أزرار فقط (بتمرير)
-   تبقى مفتوحة بعد إعادة تشغيل التطبيق
+   لوحة تحكم المالك
    ========================= */
 @Composable
 private fun OwnerDashboard(
     onClose: () -> Unit,
-    onKeepOpen: () -> Unit
+    onLogoutOwner: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
-
-    // حوارات النتائج
-    var balanceDialog by remember { mutableStateOf<String?>(null) }
-
-    var showOrderDialog by remember { mutableStateOf(false) }
-    var orderLoading by remember { mutableStateOf(false) }
-    var orderError by remember { mutableStateOf<String?>(null) }
-    var orderResult by remember { mutableStateOf<String?>(null) }
+    var showBalanceResult by rememberSaveable { mutableStateOf<String?>(null) }
+    var showOrderDialog by rememberSaveable { mutableStateOf(false) }
+    var orderIdInput by rememberSaveable { mutableStateOf("") }
+    var orderStatusResult by rememberSaveable { mutableStateOf<String?>(null) }
 
     Surface(
-        color = Bg.copy(alpha = 0.98f),
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Bg),
+        color = Bg
     ) {
         Column(
-            Modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.Start
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("لوحة تحكم المالك", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Filled.Settings, contentDescription = null, tint = Accent)
+                Spacer(Modifier.width(8.dp))
+                Text("لوحة تحكم المالك", fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onKeepOpen) { Text("إبقاء مفتوحة") }
-                Spacer(Modifier.width(6.dp))
-                OutlinedButton(onClick = onClose) { Text("خروج من وضع المالك") }
+                TextButton(onClick = onClose) { Text("إغلاق") }
+                Spacer(Modifier.width(8.dp))
+                OutlinedButton(onClick = onLogoutOwner) { Text("تسجيل خروج المالك") }
             }
 
             Spacer(Modifier.height(12.dp))
 
-            val buttons = listOf(
-                "تعديل الأسعار والكميات",
-                "الطلبات المعلقة (الخدمات)",
-                "الكارتات المعلقة",
-                "طلبات شدات ببجي",
-                "طلبات شحن الايتونز",
-                "طلبات الارصدة المعلقة",
-                "طلبات لودو المعلقة",
-                "إضافة الرصيد",
-                "خصم الرصيد",
-                "فحص رصيد API",
-                "فحص حالة طلب API",
-                "عدد المستخدمين",
-                "رصيد المستخدمين",
-                "إدارة المشرفين",
-                "حظر المستخدم",
-                "الغاء حظر المستخدم",
-                "اعلان البوت",
-                "أكواد خدمات API",
-                "نظام الإحالة",
-                "شرح الخصومات",
-                "المتصدرين 🎉"
-            )
+            // أزرار فقط (Placeholders) — الشكل فقط الآن
+            OwnerButton("تعديل الأسعار والكميات")
+            OwnerButton("الطلبات المعلقة (الخدمات)")
+            OwnerButton("الكارتات المعلقة")
+            OwnerButton("طلبات شدات ببجي")
+            OwnerButton("طلبات شحن الايتونز")
+            OwnerButton("طلبات الارصدة المعلقة")
+            OwnerButton("طلبات لودو المعلقة")
+            OwnerButton("إضافة الرصيد")
+            OwnerButton("خصم الرصيد")
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 120.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(buttons) { label ->
-                    val onClick = when (label) {
-                        "فحص رصيد API" -> {
-                            {
-                                // افتح حوار ثم اجلب الرصيد
-                                balanceDialog = "جارٍ الفحص..."
-                                scope.launch {
-                                    val res = checkProviderBalance()
-                                    balanceDialog = res
-                                }
-                            }
-                        }
-                        "فحص حالة طلب API" -> {
-                            { showOrderDialog = true; orderError = null; orderResult = null }
-                        }
-                        else -> ({ /* للربط لاحقًا */ })
-                    }
-
-                    ElevatedButton(
-                        onClick = onClick,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.elevatedButtonColors(
-                            containerColor = Surface1,
-                            contentColor = OnBg
-                        )
-                    ) { Text(label) }
+            // فحص رصيد API — فعّال
+            OwnerButton("فحص رصيد API") {
+                // نداء الشبكة خارج الـ UI (بدون @Composable call)
+                // نفتح Dialog بالنتيجة عبر state
+                launchIoThenShow {
+                    checkProviderBalance()
+                } { result ->
+                    showBalanceResult = result
                 }
             }
+
+            // فحص حالة طلب API — يطلب رقم طلب ثم يستعلم
+            OwnerButton("فحص حالة طلب API") {
+                showOrderDialog = true
+            }
+
+            OwnerButton("عدد المستخدمين")
+            OwnerButton("رصيد المستخدمين")
+            OwnerButton("إدارة المشرفين")
+            OwnerButton("حظر المستخدم")
+            OwnerButton("الغاء حظر المستخدم")
+            OwnerButton("اعلان البوت")
+            OwnerButton("أكواد خدمات API")
+            OwnerButton("نظام الإحالة")
+            OwnerButton("شرح الخصومات")
+            OwnerButton("المتصدرين 🎉")
         }
     }
 
-    // حوار نتيجة الرصيد
-    if (balanceDialog != null) {
+    // Dialog نتيجة رصيد API
+    showBalanceResult?.let { txt ->
         AlertDialog(
-            onDismissRequest = { balanceDialog = null },
-            confirmButton = { TextButton(onClick = { balanceDialog = null }) { Text("إغلاق") } },
-            title = { Text("نتيجة فحص رصيد API") },
-            text = { Text(balanceDialog!!) }
+            onDismissRequest = { showBalanceResult = null },
+            confirmButton = { TextButton(onClick = { showBalanceResult = null }) { Text("حسناً") } },
+            title = { Text("نتيجة فحص الرصيد") },
+            text = { Text(txt) }
         )
     }
 
-    // حوار فحص حالة الطلب
+    // Dialog إدخال رقم الطلب
     if (showOrderDialog) {
-        var orderId by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showOrderDialog = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (orderId.isBlank()) {
-                            orderError = "أدخل رقم الطلب"
-                            return@TextButton
-                        }
-                        orderLoading = true
-                        orderError = null
-                        orderResult = null
-                        // طلب الشبكة
-                        val id = orderId.trim()
-                        LaunchedEffect(id) {
-                            val res = checkOrderStatusFlexible(id)
-                            orderResult = res
-                            orderLoading = false
-                        }
-                    }
-                ) { Text(if (orderLoading) "جارٍ..." else "تحقق") }
-            },
-            dismissButton = { TextButton(onClick = { showOrderDialog = false }) { Text("إغلاق") } },
             title = { Text("فحص حالة طلب API") },
             text = {
                 Column {
+                    Text("أدخل رقم الطلب للتحقق من حالته:")
+                    Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = orderId,
-                        onValueChange = { orderId = it },
-                        label = { Text("رقم الطلب") },
+                        value = orderIdInput,
+                        onValueChange = { orderIdInput = it },
                         singleLine = true,
+                        label = { Text("رقم الطلب") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
-                    if (orderError != null) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(orderError!!, color = Bad, fontSize = 12.sp)
-                    }
-                    if (orderResult != null) {
-                        Spacer(Modifier.height(10.dp))
-                        ElevatedCard {
-                            Column(Modifier.padding(12.dp)) {
-                                Text("النتيجة:", fontWeight = FontWeight.SemiBold)
-                                Spacer(Modifier.height(6.dp))
-                                Text(orderResult!!)
-                            }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = orderIdInput.trim()
+                    if (id.isNotEmpty()) {
+                        // نفّذ الطلب على IO وأظهر النتيجة في Dialog آخر
+                        launchIoThenShow {
+                            checkOrderStatus(id)
+                        } { result ->
+                            orderStatusResult = result
                         }
                     }
-                }
+                    showOrderDialog = false
+                }) { Text("تحقق") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showOrderDialog = false }) { Text("إلغاء") }
             }
         )
+    }
+
+    // Dialog نتيجة حالة الطلب
+    orderStatusResult?.let { txt ->
+        AlertDialog(
+            onDismissRequest = { orderStatusResult = null },
+            confirmButton = { TextButton(onClick = { orderStatusResult = null }) { Text("حسناً") } },
+            title = { Text("نتيجة فحص الطلب") },
+            text = { Text(txt) }
+        )
+    }
+}
+
+@Composable
+private fun OwnerButton(title: String, onClick: (() -> Unit)? = null) {
+    val btnColors = ButtonDefaults.buttonColors(
+        containerColor = Surface1,
+        contentColor = OnBg
+    )
+    val action = onClick ?: {}
+
+    ElevatedButton(
+        onClick = action,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        colors = btnColors
+    ) {
+        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = Accent)
+        Spacer(Modifier.width(8.dp))
+        Text(title, fontWeight = FontWeight.SemiBold)
     }
 }
 
 /* =========================
-   منطق UID + الشبكة + وضع المالك
+   Helpers (لا @Composable داخل onClick)
    ========================= */
-private fun getPrefs(ctx: Context) =
-    ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-
-private fun setOwnerMode(ctx: Context, enabled: Boolean) {
-    getPrefs(ctx).edit().putBoolean(KEY_OWNER, enabled).apply()
+@Composable
+private fun <T> launchIoThenShow(
+    task: suspend () -> T,
+    show: (T) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        scope.launch {
+            val res = withContext(Dispatchers.IO) { task() }
+            show(res)
+        }
+    }
 }
 
-private fun getOwnerMode(ctx: Context): Boolean =
-    getPrefs(ctx).getBoolean(KEY_OWNER, false)
-
+/* =========================
+   منطق UID + الشبكة
+   ========================= */
 private fun loadOrCreateUid(ctx: Context): String {
-    val sp = getPrefs(ctx)
-    val existing = sp.getString(KEY_UID, null)
+    val sp = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    val existing = sp.getString("uid", null)
     if (existing != null) return existing
     val fresh = "U" + (100000..999999).random(Random(System.currentTimeMillis()))
-    sp.edit().putString(KEY_UID, fresh).apply()
+    sp.edit().putString("uid", fresh).apply()
     return fresh
+}
+
+private fun loadOwnerMode(ctx: Context): Boolean {
+    val sp = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    return sp.getBoolean("owner_mode", false)
+}
+
+private fun saveOwnerMode(ctx: Context, enabled: Boolean) {
+    val sp = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    sp.edit().putBoolean("owner_mode", enabled).apply()
 }
 
 private suspend fun pingHealth(): Boolean? = withContext(Dispatchers.IO) {
@@ -680,135 +687,37 @@ private suspend fun tryUpsertUid(uid: String) = withContext(Dispatchers.IO) {
     }
 }
 
-/* ----- فحص رصيد المزود عبر الباكند ----- */
+/* =========================
+   مزود الخدمات — رصيد و حالة طلب
+   ========================= */
 private suspend fun checkProviderBalance(): String = withContext(Dispatchers.IO) {
-    val endpoints = listOf(
-        "$API_BASE/api/smm/balance",
-        "$API_BASE/api/smm/get-balance",
-        "$API_BASE/api/smm/get_balance"
-    )
-    for (ep in endpoints) {
-        try {
-            val url = URL(ep)
-            val con = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 6000
-                readTimeout = 6000
-            }
-            val code = con.responseCode
-            val body = (if (code in 200..299) con.inputStream else con.errorStream)
-                ?.bufferedReader()?.use(BufferedReader::readText) ?: ""
-            if (code in 200..299) {
-                return@withContext try {
-                    val j = JSONObject(body)
-                    val ok = j.optBoolean("ok", false)
-                    if (ok) {
-                        val bal = j.optString("balance", j.optString("result", body))
-                        "الرصيد: $bal"
-                    } else {
-                        "فشل: $body"
-                    }
-                } catch (_: Exception) {
-                    "الرصيد: $body"
-                }
-            }
-        } catch (_: Exception) { /* جرّب التالي */ }
-    }
-    return@withContext "تعذر الحصول على الرصيد من الخادم. تأكد من وجود مسار رصيد صالح."
-}
-
-/* ----- فحص حالة طلب المزود عبر الباكند (مسارات مرنة) ----- */
-private suspend fun checkOrderStatusFlexible(orderId: String): String = withContext(Dispatchers.IO) {
-    val enc = URLEncoder.encode(orderId, "UTF-8")
-
-    // GET بأنماط متعددة
-    val getEndpoints = listOf(
-        "$API_BASE/api/smm/order-status?order_id=$enc",
-        "$API_BASE/api/smm/order-status?id=$enc",
-        "$API_BASE/api/smm/order_status?order_id=$enc",
-        "$API_BASE/api/smm/order_status?id=$enc",
-        "$API_BASE/api/smm/order-status/$enc",
-        "$API_BASE/api/smm/order_status/$enc"
-    )
-    // POST JSON بأنماط متعددة
-    val postEndpoints = listOf(
-        "$API_BASE/api/smm/order-status",
-        "$API_BASE/api/smm/order_status"
-    )
-
-    // 1) جرّب GET
-    for (ep in getEndpoints) {
-        try {
-            val url = URL(ep)
-            val con = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 8000
-                readTimeout = 8000
-            }
-            val code = con.responseCode
-            val body = (if (code in 200..299) con.inputStream else con.errorStream)
-                ?.bufferedReader()?.use(BufferedReader::readText) ?: ""
-            if (code in 200..299) {
-                return@withContext parseOrderStatusBody(body)
-            }
-        } catch (_: Exception) { /* جرّب التالي */ }
-    }
-
-    // 2) جرّب POST JSON
-    for (ep in postEndpoints) {
-        try {
-            val url = URL(ep)
-            val con = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                doOutput = true
-                connectTimeout = 8000
-                readTimeout = 8000
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            }
-            val bodyOut = """{"order_id":"$orderId"}"""
-            OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(bodyOut) }
-
-            val code = con.responseCode
-            val body = (if (code in 200..299) con.inputStream else con.errorStream)
-                ?.bufferedReader()?.use(BufferedReader::readText) ?: ""
-            if (code in 200..299) {
-                return@withContext parseOrderStatusBody(body)
-            } else {
-                try {
-                    val err = JSONObject(body)
-                    val msg = err.optString("error", body)
-                    return@withContext "فشل الطلب ($code): $msg"
-                } catch (_: Exception) {
-                    return@withContext "فشل الطلب ($code): $body"
-                }
-            }
-        } catch (_: Exception) { /* تابع */ }
-    }
-
-    return@withContext "تعذر التحقق من حالة الطلب. تأكد من مسار الباكند وإعدادات المزود ورقم الطلب."
-}
-
-private fun parseOrderStatusBody(body: String): String {
-    return try {
-        val j = JSONObject(body)
-        val ok = j.optBoolean("ok", true) // بعض الباكند لا يرسل ok
-        if (ok) {
-            val result = j.optJSONObject("result") ?: j.optJSONObject("data") ?: j
-            val status = result.optString("status", result.optString("order_status", "غير معروفة"))
-            val charge = result.optString("charge", result.optString("price", "-"))
-            val remains = result.optString("remains", result.optString("remaining", "-"))
-            val start = result.optString("start_count", "")
-            buildString {
-                appendLine("الحالة: $status")
-                appendLine("الكلفة: $charge")
-                appendLine("المتبقي: $remains")
-                if (start.isNotBlank()) appendLine("البداية: $start")
-            }.trim()
-        } else {
-            val msg = j.optString("error", body)
-            "فشل: $msg"
+    try {
+        val url = URL("$API_BASE/api/admin/balance")
+        val con = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 7000
+            readTimeout = 7000
         }
-    } catch (_: Exception) {
-        if (body.isBlank()) "لا يوجد رد" else body // نص خام
+        val code = con.responseCode
+        val body = con.inputStream.bufferedReader().use(BufferedReader::readText)
+        "HTTP $code\n$body"
+    } catch (e: Exception) {
+        "تعذُّر الحصول على الرصيد من الخادم.\n${e.message ?: "خطأ غير معروف"}"
+    }
+}
+
+private suspend fun checkOrderStatus(orderId: String): String = withContext(Dispatchers.IO) {
+    try {
+        val url = URL("$API_BASE/api/admin/order-status?order_id=$orderId")
+        val con = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 8000
+            readTimeout = 8000
+        }
+        val code = con.responseCode
+        val body = con.inputStream.bufferedReader().use(BufferedReader::readText)
+        "HTTP $code\n$body"
+    } catch (e: Exception) {
+        "تعذُّر فحص حالة الطلب.\n${e.message ?: "خطأ غير معروف"}"
     }
 }

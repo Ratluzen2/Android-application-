@@ -168,12 +168,12 @@ fun AppRoot() {
             onOwnerLogin = { pin ->
                 if (pin == OWNER_PIN) {
                     isOwner = true
-                    saveOwnerMode(LocalContext.current, true)
+                    saveOwnerMode(ctx, true)   // <-- استبدلنا LocalContext.current بـ ctx
                 }
             },
             onOwnerLogout = {
                 isOwner = false
-                saveOwnerMode(LocalContext.current, false)
+                saveOwnerMode(ctx, false)     // <-- استبدلنا LocalContext.current بـ ctx
             }
         )
     }
@@ -240,7 +240,7 @@ private fun ContactCard(
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-        .clickable { onClick() },
+            .clickable { onClick() },
         colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
     ) {
         Row(
@@ -470,7 +470,7 @@ private fun OwnerDashboard() {
         Text("لوحة تحكم المالك", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
 
-        // عرض الأزرار عموديًا لتفادي مشاكل التخطيط
+        // عرض الأزرار عموديًا
         val buttons = listOf(
             "تعديل الأسعار والكميات",
             "الطلبات المعلقة (الخدمات)",
@@ -518,7 +518,7 @@ private fun OwnerDashboard() {
                             askOrder = true
                         }
                         else -> {
-                            // أزرار placeholder لربطها لاحقًا
+                            // placeholder
                             showInfo(title, "سيتم ربط هذا الزر لاحقًا.")
                         }
                     }
@@ -546,7 +546,6 @@ private fun OwnerDashboard() {
                     if (id.isNotEmpty()) {
                         askOrder = false
                         orderId = ""
-                        // نفذ الطلب الآن
                         scope.launch {
                             val res = checkOrderStatus(id)
                             if (res.first) {

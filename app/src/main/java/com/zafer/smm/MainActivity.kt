@@ -599,7 +599,8 @@ private fun ServiceOrderDialog(
                     }
                     loading = true
                     scope.launch {
-                        val ok = placeProviderOrder(service.uiKey, link, qty)
+                        // ←← تم الإصلاح: نمرّر uid للباكند
+                        val ok = placeProviderOrder(uid, service.uiKey, link, qty)
                         if (ok) {
                             val newBal = (balance.value - price).coerceAtLeast(0.0)
                             saveBalance(ctx, newBal)
@@ -823,6 +824,10 @@ private fun OwnerPanel(
     onShowOwnerNotices: () -> Unit,
     onToast: (String) -> Unit
 ) {
+    val scope = rememberCoroutineScope()
+    var showStatusDialog by remember { mutableStateOf(false) }
+    var orderIdText by remember { mutableStateOf("") }
+
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text("لوحة تحكم المالك", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -863,8 +868,15 @@ private fun OwnerPanel(
                     ElevatedButton(
                         onClick = {
                             when (title) {
-                                "فحص رصيد API" -> onToast("استخدم زر فحص الرصيد في الإعدادات القديمة (موجود).")
-                                "فحص حالة طلب API" -> onToast("استعمل ميزة فحص حالة الطلب من القائمة المضافة سابقاً.")
+                                "فحص رصيد API" -> {
+                                    scope.launch {
+                                        val msg = providerBalance()
+                                        onToast(msg ?: "تعذر فحص رصيد المزود")
+                                    }
+                                }
+                                "فحص حالة طلب API" -> {
+                                    showStatusDialog = true
+                                }
                                 else -> onToast("$title — قريباً")
                             }
                         },
@@ -880,6 +892,36 @@ private fun OwnerPanel(
                 if (row.size == 1) Spacer(Modifier.weight(1f))
             }
         }
+    }
+
+    if (showStatusDialog) {
+        AlertDialog(
+            onDismissRequest = { showStatusDialog = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = orderIdText.trim()
+                    if (id.isEmpty()) return@TextButton
+                    // نداء الشبكة
+                    val scopeLocal = rememberCoroutineScope()
+                    scopeLocal.launch {
+                        val msg = providerOrderStatus(id)
+                        onToast(msg ?: "تعذر فحص حالة الطلب")
+                    }
+                    orderIdText = ""
+                    showStatusDialog = false
+                }) { Text("فحص") }
+            },
+            dismissButton = { TextButton(onClick = { showStatusDialog = false }) { Text("إلغاء") } },
+            title = { Text("فحص حالة طلب API") },
+            text = {
+                OutlinedTextField(
+                    value = orderIdText,
+                    onValueChange = { orderIdText = it.filter { ch -> ch.isDigit() } },
+                    singleLine = true,
+                    label = { Text("أدخل رقم الطلب من المزود") }
+                )
+            }
+        )
     }
 }
 
@@ -1042,8 +1084,8 @@ private suspend fun tryUpsertUid(uid: String) = withContext(Dispatchers.IO) {
     }
 }
 
-/* إرسال طلب إلى مزود الخدمات عبر الباكند */
-private suspend fun placeProviderOrder(serviceKey: String, link: String, quantity: Int): Boolean =
+/* إرسال طلب إلى مزود الخدمات عبر الباكند — تم إصلاحه ليُمرّر UID */
+private suspend fun placeProviderOrder(uid: String, serviceKey: String, link: String, quantity: Int): Boolean =
     withContext(Dispatchers.IO) {
         try {
             val url = URL("$API_BASE/api/provider/order")
@@ -1055,6 +1097,7 @@ private suspend fun placeProviderOrder(serviceKey: String, link: String, quantit
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
             }
             val payload = JSONObject()
+                .put("uid", uid)                 // ← مهم
                 .put("service_key", serviceKey)
                 .put("link", link)
                 .put("quantity", quantity)
@@ -1068,6 +1111,61 @@ private suspend fun placeProviderOrder(serviceKey: String, link: String, quantit
             false
         }
     }
+
+/* فحص رصيد المزود عبر الباكند */
+private suspend fun providerBalance(): String? = withContext(Dispatchers.IO) {
+    try {
+        val url = URL("$API_BASE/api/provider/balance")
+        val con = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 8000
+            readTimeout = 8000
+        }
+        con.connect()
+        val code = con.responseCode
+        val txt = (if (code in 200..299) con.inputStream else con.errorStream)
+            .bufferedReader().use(BufferedReader::readText)
+        if (code !in 200..299) return@withContext null
+        val root = JSONObject(txt)
+        val raw = root.optJSONObject("raw")
+        val bal = raw?.optString("balance") ?: ""
+        val cur = raw?.optString("currency") ?: ""
+        if (bal.isNotEmpty()) "رصيد المزود: $bal $cur" else txt
+    } catch (_: Exception) {
+        null
+    }
+}
+
+/* فحص حالة طلب المزود عبر الباكند */
+private suspend fun providerOrderStatus(orderId: String): String? = withContext(Dispatchers.IO) {
+    try {
+        val url = URL("$API_BASE/api/provider/status")
+        val con = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            connectTimeout = 8000
+            readTimeout = 8000
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        }
+        val body = JSONObject().put("order_id", orderId).toString()
+        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
+        val code = con.responseCode
+        val txt = (if (code in 200..299) con.inputStream else con.errorStream)
+            .bufferedReader().use(BufferedReader::readText)
+        if (code !in 200..299) return@withContext null
+        val root = JSONObject(txt)
+        val raw = root.optJSONObject("raw")
+        if (raw != null) {
+            val st = raw.optString("status", "Unknown")
+            val rem = raw.optString("remains", "")
+            val ch  = raw.optString("charge", "")
+            val cur = raw.optString("currency", "")
+            "الحالة: $st | المتبقي: $rem | التكلفة: $ch $cur"
+        } else txt
+    } catch (_: Exception) {
+        null
+    }
+}
 
 /* =========================
    شريط سفلي

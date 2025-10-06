@@ -1,22 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.zafer.smm">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- صلاحيات الشبكة -->
+    <!-- إنترنت -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-
-    <!-- إذن الإشعارات (Android 13+). لا يسبب خطأ على الإصدارات الأقدم -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
     <application
         android:allowBackup="true"
+        android:label="خدمات راتلوزن"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
-        android:networkSecurityConfig="@xml/network_security_config">
-        <!-- ملاحظة:
-             - android:usesCleartextTraffic="true" + networkSecurityConfig تسمح بـ HTTP عند الحاجة.
-             - إن كنت ستستخدم HTTPS فقط يمكنك حذف السطرين السابقين. -->
+        android:theme="@style/Theme.Smm.NoActionBar">
 
         <activity
             android:name=".MainActivity"
@@ -26,5 +19,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+
     </application>
 </manifest>

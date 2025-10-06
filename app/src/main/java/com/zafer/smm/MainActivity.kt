@@ -128,14 +128,14 @@ private val serviceCategories = listOf(
     "قسم خدمات الودو"
 )
 
-/* ربط اسم الخدمة برقم خدمة المزود (كما زودتني) */
+/* ربط اسم الخدمة برقم خدمة المزود */
 private val serviceIdMap = mapOf(
-    "متابعين تيكتوك"   to 16256,
-    "متابعين انستغرام" to 16267,
-    "لايكات تيكتوك"    to 12320,
-    "لايكات انستغرام"  to 1066500,
-    "مشاهدات تيكتوك"   to 9448,
-    "مشاهدات انستغرام" to 64686464,
+    "متابعين تيكتوك"    to 16256,
+    "متابعين انستغرام"  to 16267,
+    "لايكات تيكتوك"     to 12320,
+    "لايكات انستغرام"   to 1066500,
+    "مشاهدات تيكتوك"    to 9448,
+    "مشاهدات انستغرام"  to 64686464,
     "مشاهدات بث تيكتوك" to 14442,
     "مشاهدات بث انستا"  to 646464,
     "رفع سكور البث"     to 14662,
@@ -293,7 +293,7 @@ fun AppRoot() {
         )
     }
 
-    // حوار فحص رصيد المزود
+    // حوار فحص رصيد المزود — (الإصلاح هنا) استخدم rememberCoroutineScope خارج onClick
     if (showProviderBalance) {
         AlertDialog(
             onDismissRequest = { showProviderBalance = false; providerBalanceResult = null },
@@ -303,10 +303,9 @@ fun AppRoot() {
             title = { Text("فحص رصيد API") },
             text = {
                 Column {
+                    val s = rememberCoroutineScope() // <-- هنا
                     Button(
                         onClick = {
-                            // استدعاء الباكند
-                            val s = rememberCoroutineScope()
                             s.launch {
                                 providerBalanceResult = "جاري الفحص..."
                                 val res = providerBalance()

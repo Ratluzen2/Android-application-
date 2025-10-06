@@ -7,14 +7,16 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -26,30 +28,27 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.*
 import kotlin.math.ceil
 import kotlin.random.Random
 
-/* =========================
-   Config
-   ========================= */
-private const val API_BASE =
-    "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // عدّلها إن لزم
+/* =========================================
+   إعدادات عامة + مفاتيح
+   ========================================= */
+private const val API_BASE = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
+private const val OWNER_PIN = "2000" // PIN المالك
 
-/* =========================
+/* =========================================
    Theme
-   ========================= */
+   ========================================= */
 private val Bg       = Color(0xFF111315)
 private val Surface1 = Color(0xFF1A1F24)
 private val OnBg     = Color(0xFFEDEFF2)
@@ -72,48 +71,30 @@ fun AppTheme(content: @Composable () -> Unit) {
     )
 }
 
-/* =========================
-   Models
-   ========================= */
+/* =========================================
+   نماذج بيانات
+   ========================================= */
+private enum class Tab { HOME, SERVICES, WALLET, ORDERS, SUPPORT, OWNER }
+
 data class AppNotice(
+    val id: String,
     val title: String,
     val body: String,
-    val ts: Long = System.currentTimeMillis(),
-    val forOwner: Boolean = false
+    val ts: Long,
+    val forOwner: Boolean,
+    val read: Boolean
 )
-
-enum class Tab { HOME, SERVICES, WALLET, ORDERS, SUPPORT }
 
 data class ServiceDef(
     val uiKey: String,
+    val serviceId: String,
     val min: Int,
     val max: Int,
     val pricePerK: Double,
-    val category: String,
-    val serviceId: Long       // رقم الخدمة الحقيقي للمزوّد
+    val category: String
 )
 
-/* أرقام الخدمات كما زوّدتني */
-private val servicesCatalog = listOf(
-    // المتابعين
-    ServiceDef("متابعين تيكتوك",   100, 1_000_000, 3.5, "المتابعين",          16256),
-    ServiceDef("متابعين انستغرام", 100, 1_000_000, 3.0, "المتابعين",          16267),
-    // اللايكات
-    ServiceDef("لايكات تيكتوك",    100, 1_000_000, 1.0, "الايكات",            12320),
-    ServiceDef("لايكات انستغرام",  100, 1_000_000, 1.0, "الايكات",          1066500),
-    // المشاهدات
-    ServiceDef("مشاهدات تيكتوك",    100, 1_000_000, 0.1, "المشاهدات",           9448),
-    ServiceDef("مشاهدات انستغرام",  100, 1_000_000, 0.1, "المشاهدات",       64686464),
-    // البث المباشر
-    ServiceDef("مشاهدات بث تيكتوك", 100, 1_000_000, 2.0, "مشاهدات البث المباشر", 14442),
-    ServiceDef("مشاهدات بث انستا",  100, 1_000_000, 2.0, "مشاهدات البث المباشر", 646464),
-    // رفع سكور
-    ServiceDef("رفع سكور البث",     100, 1_000_000, 2.0, "رفع سكور تيكتوك",   14662),
-    // تلجرام
-    ServiceDef("اعضاء قنوات تلي",   100, 1_000_000, 3.0, "خدمات التليجرام",   955656),
-    ServiceDef("اعضاء كروبات تلي",  100, 1_000_000, 3.0, "خدمات التليجرام",   644656),
-)
-
+/* فئات الخدمات */
 private val serviceCategories = listOf(
     "قسم المتابعين",
     "قسم الايكات",
@@ -127,9 +108,30 @@ private val serviceCategories = listOf(
     "قسم خدمات الودو"
 )
 
-/* =========================
-   Activity
-   ========================= */
+/* كتالوج الخدمات المربوطة بـ API مع أكوادك */
+private val servicesCatalog = listOf(
+    // المتابعين
+    ServiceDef("متابعين تيكتوك",   "16256",   100, 1_000_000, 3.5, "المتابعين"),
+    ServiceDef("متابعين انستغرام", "16267",   100, 1_000_000, 3.0, "المتابعين"),
+    // اللايكات
+    ServiceDef("لايكات تيكتوك",    "12320",   100, 1_000_000, 1.0, "الايكات"),
+    ServiceDef("لايكات انستغرام",  "1066500", 100, 1_000_000, 1.0, "الايكات"),
+    // المشاهدات
+    ServiceDef("مشاهدات تيكتوك",   "9448",    100, 1_000_000, 0.1, "المشاهدات"),
+    ServiceDef("مشاهدات انستغرام", "64686464",100, 1_000_000, 0.1, "المشاهدات"),
+    // البث المباشر
+    ServiceDef("مشاهدات بث تيكتوك", "14442",  100, 1_000_000, 2.0, "مشاهدات البث المباشر"),
+    ServiceDef("مشاهدات بث انستا",  "646464", 100, 1_000_000, 2.0, "مشاهدات البث المباشر"),
+    // رفع سكور
+    ServiceDef("رفع سكور البث",     "14662",  100, 1_000_000, 2.0, "رفع سكور تيكتوك"),
+    // تلجرام
+    ServiceDef("اعضاء قنوات تلي",   "955656", 100, 1_000_000, 3.0, "خدمات التليجرام"),
+    ServiceDef("اعضاء كروبات تلي",  "644656", 100, 1_000_000, 3.0, "خدمات التليجرام"),
+)
+
+/* =========================================
+   MainActivity
+   ========================================= */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -138,125 +140,139 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/* =========================
-   Root
-   ========================= */
+/* =========================================
+   App Root
+   ========================================= */
 @Composable
 fun AppRoot() {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
     var uid by remember { mutableStateOf(loadOrCreateUid(ctx)) }
-    var settingsOpen by remember { mutableStateOf(false) }
-    var ownerMode by remember { mutableStateOf(loadOwnerMode(ctx)) }
+    var isOwner by rememberSaveable { mutableStateOf(loadOwnerMode(ctx)) }
+    var current by rememberSaveable { mutableStateOf(loadLastTab(ctx, if (isOwner) Tab.OWNER else Tab.HOME)) }
 
     var online by remember { mutableStateOf<Boolean?>(null) }
 
-    var notices by remember { mutableStateOf(loadNotices(ctx)) }
+    // إشعارات
     var showNoticeCenter by remember { mutableStateOf(false) }
-    val unreadCount = notices.count { !it.forOwner }
+    var userNotices by remember { mutableStateOf<List<AppNotice>>(emptyList()) }
+    var ownerNotices by remember { mutableStateOf<List<AppNotice>>(emptyList()) }
+    val unreadUser = userNotices.count { !it.read }
+    val unreadOwner = ownerNotices.count { !it.read }
 
-    LaunchedEffect(Unit) {
+    // رصيد المستخدم
+    var userBalance by remember { mutableStateOf(0.0) }
+
+    // فحص السيرفر ودورية جلب البيانات
+    LaunchedEffect(uid, isOwner) {
         scope.launch { tryUpsertUid(uid) }
         while (true) {
             online = pingHealth()
+            // اسحب الرصيد
+            fetchUserBalance(uid)?.let { userBalance = it }
+            // اسحب الإشعارات
+            fetchNotices(uid = uid, forOwner = false)?.let { userNotices = it }
+            if (isOwner) fetchNotices(uid = uid, forOwner = true)?.let { ownerNotices = it }
             delay(20_000)
         }
     }
 
-    var current by remember { mutableStateOf(Tab.HOME) }
-
-    var toast by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(toast) { if (toast != null) { delay(2000); toast = null } }
-
-    Box(Modifier.fillMaxSize().background(Bg)) {
-
+    // حاوية شاشات
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Bg)
+    ) {
         when (current) {
-            Tab.HOME -> if (ownerMode) {
-                OwnerPanel(
-                    onShowOwnerNotices = { showNoticeCenter = true },
-                    onToast = { toast = it }
-                )
-            } else {
-                HomeScreen()
-            }
-
+            Tab.HOME -> HomeScreen()
             Tab.SERVICES -> ServicesScreen(
                 uid = uid,
-                onAddNotice = { n -> notices = notices + n; saveNotices(ctx, notices) },
-                onToast = { toast = it },
-                ctx = ctx
+                balance = userBalance,
+                onBalanceChanged = { userBalance = it }
             )
-
             Tab.WALLET -> WalletScreen(
                 uid = uid,
-                onAddNotice = { n -> notices = notices + n; saveNotices(ctx, notices) },
-                onToast = { toast = it },
-                ctx = ctx
+                balance = userBalance,
+                onBalanceChanged = { userBalance = it }
             )
-
-            Tab.ORDERS -> OrdersScreen()
+            Tab.ORDERS -> OrdersScreen(uid = uid)
             Tab.SUPPORT -> SupportScreen()
+            Tab.OWNER -> OwnerDashboard(
+                ownerUid = uid,
+                onRequireRefresh = { /* سيُعاد الجلب في الدورة القادمة */ }
+            )
         }
 
+        // الشريط العلوي: حالة الخادم + جرس الإشعارات + إعدادات
         TopRightBar(
             online = online,
-            unread = unreadCount,
+            unread = if (isOwner && current == Tab.OWNER) unreadOwner else unreadUser,
             onOpenNotices = { showNoticeCenter = true },
-            onOpenSettings = { settingsOpen = true },
+            onOpenSettings = { /* حوار الإعدادات */ },
+            isOwner = isOwner,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .statusBarsPadding()
                 .padding(top = 6.dp, end = 10.dp)
         )
 
+        // الشريط السفلي
         BottomNavBar(
             current = current,
-            onChange = { current = it },
-            modifier = Modifier.align(Alignment.BottomCenter)
+            onChange = {
+                current = it
+                saveLastTab(ctx, it)
+            },
+            modifier = Modifier.align(Alignment.BottomCenter),
+            isOwner = isOwner
         )
-
-        toast?.let { msg ->
-            Box(Modifier.fillMaxSize()) {
-                Surface(
-                    color = Surface1, tonalElevation = 6.dp,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 90.dp)
-                ) {
-                    Text(msg, Modifier.padding(horizontal = 16.dp, vertical = 10.dp), color = OnBg)
-                }
-            }
-        }
     }
 
+    // إعدادات (UID + تسجيل المالك)
+    var settingsOpen by remember { mutableStateOf(false) }
     if (settingsOpen) {
         SettingsDialog(
             uid = uid,
-            ownerMode = ownerMode,
-            onOwnerLogin  = { ownerMode = true;  saveOwnerMode(ctx, true) },
-            onOwnerLogout = { ownerMode = false; saveOwnerMode(ctx, false) },
-            onDismiss = { settingsOpen = false }
+            isOwner = isOwner,
+            onDismiss = { settingsOpen = false },
+            onOwnerLogin = { pin ->
+                if (pin == OWNER_PIN) {
+                    isOwner = true
+                    saveOwnerMode(ctx, true)
+                    saveLastTab(ctx, Tab.OWNER)
+                }
+            },
+            onOwnerLogout = {
+                isOwner = false
+                saveOwnerMode(ctx, false)
+                saveLastTab(ctx, Tab.HOME)
+            }
         )
     }
 
+    // مركز الإشعارات
     if (showNoticeCenter) {
         NoticeCenterDialog(
-            notices = if (ownerMode) notices.filter { it.forOwner } else notices.filter { !it.forOwner },
+            notices = if (isOwner && current == Tab.OWNER) ownerNotices else userNotices,
             onClear = {
-                notices = if (ownerMode) notices.filter { !it.forOwner } else notices.filter { it.forOwner }
-                saveNotices(ctx, notices)
+                // تعليم كمقروء على الخادم
+                CoroutineScope(Dispatchers.IO).launch {
+                    markAllRead(uid = uid, forOwner = isOwner && current == Tab.OWNER)
+                }
+                showNoticeCenter = false
             },
             onDismiss = { showNoticeCenter = false }
         )
     }
 }
 
-/* =========================
-   Simple screens
-   ========================= */
-@Composable private fun HomeScreen() {
-    Box(Modifier.fillMaxSize().background(Bg), contentAlignment = Alignment.Center) {
+/* =========================================
+   عناصر واجهة عامة
+   ========================================= */
+@Composable
+private fun HomeScreen() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("مرحباً بك 👋", color = OnBg)
     }
 }
@@ -267,30 +283,55 @@ private fun SupportScreen() {
     val whatsappUrl = "https://wa.me/9647763410970"
     val telegramUrl = "https://t.me/z396r"
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.Start
+    ) {
         Text("الدعم", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         Text("للتواصل أو الاستفسار اختر إحدى الطرق التالية:")
+
         Spacer(Modifier.height(12.dp))
-        ContactCard("واتساب", "+964 776 341 0970", "افتح واتساب", { uri.openUri(whatsappUrl) }, Icons.Filled.Call)
+        ContactCard(
+            title = "واتساب",
+            subtitle = "+964 776 341 0970",
+            actionText = "افتح واتساب",
+            onClick = { uri.openUri(whatsappUrl) },
+            icon = Icons.Filled.Call
+        )
+
         Spacer(Modifier.height(10.dp))
-        ContactCard("تيليجرام", "@z396r", "افتح تيليجرام", { uri.openUri(telegramUrl) }, Icons.Filled.Send)
+        ContactCard(
+            title = "تيليجرام",
+            subtitle = "@z396r",
+            actionText = "افتح تيليجرام",
+            onClick = { uri.openUri(telegramUrl) },
+            icon = Icons.Filled.Send
+        )
     }
 }
 
 @Composable
 private fun ContactCard(
-    title: String, subtitle: String, actionText: String, onClick: () -> Unit,
+    title: String,
+    subtitle: String,
+    actionText: String,
+    onClick: () -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
     ElevatedCard(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = Accent, modifier = Modifier.size(28.dp))
+            Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.size(28.dp))
             Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.SemiBold)
                 Text(subtitle, color = Dim, fontSize = 13.sp)
             }
@@ -299,55 +340,63 @@ private fun ContactCard(
     }
 }
 
-/* =========================
-   Top bar (status + bell + settings)
-   ========================= */
+/* شريط علوي يمين (حالة الخادم + جرس + إعدادات) */
 @Composable
 private fun TopRightBar(
     online: Boolean?,
     unread: Int,
     onOpenNotices: () -> Unit,
     onOpenSettings: () -> Unit,
+    isOwner: Boolean,
     modifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier
-            .background(Surface1, shape = MaterialTheme.shapes.medium)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .background(Surface1, shape = RoundedCornerShape(10.dp))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
-            IconButton(onClick = onOpenNotices, modifier = Modifier.size(24.dp)) {
+        // جرس مع عدد غير المقروء
+        BadgedBox(
+            badge = { if (unread > 0) Badge { Text(unread.toString()) } }
+        ) {
+            IconButton(onClick = onOpenNotices, modifier = Modifier.size(22.dp)) {
                 Icon(Icons.Filled.Notifications, contentDescription = "الإشعارات", tint = OnBg)
             }
         }
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(8.dp))
+
+        // حالة الخادم
         val (txt, clr) = when (online) {
-            true  -> "الخادم: متصل" to Good
+            true -> "الخادم: متصل" to Good
             false -> "الخادم: غير متصل" to Bad
-            null  -> "الخادم: ..."   to Dim
+            null -> "الخادم: ..." to Dim
         }
-        Box(
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
-                .background(Surface1, shape = MaterialTheme.shapes.small)
-                .padding(horizontal = 8.dp, vertical = 4.dp)
+                .background(Surface1, shape = RoundedCornerShape(8.dp))
+                .padding(horizontal = 10.dp, vertical = 4.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(8.dp).background(clr, shape = MaterialTheme.shapes.small))
-                Spacer(Modifier.width(6.dp))
-                Text(txt, fontSize = 12.sp, color = OnBg)
-            }
+            Box(
+                Modifier
+                    .size(8.dp)
+                    .background(clr, shape = RoundedCornerShape(4.dp))
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(txt, fontSize = 12.sp, color = OnBg)
         }
-        Spacer(Modifier.width(6.dp))
-        IconButton(onClick = onOpenSettings, modifier = Modifier.size(22.dp)) {
+
+        Spacer(Modifier.width(8.dp))
+
+        // إعدادات
+        IconButton(onClick = onOpenSettings, modifier = Modifier.size(20.dp)) {
             Icon(Icons.Filled.Settings, contentDescription = "الإعدادات", tint = OnBg)
         }
     }
 }
 
-/* =========================
-   Notice Center
-   ========================= */
+/* مركز الإشعارات */
 @Composable
 private fun NoticeCenterDialog(
     notices: List<AppNotice>,
@@ -357,13 +406,13 @@ private fun NoticeCenterDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
-        dismissButton  = { TextButton(onClick = onClear) { Text("مسح الإشعارات") } },
+        dismissButton = { TextButton(onClick = onClear) { Text("تمييز كمقروء") } },
         title = { Text("الإشعارات") },
         text = {
             if (notices.isEmpty()) {
                 Text("لا توجد إشعارات حالياً", color = Dim)
             } else {
-                Column {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
                     notices.sortedByDescending { it.ts }.forEach {
                         val dt = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(it.ts))
                         Text("• ${it.title}", fontWeight = FontWeight.SemiBold)
@@ -377,23 +426,24 @@ private fun NoticeCenterDialog(
     )
 }
 
-/* =========================
-   Services tab
-   ========================= */
+/* =========================================
+   تبويب الخدمات
+   ========================================= */
 @Composable
 private fun ServicesScreen(
     uid: String,
-    onAddNotice: (AppNotice) -> Unit,
-    onToast: (String) -> Unit,
-    ctx: Context
+    balance: Double,
+    onBalanceChanged: (Double) -> Unit
 ) {
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var selectedService by remember { mutableStateOf<ServiceDef?>(null) }
 
+    // شاشة الأقسام
     if (selectedCategory == null) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             Text("الخدمات", fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
+
             serviceCategories.forEach { cat ->
                 ElevatedCard(
                     modifier = Modifier
@@ -403,7 +453,7 @@ private fun ServicesScreen(
                     colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
                 ) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.ChevronLeft, null, tint = Accent)
+                        Icon(Icons.Filled.ChevronLeft, contentDescription = null, tint = Accent)
                         Spacer(Modifier.width(8.dp))
                         Text(cat, fontWeight = FontWeight.SemiBold)
                     }
@@ -413,7 +463,8 @@ private fun ServicesScreen(
         return
     }
 
-    val inCat = when (selectedCategory) {
+    // الخدمات حسب القسم
+    val apiItems: List<ServiceDef> = when (selectedCategory) {
         "قسم المتابعين"            -> servicesCatalog.filter { it.category == "المتابعين" }
         "قسم الايكات"              -> servicesCatalog.filter { it.category == "الايكات" }
         "قسم المشاهدات"            -> servicesCatalog.filter { it.category == "المشاهدات" }
@@ -423,7 +474,7 @@ private fun ServicesScreen(
         else -> emptyList()
     }
 
-    if (inCat.isNotEmpty()) {
+    if (apiItems.isNotEmpty()) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { selectedCategory = null }) {
@@ -434,7 +485,7 @@ private fun ServicesScreen(
             }
             Spacer(Modifier.height(10.dp))
 
-            inCat.forEach { svc ->
+            apiItems.forEach { svc ->
                 ElevatedCard(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -451,118 +502,134 @@ private fun ServicesScreen(
             }
         }
     } else {
+        // الأقسام اليدوية
         ManualSectionsScreen(
             title = selectedCategory!!,
             onBack = { selectedCategory = null },
-            onToast = onToast,
-            onAddNotice = onAddNotice,
             uid = uid
         )
     }
 
+    // نافذة طلب خدمة API
     selectedService?.let { svc ->
         ServiceOrderDialog(
             uid = uid,
             service = svc,
-            onDismiss = { selectedService = null },
-            onOrdered = { ok, msg ->
-                onToast(msg)
-                if (ok) {
-                    onAddNotice(AppNotice("طلب جديد (${svc.uiKey})", "تم استلام طلبك وسيتم تنفيذه قريباً.", forOwner = false))
-                    onAddNotice(AppNotice("طلب خدمات معلّق", "طلب ${svc.uiKey} من UID=$uid بانتظار المعالجة/التنفيذ", forOwner = true))
-                }
-            },
-            ctx = ctx
+            userBalance = balance,
+            onBalanceChanged = onBalanceChanged,
+            onDismiss = { selectedService = null }
         )
     }
 }
 
-/* مربّع الطلب لخدمات المزوّد */
+/* طلب خدمة مربوطة بالـ API */
 @Composable
 private fun ServiceOrderDialog(
     uid: String,
     service: ServiceDef,
-    onDismiss: () -> Unit,
-    onOrdered: (Boolean, String) -> Unit,
-    ctx: Context
+    userBalance: Double,
+    onBalanceChanged: (Double) -> Unit,
+    onDismiss: () -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     var link by remember { mutableStateOf("") }
     var qtyText by remember { mutableStateOf(service.min.toString()) }
     val qty = qtyText.toIntOrNull() ?: 0
     val price = ceil((qty / 1000.0) * service.pricePerK * 100) / 100.0
+    var working by remember { mutableStateOf(false) }
+    var toast by remember { mutableStateOf<String?>(null) }
 
-    val balance = remember { mutableStateOf(loadBalance(ctx)) }
-    val scope = rememberCoroutineScope()
-    var loading by remember { mutableStateOf(false) }
+    if (toast != null) {
+        AlertDialog(
+            onDismissRequest = { toast = null },
+            confirmButton = { TextButton(onClick = { toast = null }) { Text("حسناً") } },
+            title = { Text("تنبيه") },
+            text = { Text(toast!!) }
+        )
+    }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!working) onDismiss() },
         confirmButton = {
             TextButton(
-                enabled = !loading,
+                enabled = !working,
                 onClick = {
-                    if (link.isBlank()) { onOrdered(false, "الرجاء إدخال الرابط"); return@TextButton }
+                    if (link.isBlank()) { toast = "الرجاء إدخال الرابط"; return@TextButton }
                     if (qty < service.min || qty > service.max) {
-                        onOrdered(false, "الكمية يجب أن تكون بين ${service.min} و ${service.max}")
+                        toast = "الكمية يجب أن تكون بين ${service.min} و ${service.max}"
                         return@TextButton
                     }
-                    if (balance.value < price) {
-                        onOrdered(false, "رصيدك غير كافٍ. السعر: $price\$ | رصيدك: ${balance.value}\$")
+                    if (userBalance < price) {
+                        toast = "رصيدك غير كافٍ. السعر: $price\$ | رصيدك: ${"%.2f".format(userBalance)}$"
                         return@TextButton
                     }
-                    loading = true
+                    working = true
                     scope.launch {
-                        val ok = placeProviderOrder(service, link, qty)
-                        if (ok) {
-                            val newBal = (balance.value - price).coerceAtLeast(0.0)
-                            saveBalance(ctx, newBal)
-                            balance.value = newBal
-                            onOrdered(true, "تم إرسال الطلب بنجاح. رقم الطلب سيظهر بعد التنفيذ.")
+                        val res = placeProviderOrder(uid, service, link, qty)
+                        if (res.first) {
+                            // خصم محلي مؤقت — الخادم سيحفظ القيمة الفعلية
+                            val newBal = (userBalance - price).coerceAtLeast(0.0)
+                            onBalanceChanged(newBal)
+                            toast = "تم إرسال الطلب بنجاح. رقم الطلب: ${res.second ?: "—"}"
                         } else {
-                            onOrdered(false, "فشل إرسال الطلب إلى الخادم")
+                            toast = "فشل إرسال الطلب:\n${res.third ?: "تعذر الاتصال"}"
                         }
-                        loading = false
+                        working = false
                         onDismiss()
                     }
                 }
-            ) { Text(if (loading) "يرسل..." else "شراء") }
+            ) { Text(if (working) "يرسل..." else "شراء") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
+        dismissButton = { TextButton(enabled = !working, onClick = onDismiss) { Text("إلغاء") } },
         title = { Text(service.uiKey) },
         text = {
             Column {
                 Text("الكمية بين ${service.min} و ${service.max}", color = Dim, fontSize = 12.sp)
                 Spacer(Modifier.height(6.dp))
                 OutlinedTextField(
-                    value = qtyText, onValueChange = { s -> if (s.all { it.isDigit() }) qtyText = s },
-                    label = { Text("الكمية") }, singleLine = true
+                    value = qtyText,
+                    onValueChange = { s -> if (s.all { it.isDigit() }) qtyText = s },
+                    label = { Text("الكمية") },
+                    singleLine = true
                 )
                 Spacer(Modifier.height(6.dp))
                 OutlinedTextField(
-                    value = link, onValueChange = { link = it },
-                    label = { Text("الرابط (أرسل الرابط وليس اليوزر)") }, singleLine = true
+                    value = link,
+                    onValueChange = { link = it },
+                    label = { Text("الرابط (أرسل الرابط وليس اليوزر)") },
+                    singleLine = true
                 )
                 Spacer(Modifier.height(8.dp))
                 Text("السعر التقريبي: $price\$", fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(4.dp))
-                Text("رصيدك الحالي: ${balance.value}\$", color = Dim, fontSize = 12.sp)
+                Text("رصيدك الحالي: ${"%.2f".format(userBalance)}$", color = Dim, fontSize = 12.sp)
             }
         }
     )
 }
 
-/* الأقسام اليدوية (تُراجع يدوياً من المالك) */
+/* أقسام تُراجع يدوياً من المالك */
 @Composable
 private fun ManualSectionsScreen(
     title: String,
     onBack: () -> Unit,
-    onToast: (String) -> Unit,
-    onAddNotice: (AppNotice) -> Unit,
     uid: String
 ) {
+    val scope = rememberCoroutineScope()
+    var toast by remember { mutableStateOf<String?>(null) }
+
+    if (toast != null) {
+        AlertDialog(
+            onDismissRequest = { toast = null },
+            confirmButton = { TextButton(onClick = { toast = null }) { Text("حسناً") } },
+            title = { Text("تم الإرسال") },
+            text = { Text(toast!!) }
+        )
+    }
+
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "رجوع", tint = OnBg) }
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "رجوع", tint = OnBg) }
             Spacer(Modifier.width(6.dp))
             Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
@@ -578,11 +645,15 @@ private fun ManualSectionsScreen(
 
         items.forEach { name ->
             ElevatedCard(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable {
-                    onToast("تم استلام طلبك ($name). سيُراجع من المالك.")
-                    onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $name للمراجعة.", forOwner = false))
-                    onAddNotice(AppNotice("طلب يدوي جديد", "طلب $name من UID=$uid يحتاج مراجعة.", forOwner = true))
-                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .clickable {
+                        scope.launch {
+                            val ok = createManualRequest(uid, name)
+                            toast = if (ok) "تم استلام طلبك ($name). سيُراجع من المالك." else "تعذر إرسال الطلب."
+                        }
+                    },
                 colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
             ) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -595,19 +666,28 @@ private fun ManualSectionsScreen(
     }
 }
 
-/* =========================
-   Wallet tab
-   ========================= */
+/* =========================================
+   تبويب رصيدي
+   ========================================= */
 @Composable
 private fun WalletScreen(
     uid: String,
-    onAddNotice: (AppNotice) -> Unit,
-    onToast: (String) -> Unit,
-    ctx: Context
+    balance: Double,
+    onBalanceChanged: (Double) -> Unit
 ) {
-    var balance by remember { mutableStateOf(loadBalance(ctx)) }
+    val scope = rememberCoroutineScope()
     var askAsiacell by remember { mutableStateOf(false) }
     var cardNumber by remember { mutableStateOf("") }
+    var toast by remember { mutableStateOf<String?>(null) }
+
+    if (toast != null) {
+        AlertDialog(
+            onDismissRequest = { toast = null },
+            confirmButton = { TextButton(onClick = { toast = null }) { Text("حسناً") } },
+            title = { Text("تنبيه") },
+            text = { Text(toast!!) }
+        )
+    }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("رصيدي", fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -617,8 +697,12 @@ private fun WalletScreen(
         Text("طرق الشحن:", fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
 
+        // 1: أسيا سيل
         ElevatedCard(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { askAsiacell = true },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp)
+                .clickable { askAsiacell = true },
             colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -628,6 +712,7 @@ private fun WalletScreen(
             }
         }
 
+        // 2..6: بقية الطرق -> الدعم
         listOf(
             "شحن عبر هلا بي",
             "شحن عبر نقاط سنتات",
@@ -636,10 +721,10 @@ private fun WalletScreen(
             "شحن عبر عملات رقمية (USDT)"
         ).forEach {
             ElevatedCard(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable {
-                    onToast("لإتمام الشحن تواصل مع الدعم (واتساب/تيليجرام).")
-                    onAddNotice(AppNotice("شحن رصيد", "يرجى التواصل مع الدعم لإكمال شحن: $it", forOwner = false))
-                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .clickable { toast = "لإتمام الشحن تواصل مع الدعم (واتساب/تيليجرام) من تبويب (الدعم)." },
                 colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
             ) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -654,19 +739,6 @@ private fun WalletScreen(
     if (askAsiacell) {
         AlertDialog(
             onDismissRequest = { askAsiacell = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    val digitsOnly = cardNumber.filter { it.isDigit() }
-                    if (digitsOnly.length != 14 && digitsOnly.length != 16) return@TextButton
-                    val now = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date())
-                    onAddNotice(AppNotice("كارت أسيا سيل جديد", "رقم الكارت: $cardNumber | UID=$uid | الوقت: $now", forOwner = true))
-                    onAddNotice(AppNotice("تم استلام كارتك", "تم إرسال كارت أسيا سيل إلى المالك للمراجعة.", forOwner = false))
-                    cardNumber = ""
-                    askAsiacell = false
-                    onToast("تم إرسال الكارت للمراجعة.")
-                }) { Text("إرسال") }
-            },
-            dismissButton = { TextButton(onClick = { askAsiacell = false }) { Text("إلغاء") } },
             title = { Text("شحن عبر أسيا سيل") },
             text = {
                 Column {
@@ -679,588 +751,450 @@ private fun WalletScreen(
                         label = { Text("رقم الكارت") }
                     )
                 }
-            }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val digits = cardNumber.filter { it.isDigit() }
+                    if (digits.length != 14 && digits.length != 16) return@TextButton
+                    // أرسل للمالك كطلب كارت معلّق
+                    scope.launch {
+                        val ok = submitAsiacellCard(uid, digits)
+                        toast = if (ok) "تم إرسال الكارت للمراجعة." else "تعذر إرسال الطلب."
+                        askAsiacell = false
+                        cardNumber = ""
+                    }
+                }) { Text("إرسال") }
+            },
+            dismissButton = { TextButton(onClick = { askAsiacell = false }) { Text("إلغاء") } }
         )
     }
 }
 
-/* =========================
-   Orders tab (placeholder)
-   ========================= */
-@Composable private fun OrdersScreen() {
+/* =========================================
+   تبويب طلباتي — يسحب من الخادم
+   ========================================= */
+@Composable
+private fun OrdersScreen(uid: String) {
+    val scope = rememberCoroutineScope()
+    var orders by remember { mutableStateOf<List<JSONObject>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(uid) {
+        loading = true
+        scope.launch {
+            orders = fetchUserOrders(uid) ?: emptyList()
+            loading = false
+        }
+    }
+
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("طلباتي", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
-        Text("ستظهر الطلبات هنا عندما نربط التخزين الكامل في الخادم.", color = Dim, fontSize = 12.sp)
+        if (loading) {
+            Text("يتم التحميل...", color = Dim)
+        } else if (orders.isEmpty()) {
+            Text("لا توجد طلبات بعد.", color = Dim)
+        } else {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                orders.forEach { o ->
+                    val id = o.optString("order_id", "—")
+                    val name = o.optString("name", "—")
+                    val qty = o.optInt("quantity", 0)
+                    val status = o.optString("status", "pending")
+                    ElevatedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text("رقم الطلب: $id", fontWeight = FontWeight.SemiBold)
+                            Text("الخدمة: $name", color = Dim, fontSize = 12.sp)
+                            Text("الكمية: $qty", color = Dim, fontSize = 12.sp)
+                            Text("الحالة: $status", color = if (status == "completed") Good else Dim, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
-/* =========================
-   Owner panel
-   ========================= */
-private enum class OwnerView {
-    DASHBOARD,
-    PENDING_SERVICES, PENDING_CARDS, PENDING_PUBG, PENDING_ITUNES, PENDING_BALANCES, PENDING_LUDO,
-    TOPUP, DEDUCT,
-    USERS_COUNT, USERS_BALANCES
-}
-
+/* =========================================
+   لوحة تحكم المالك — واجهات عرض + ربط
+   ========================================= */
 @Composable
-private fun OwnerPanel(
-    onShowOwnerNotices: () -> Unit,
-    onToast: (String) -> Unit
+private fun OwnerDashboard(
+    ownerUid: String,
+    onRequireRefresh: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
-    var view by remember { mutableStateOf(OwnerView.DASHBOARD) }
-
-    var showBalanceDialog by remember { mutableStateOf(false) }
-    var balanceLoading by remember { mutableStateOf(false) }
-    var balanceResult by remember { mutableStateOf<String?>(null) }
-
-    var showStatusDialog by remember { mutableStateOf(false) }
-    var orderIdText by remember { mutableStateOf("") }
-    var statusLoading by remember { mutableStateOf(false) }
-    var statusResult by remember { mutableStateOf<String?>(null) }
-
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text(
-                when (view) {
-                    OwnerView.DASHBOARD -> "لوحة تحكم المالك"
-                    OwnerView.PENDING_SERVICES -> "الطلبات المعلقة (الخدمات)"
-                    OwnerView.PENDING_CARDS -> "الكارتات المعلقة"
-                    OwnerView.PENDING_PUBG -> "طلبات شدات ببجي"
-                    OwnerView.PENDING_ITUNES -> "طلبات شحن الايتونز"
-                    OwnerView.PENDING_BALANCES -> "طلبات الأرصدة المعلقة"
-                    OwnerView.PENDING_LUDO -> "طلبات لودو المعلقة"
-                    OwnerView.TOPUP -> "إضافة الرصيد"
-                    OwnerView.DEDUCT -> "خصم الرصيد"
-                    OwnerView.USERS_COUNT -> "عدد المستخدمين"
-                    OwnerView.USERS_BALANCES -> "رصيد المستخدمين"
-                },
-                fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)
-            )
-            IconButton(onClick = onShowOwnerNotices) {
-                Icon(Icons.Filled.Notifications, contentDescription = "إشعارات المالك", tint = OnBg)
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-
-        when (view) {
-            OwnerView.DASHBOARD -> {
-                val buttons = listOf(
-                    "تعديل الأسعار والكميات" to { onToast("تعديل الأسعار والكميات — قريباً") },
-                    "الطلبات المعلقة (الخدمات)" to { view = OwnerView.PENDING_SERVICES },
-                    "الكارتات المعلقة" to { view = OwnerView.PENDING_CARDS },
-                    "طلبات شدات ببجي" to { view = OwnerView.PENDING_PUBG },
-                    "طلبات شحن الايتونز" to { view = OwnerView.PENDING_ITUNES },
-                    "طلبات الارصدة المعلقة" to { view = OwnerView.PENDING_BALANCES },
-                    "طلبات لودو المعلقة" to { view = OwnerView.PENDING_LUDO },
-                    "إضافة الرصيد" to { view = OwnerView.TOPUP },
-                    "خصم الرصيد" to { view = OwnerView.DEDUCT },
-                    "فحص رصيد API" to {
-                        balanceResult = null; balanceLoading = true; showBalanceDialog = true
-                        // جلب الرصيد عند فتح المربع
-                        scope.launch {
-                            balanceResult = providerBalance()
-                            balanceLoading = false
-                        }
-                    },
-                    "فحص حالة طلب API" to {
-                        statusResult = null; statusLoading = false; orderIdText = ""; showStatusDialog = true
-                    },
-                    "عدد المستخدمين" to { view = OwnerView.USERS_COUNT },
-                    "رصيد المستخدمين" to { view = OwnerView.USERS_BALANCES },
-                    "إدارة المشرفين" to { onToast("إدارة المشرفين — قريباً") },
-                    "حظر المستخدم" to { onToast("حظر المستخدم — قريباً") },
-                    "الغاء حظر المستخدم" to { onToast("الغاء حظر المستخدم — قريباً") },
-                    "اعلان البوت" to { onToast("اعلان البوت — قريباً") },
-                    "أكواد خدمات API" to { onToast("أكواد خدمات API — قريباً") },
-                    "نظام الإحالة" to { onToast("نظام الإحالة — قريباً") },
-                    "شرح الخصومات" to { onToast("شرح الخصومات — قريباً") },
-                    "المتصدرين 🎉" to { onToast("المتصدرين — قريباً") }
-                )
-                buttons.chunked(2).forEach { row ->
-                    Row(Modifier.fillMaxWidth()) {
-                        row.forEach { (title, action) ->
-                            ElevatedButton(
-                                onClick = action,
-                                modifier = Modifier.weight(1f).padding(4.dp),
-                                colors = ButtonDefaults.elevatedButtonColors(
-                                    containerColor = Surface1,
-                                    contentColor = OnBg
-                                )
-                            ) { Text(title, fontSize = 12.sp) }
-                        }
-                        if (row.size == 1) Spacer(Modifier.weight(1f))
-                    }
-                }
-            }
-
-            OwnerView.PENDING_SERVICES -> PendingListScreen(kind = "services", onBack = { view = OwnerView.DASHBOARD }, onToast = onToast)
-            OwnerView.PENDING_CARDS    -> PendingListScreen(kind = "cards",    onBack = { view = OwnerView.DASHBOARD }, onToast = onToast)
-            OwnerView.PENDING_PUBG     -> PendingListScreen(kind = "pubg",     onBack = { view = OwnerView.DASHBOARD }, onToast = onToast)
-            OwnerView.PENDING_ITUNES   -> PendingListScreen(kind = "itunes",   onBack = { view = OwnerView.DASHBOARD }, onToast = onToast)
-            OwnerView.PENDING_BALANCES -> PendingListScreen(kind = "balances", onBack = { view = OwnerView.DASHBOARD }, onToast = onToast)
-            OwnerView.PENDING_LUDO     -> PendingListScreen(kind = "ludo",     onBack = { view = OwnerView.DASHBOARD }, onToast = onToast)
-
-            OwnerView.TOPUP  -> TopupDeductScreen(isTopup = true,  onBack = { view = OwnerView.DASHBOARD }, onToast = onToast)
-            OwnerView.DEDUCT -> TopupDeductScreen(isTopup = false, onBack = { view = OwnerView.DASHBOARD }, onToast = onToast)
-
-            OwnerView.USERS_COUNT    -> UsersCountScreen(onBack = { view = OwnerView.DASHBOARD })
-            OwnerView.USERS_BALANCES -> UsersBalancesScreen(onBack = { view = OwnerView.DASHBOARD })
-        }
-    }
-
-    /* حوار فحص رصيد API */
-    if (showBalanceDialog) {
-        AlertDialog(
-            onDismissRequest = { showBalanceDialog = false },
-            confirmButton = { TextButton(onClick = { showBalanceDialog = false }) { Text("إغلاق") } },
-            title = { Text("فحص رصيد API") },
-            text = {
-                if (balanceLoading) Text("جاري الفحص...", color = Dim)
-                else Text(balanceResult ?: "تعذر جلب الرصيد", color = OnBg)
-            }
-        )
-    }
-
-    /* حوار فحص حالة طلب API — مُصحح بالكامل */
-    if (showStatusDialog) {
-        AlertDialog(
-            onDismissRequest = { showStatusDialog = false },
-            confirmButton = {
-                TextButton(
-                    enabled = !statusLoading && orderIdText.isNotBlank(),
-                    onClick = {
-                        statusLoading = true
-                        statusResult = null
-                        val id = orderIdText.trim()
-                        val scope2 = rememberCoroutineScope() // لا نستخدمه هنا؛ سنستخدم scope الخارجي
-                        // استخدم scope الخارجي:
-                        scope.launch {
-                            statusResult = providerOrderStatus(id)
-                            statusLoading = false
-                        }
-                    }
-                ) { Text(if (statusLoading) "يفحص..." else "فحص") }
-            },
-            dismissButton = { TextButton(onClick = { showStatusDialog = false }) { Text("إغلاق") } },
-            title = { Text("فحص حالة طلب API") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = orderIdText,
-                        onValueChange = { s -> orderIdText = s.filter { it.isDigit() } },
-                        singleLine = true,
-                        label = { Text("رقم الطلب") }
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    when {
-                        statusLoading     -> Text("جاري الفحص...", color = Dim)
-                        statusResult != null -> Text(statusResult!!, color = OnBg)
-                    }
-                }
-            }
-        )
-    }
-}
-
-/* =========================
-   Owner sub-screens (ADMIN ENDPOINTS)
-   ========================= */
-@Composable
-private fun PendingListScreen(kind: String, onBack: () -> Unit, onToast: (String) -> Unit) {
-    var loading by remember { mutableStateOf(true) }
-    var text by remember { mutableStateOf("...") }
-
-    LaunchedEffect(kind) {
-        loading = true
-        text = withContext(Dispatchers.IO) {
-            try {
-                val url = URL("$API_BASE/api/admin/pending/$kind")
-                val con = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = 8000
-                    readTimeout = 8000
-                }
-                con.inputStream.bufferedReader().use(BufferedReader::readText)
-            } catch (e: Exception) {
-                "تعذر جلب $kind"
-            }
-        }
-        loading = false
-    }
-
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "رجوع", tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text("قائمة $kind", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(if (loading) "جاري التحميل..." else text, color = OnBg)
-    }
-}
-
-@Composable
-private fun TopupDeductScreen(isTopup: Boolean, onBack: () -> Unit, onToast: (String) -> Unit) {
-    var uid by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
-    var result by remember { mutableStateOf<String?>(null) }
+    var screen by remember { mutableStateOf("MAIN") }
+    var payload by remember { mutableStateOf<JSONArray?>(null) }
     val scope = rememberCoroutineScope()
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "رجوع", tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text(if (isTopup) "إضافة الرصيد" else "خصم الرصيد", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(10.dp))
+    // قوائم الأزرار
+    if (screen == "MAIN") {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(Bg)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text("لوحة تحكم المالك", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg) // جرس المالك أعلى اليمين
+            }
+            Spacer(Modifier.height(12.dp))
 
-        OutlinedTextField(value = uid, onValueChange = { uid = it }, singleLine = true, label = { Text("UID المستخدم") })
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = amount, onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) amount = s }, singleLine = true, label = { Text("القيمة بالدولار") })
-        Spacer(Modifier.height(8.dp))
-
-        ElevatedButton(
-            onClick = {
-                if (uid.isBlank() || amount.toDoubleOrNull() == null) {
-                    onToast("الرجاء إدخال UID وقيمة صحيحة"); return@ElevatedButton
-                }
-                loading = true; result = null
+            OwnerButton("الطلبات المعلقة (الخدمات)") {
                 scope.launch {
-                    val r = withContext(Dispatchers.IO) {
-                        try {
-                            val url = URL("$API_BASE/api/admin/" + if (isTopup) "topup" else "deduct")
-                            val con = (url.openConnection() as HttpURLConnection).apply {
-                                requestMethod = "POST"
-                                doOutput = true
-                                connectTimeout = 8000
-                                readTimeout = 8000
-                                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                            }
-                            val body = JSONObject().put("uid", uid).put("amount", amount.toDouble()).toString()
-                            OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
-                            val code = con.responseCode
-                            val txt = (if (code in 200..299) con.inputStream else con.errorStream)
-                                .bufferedReader().use(BufferedReader::readText)
-                            if (code in 200..299) "تم بنجاح: $txt" else "فشل: $txt"
-                        } catch (e: Exception) {
-                            "خطأ بالشبكة"
-                        }
+                    payload = adminFetchList("services")
+                    screen = "PENDING_SERVICES"
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            OwnerButton("الكارتات المعلقة") {
+                scope.launch {
+                    payload = adminFetchList("cards")
+                    screen = "PENDING_CARDS"
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            OwnerButton("طلبات شدات ببجي") {
+                scope.launch {
+                    payload = adminFetchList("pubg")
+                    screen = "PENDING_PUBG"
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            OwnerButton("طلبات شحن الايتونز") {
+                scope.launch {
+                    payload = adminFetchList("itunes")
+                    screen = "PENDING_ITUNES"
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            OwnerButton("طلبات الارصدة المعلقة") {
+                scope.launch {
+                    payload = adminFetchList("topups")
+                    screen = "PENDING_TOPUPS"
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            OwnerButton("طلبات لودو المعلقة") {
+                scope.launch {
+                    payload = adminFetchList("ludo")
+                    screen = "PENDING_LUDO"
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+            Divider(color = Surface1)
+            Spacer(Modifier.height(16.dp))
+
+            OwnerButton("فحص رصيد API") {
+                scope.launch {
+                    val res = checkProviderBalance()
+                    val msg = if (res.first) {
+                        val j = res.second!!
+                        "الرصيد: ${j.optString("balance","?")} ${j.optString("currency","")}"
+                    } else {
+                        "تعذر جلب الرصيد: ${res.third ?: "?"}"
                     }
-                    result = r; loading = false
+                    showInfoDialog(msg)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            OwnerButton("فحص حالة طلب API") {
+                askOrderDialog { orderId ->
+                    scope.launch {
+                        val res = checkOrderStatus(orderId)
+                        val msg = if (res.first) {
+                            val j = res.second!!
+                            "الحالة: ${j.optString("status")} | المتبقي: ${j.optString("remains")} | التكلفة: ${j.optString("charge")} ${j.optString("currency")}"
+                        } else {
+                            "تعذر الفحص: ${res.third ?: "?"}"
+                        }
+                        showInfoDialog(msg)
+                    }
+                }
+            }
+        }
+    }
+
+    // شاشات القوائم المعلّقة
+    if (screen.startsWith("PENDING_")) {
+        PendingListScreen(
+            title = when (screen) {
+                "PENDING_SERVICES" -> "الطلبات المعلقة (الخدمات)"
+                "PENDING_CARDS"    -> "الكارتات المعلقة"
+                "PENDING_PUBG"     -> "طلبات شدات ببجي"
+                "PENDING_ITUNES"   -> "طلبات شحن الايتونز"
+                "PENDING_TOPUPS"   -> "طلبات الارصدة المعلقة"
+                "PENDING_LUDO"     -> "طلبات لودو المعلقة"
+                else -> "قائمة"
+            },
+            rows = payload ?: JSONArray(),
+            onBack = { screen = "MAIN" },
+            onApprove = { id ->
+                scope.launch {
+                    val ok = when (screen) {
+                        "PENDING_SERVICES" -> adminApprove("services", id)
+                        "PENDING_PUBG"     -> adminApprove("pubg", id)
+                        "PENDING_ITUNES"   -> adminApprove("itunes", id)
+                        "PENDING_TOPUPS"   -> adminApprove("topups", id)
+                        "PENDING_LUDO"     -> adminApprove("ludo", id)
+                        else               -> false
+                    }
+                    showInfoDialog(if (ok) "تم التنفيذ." else "فشل التنفيذ.")
+                    payload = adminFetchList(when (screen) {
+                        "PENDING_SERVICES" -> "services"
+                        "PENDING_CARDS"    -> "cards"
+                        "PENDING_PUBG"     -> "pubg"
+                        "PENDING_ITUNES"   -> "itunes"
+                        "PENDING_TOPUPS"   -> "topups"
+                        "PENDING_LUDO"     -> "ludo"
+                        else -> "services"
+                    })
                 }
             },
-            enabled = !loading,
-            colors = ButtonDefaults.elevatedButtonColors(containerColor = Surface1, contentColor = OnBg)
-        ) { Text(if (loading) "جارٍ الإرسال..." else if (isTopup) "إضافة" else "خصم") }
-
-        Spacer(Modifier.height(8.dp))
-        result?.let { Text(it, color = OnBg) }
-    }
-}
-
-@Composable
-private fun UsersCountScreen(onBack: () -> Unit) {
-    var text by remember { mutableStateOf("...") }
-    var loading by remember { mutableStateOf(true) }
-
-    LaunchedEffect(Unit) {
-        loading = true
-        text = withContext(Dispatchers.IO) {
-            try {
-                val url = URL("$API_BASE/api/admin/users/count")
-                val con = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = 8000
-                    readTimeout = 8000
+            onReject = { id ->
+                scope.launch {
+                    val ok = when (screen) {
+                        "PENDING_SERVICES" -> adminReject("services", id)
+                        "PENDING_CARDS"    -> adminReject("cards", id)
+                        "PENDING_PUBG"     -> adminReject("pubg", id)
+                        "PENDING_ITUNES"   -> adminReject("itunes", id)
+                        "PENDING_TOPUPS"   -> adminReject("topups", id)
+                        "PENDING_LUDO"     -> adminReject("ludo", id)
+                        else               -> false
+                    }
+                    showInfoDialog(if (ok) "تم الرفض وإرجاع الرصيد إن وُجد." else "فشل الرفض.")
+                    payload = adminFetchList(when (screen) {
+                        "PENDING_SERVICES" -> "services"
+                        "PENDING_CARDS"    -> "cards"
+                        "PENDING_PUBG"     -> "pubg"
+                        "PENDING_ITUNES"   -> "itunes"
+                        "PENDING_TOPUPS"   -> "topups"
+                        "PENDING_LUDO"     -> "ludo"
+                        else -> "services"
+                    })
                 }
-                con.inputStream.bufferedReader().use(BufferedReader::readText)
-            } catch (e: Exception) {
-                "تعذر الجلب"
-            }
-        }
-        loading = false
-    }
-
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "رجوع", tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text("عدد المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(if (loading) "جاري التحميل..." else text, color = OnBg)
-    }
-}
-
-@Composable
-private fun UsersBalancesScreen(onBack: () -> Unit) {
-    var text by remember { mutableStateOf("...") }
-    var loading by remember { mutableStateOf(true) }
-
-    LaunchedEffect(Unit) {
-        loading = true
-        text = withContext(Dispatchers.IO) {
-            try {
-                val url = URL("$API_BASE/api/admin/users/balances-sum")
-                val con = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    connectTimeout = 8000
-                    readTimeout = 8000
+            },
+            // قبول خاص للكارت: يحتاج إدخال مبلغ
+            onApproveCard = { id, amount ->
+                scope.launch {
+                    val ok = adminApproveCard(id, amount)
+                    showInfoDialog(if (ok) "تم قبول الكارت وشحن الرصيد." else "فشل قبول الكارت.")
+                    payload = adminFetchList("cards")
                 }
-                con.inputStream.bufferedReader().use(BufferedReader::readText)
-            } catch (e: Exception) {
-                "تعذر الجلب"
             }
-        }
-        loading = false
-    }
-
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "رجوع", tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text("رصيد المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(if (loading) "جاري التحميل..." else text, color = OnBg)
+        )
     }
 }
 
-/* =========================
-   Settings dialog (UID + owner login)
-   ========================= */
+/* عنصر زر للمالك */
 @Composable
-private fun SettingsDialog(
-    uid: String,
-    ownerMode: Boolean,
-    onOwnerLogin: () -> Unit,
-    onOwnerLogout: () -> Unit,
-    onDismiss: () -> Unit
+private fun OwnerButton(title: String, onClick: () -> Unit) {
+    ElevatedButton(
+        onClick = onClick,
+        colors = ButtonDefaults.elevatedButtonColors(
+            containerColor = Surface1,
+            contentColor = OnBg
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+    ) { Text(title, fontWeight = FontWeight.SemiBold) }
+}
+
+/* بطاقة عناصر معلّقة عامة */
+@Composable
+private fun PendingListScreen(
+    title: String,
+    rows: JSONArray,
+    onBack: () -> Unit,
+    onApprove: (String) -> Unit,
+    onReject: (String) -> Unit,
+    onApproveCard: (String, Double) -> Unit
 ) {
-    val clip: ClipboardManager = LocalClipboardManager.current
-    var askPass by remember { mutableStateOf(false) }
-    var pass by remember { mutableStateOf("") }
+    var askAmountForCard by remember { mutableStateOf<String?>(null) }
+    var amountText by remember { mutableStateOf("") }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
-        title = { Text("الإعدادات") },
-        text = {
-            Column {
-                Text("المعرّف الخاص بك (UID):", fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(uid, color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = { clip.setText(AnnotatedString(uid)) }) { Text("نسخ") }
-                }
-                Spacer(Modifier.height(12.dp))
-                Divider(color = Surface1)
-                Spacer(Modifier.height(12.dp))
-                if (ownerMode) {
-                    Text("وضع المالك: مفعل", color = Good, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedButton(onClick = onOwnerLogout) { Text("تسجيل خروج المالك") }
-                } else {
-                    Text("تسجيل المالك (خاص بالمالك فقط):", fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedButton(onClick = { askPass = true }) { Text("تسجيل المالك") }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState())
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(10.dp))
+
+        if (rows.length() == 0) {
+            Text("لا توجد عناصر حالياً.", color = Dim)
+        } else {
+            repeat(rows.length()) { idx ->
+                val o = rows.optJSONObject(idx) ?: JSONObject()
+                val id = o.optString("id", "—")
+                val userUid = o.optString("uid", "—")
+                val name = o.optString("name", o.optString("service_name", "—"))
+                val qty = o.optInt("quantity", 0)
+                val price = o.optDouble("price", 0.0)
+                val link = o.optString("link", null)
+                val requestedAt = o.optString("created_at", "—")
+
+                ElevatedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("ID: $id", fontWeight = FontWeight.SemiBold)
+                        Text("UID: $userUid", color = Dim, fontSize = 12.sp)
+                        Text("الطلب: $name × $qty | السعر: ${"%.2f".format(price)}$", color = Dim, fontSize = 12.sp)
+                        link?.let { Text("الرابط: $it", color = Dim, fontSize = 12.sp) }
+                        Text("الوقت: $requestedAt", color = Dim, fontSize = 12.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Row {
+                            TextButton(onClick = { onApprove(id) }) { Text("تنفيذ") }
+                            Spacer(Modifier.width(10.dp))
+                            TextButton(onClick = { onReject(id) }) { Text("رفض") }
+                            if (title == "الكارتات المعلقة") {
+                                Spacer(Modifier.width(10.dp))
+                                TextButton(onClick = { askAmountForCard = id }) { Text("قبول الكارت (مبلغ)") }
+                            }
+                        }
+                    }
                 }
             }
         }
-    )
+    }
 
-    if (askPass) {
+    // إدخال مبلغ الكارت
+    askAmountForCard?.let { id ->
         AlertDialog(
-            onDismissRequest = { askPass = false },
+            onDismissRequest = { askAmountForCard = null },
+            title = { Text("أدخل مبلغ الشحن (بالدولار)") },
+            text = {
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) amountText = s },
+                    placeholder = { Text("مثال: 5.0") }
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
-                    if (pass == "2000") {
-                        onOwnerLogin(); askPass = false
+                    val v = amountText.toDoubleOrNull()
+                    if (v != null && v > 0) {
+                        onApproveCard(id, v)
+                        amountText = ""
+                        askAmountForCard = null
                     }
                 }) { Text("تأكيد") }
             },
-            dismissButton = { TextButton(onClick = { askPass = false }) { Text("إلغاء") } },
-            title = { Text("كلمة مرور المالك") },
-            text = {
-                OutlinedTextField(
-                    value = pass,
-                    onValueChange = { s -> if (s.length <= 10) pass = s },
-                    singleLine = true,
-                    label = { Text("أدخل كلمة المرور: 2000") }
-                )
-            }
+            dismissButton = { TextButton(onClick = { askAmountForCard = null }) { Text("إلغاء") } }
         )
     }
 }
 
-/* =========================
-   Local storage (temporary)
-   ========================= */
-private fun prefs(ctx: Context) = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-
-private fun loadOrCreateUid(ctx: Context): String {
-    val sp = prefs(ctx)
-    val existing = sp.getString("uid", null)
-    if (existing != null) return existing
-    val fresh = "U" + (100000..999999).random(Random(System.currentTimeMillis()))
-    sp.edit().putString("uid", fresh).apply()
-    return fresh
+/* حوار معلومات سريع */
+@Composable
+private fun showInfoDialog(msg: String) {
+    AlertDialog(
+        onDismissRequest = {},
+        confirmButton = {
+            TextButton(onClick = { }) { Text("حسناً") }
+        },
+        title = { Text("نتيجة") },
+        text = { Text(msg) }
+    )
 }
 
-private fun loadOwnerMode(ctx: Context): Boolean = prefs(ctx).getBoolean("owner_mode", false)
-private fun saveOwnerMode(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("owner_mode", on).apply() }
-
-private fun loadBalance(ctx: Context): Double = java.lang.Double.longBitsToDouble(
-    prefs(ctx).getLong("user_balance_bits", java.lang.Double.doubleToLongBits(0.0))
-)
-private fun saveBalance(ctx: Context, v: Double) {
-    prefs(ctx).edit().putLong("user_balance_bits", java.lang.Double.doubleToLongBits(v)).apply()
+/* حوار إدخال رقم طلب */
+@Composable
+private fun askOrderDialog(onOk: (String) -> Unit) {
+    var open by remember { mutableStateOf(true) }
+    var id by remember { mutableStateOf("") }
+    if (!open) return
+    AlertDialog(
+        onDismissRequest = { open = false },
+        title = { Text("أدخل رقم الطلب") },
+        text = {
+            OutlinedTextField(
+                value = id,
+                onValueChange = { id = it },
+                placeholder = { Text("123456") }
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val s = id.trim()
+                if (s.isNotEmpty()) onOk(s)
+                open = false
+            }) { Text("تحقق") }
+        },
+        dismissButton = { TextButton(onClick = { open = false }) { Text("إلغاء") } }
+    )
 }
 
-private fun loadNotices(ctx: Context): List<AppNotice> {
-    val raw = prefs(ctx).getString("notices_json", "[]") ?: "[]"
-    return try {
-        val arr = org.json.JSONArray(raw)
-        (0 until arr.length()).map { i ->
-            val o = arr.getJSONObject(i)
-            AppNotice(
-                title = o.optString("title"),
-                body = o.optString("body"),
-                ts = o.optLong("ts"),
-                forOwner = o.optBoolean("forOwner")
+/* =========================================
+   الشريط السفلي
+   ========================================= */
+@Composable
+private fun BottomNavBar(
+    current: Tab,
+    onChange: (Tab) -> Unit,
+    modifier: Modifier = Modifier,
+    isOwner: Boolean
+) {
+    NavigationBar(
+        modifier = modifier.fillMaxWidth(),
+        containerColor = Surface1
+    ) {
+        NavItem(
+            selected = current == Tab.HOME,
+            onClick = { onChange(Tab.HOME) },
+            icon = Icons.Filled.Home,
+            label = "الرئيسية"
+        )
+        NavItem(
+            selected = current == Tab.SERVICES,
+            onClick = { onChange(Tab.SERVICES) },
+            icon = Icons.Filled.List,
+            label = "الخدمات"
+        )
+        NavItem(
+            selected = current == Tab.WALLET,
+            onClick = { onChange(Tab.WALLET) },
+            icon = Icons.Filled.AccountBalanceWallet,
+            label = "رصيدي"
+        )
+        NavItem(
+            selected = current == Tab.ORDERS,
+            onClick = { onChange(Tab.ORDERS) },
+            icon = Icons.Filled.ShoppingCart,
+            label = "الطلبات"
+        )
+        NavItem(
+            selected = current == Tab.SUPPORT,
+            onClick = { onChange(Tab.SUPPORT) },
+            icon = Icons.Filled.ChatBubble,
+            label = "الدعم"
+        )
+        if (isOwner) {
+            NavItem(
+                selected = current == Tab.OWNER,
+                onClick = { onChange(Tab.OWNER) },
+                icon = Icons.Filled.AdminPanelSettings,
+                label = "المالك"
             )
         }
-    } catch (e: Exception) { emptyList() }
-}
-private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
-    val arr = org.json.JSONArray()
-    notices.forEach {
-        val o = JSONObject()
-        o.put("title", it.title)
-        o.put("body", it.body)
-        o.put("ts", it.ts)
-        o.put("forOwner", it.forOwner)
-        arr.put(o)
-    }
-    prefs(ctx).edit().putString("notices_json", arr.toString()).apply()
-}
-
-/* =========================
-   Network
-   ========================= */
-private suspend fun pingHealth(): Boolean? = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("$API_BASE/health")
-        val con = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 4000
-            readTimeout = 4000
-        }
-        con.connect()
-        (con.responseCode in 200..299)
-    } catch (_: Exception) {
-        false
-    }
-}
-
-private suspend fun tryUpsertUid(uid: String) = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("$API_BASE/api/users/upsert")
-        val con = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            connectTimeout = 5000
-            readTimeout = 5000
-            setRequestProperty("Content-Type", "application/json; charset=utf-8")
-        }
-        val body = """{"uid":"$uid"}"""
-        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
-        con.inputStream.bufferedReader().use(BufferedReader::readText)
-    } catch (_: Exception) { }
-}
-
-/* إرسال طلب مزوّد — يمرر service_id */
-private suspend fun placeProviderOrder(service: ServiceDef, link: String, quantity: Int): Boolean =
-    withContext(Dispatchers.IO) {
-        try {
-            val url = URL("$API_BASE/api/provider/order")
-            val con = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                doOutput = true
-                connectTimeout = 8000
-                readTimeout = 8000
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            }
-            val payload = JSONObject()
-                .put("service_key", service.uiKey)
-                .put("service_id", service.serviceId)
-                .put("link", link)
-                .put("quantity", quantity)
-                .toString()
-            OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(payload) }
-            val code = con.responseCode
-            val txt = (if (code in 200..299) con.inputStream else con.errorStream)
-                .bufferedReader().use(BufferedReader::readText)
-            code in 200..299 && txt.contains("ok", ignoreCase = true)
-        } catch (_: Exception) { false }
-    }
-
-/* رصيد المزوّد */
-private suspend fun providerBalance(): String = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("$API_BASE/api/provider/balance")
-        val con = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            connectTimeout = 8000
-            readTimeout = 8000
-            setRequestProperty("Content-Type", "application/json; charset=utf-8")
-        }
-        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write("{}") }
-        val code = con.responseCode
-        val txt = (if (code in 200..299) con.inputStream else con.errorStream)
-            .bufferedReader().use(BufferedReader::readText)
-        if (code in 200..299) txt else "تعذر جلب الرصيد"
-    } catch (e: Exception) { "تعذر جلب الرصيد" }
-}
-
-/* حالة طلب المزوّد */
-private suspend fun providerOrderStatus(orderId: String): String = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("$API_BASE/api/provider/status")
-        val con = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            connectTimeout = 8000
-            readTimeout = 8000
-            setRequestProperty("Content-Type", "application/json; charset=utf-8")
-        }
-        val body = JSONObject().put("order_id", orderId).toString()
-        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
-        val code = con.responseCode
-        val txt = (if (code in 200..299) con.inputStream else con.errorStream)
-            .bufferedReader().use(BufferedReader::readText)
-        if (code in 200..299) txt else "تعذر فحص حالة الطلب"
-    } catch (e: Exception) { "تعذر فحص حالة الطلب" }
-}
-
-/* =========================
-   Bottom nav
-   ========================= */
-@Composable
-private fun BottomNavBar(current: Tab, onChange: (Tab) -> Unit, modifier: Modifier = Modifier) {
-    NavigationBar(modifier = modifier.fillMaxWidth(), containerColor = Surface1) {
-        NavItem(current == Tab.HOME,     { onChange(Tab.HOME) },     Icons.Filled.Home,                 "الرئيسية")
-        NavItem(current == Tab.SERVICES, { onChange(Tab.SERVICES) }, Icons.Filled.List,                 "الخدمات")
-        NavItem(current == Tab.WALLET,   { onChange(Tab.WALLET) },   Icons.Filled.AccountBalanceWallet, "رصيدي")
-        NavItem(current == Tab.ORDERS,   { onChange(Tab.ORDERS) },   Icons.Filled.ShoppingCart,         "الطلبات")
-        NavItem(current == Tab.SUPPORT,  { onChange(Tab.SUPPORT) },  Icons.Filled.ChatBubble,           "الدعم")
     }
 }
 
@@ -1290,4 +1224,247 @@ private fun RowScope.NavItem(
             unselectedTextColor = Dim
         )
     )
+}
+
+/* =========================================
+   تخزين محلي بسيط (UID/وضع المالك/التبويب الأخير فقط)
+   ========================================= */
+private fun loadOrCreateUid(ctx: Context): String {
+    val sp = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    val existing = sp.getString("uid", null)
+    if (existing != null) return existing
+    val fresh = "U" + (100000..999999).random(Random(System.currentTimeMillis()))
+    sp.edit().putString("uid", fresh).apply()
+    return fresh
+}
+private fun saveOwnerMode(ctx: Context, enabled: Boolean) {
+    ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).edit().putBoolean("owner_mode", enabled).apply()
+}
+private fun loadOwnerMode(ctx: Context): Boolean =
+    ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).getBoolean("owner_mode", false)
+
+private fun saveLastTab(ctx: Context, tab: Tab) {
+    ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).edit().putString("last_tab", tab.name).apply()
+}
+private fun loadLastTab(ctx: Context, defaultTab: Tab): Tab {
+    val name = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).getString("last_tab", null)
+    return runCatching { if (name != null) Tab.valueOf(name) else defaultTab }.getOrDefault(defaultTab)
+}
+
+/* =========================================
+   الشبكة — API ROUTES (بدّل المسارات حسب باكندك إن لزم)
+   ========================================= */
+private suspend fun pingHealth(): Boolean? = withContext(Dispatchers.IO) {
+    try {
+        val con = (URL("$API_BASE/health").openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"; connectTimeout = 4000; readTimeout = 4000
+        }
+        con.connect(); (con.responseCode in 200..299)
+    } catch (_: Exception) { false }
+}
+
+private suspend fun tryUpsertUid(uid: String) = withContext(Dispatchers.IO) {
+    try {
+        val con = (URL("$API_BASE/api/users/upsert").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; doOutput = true
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            connectTimeout = 5000; readTimeout = 5000
+        }
+        val body = """{"uid":"$uid"}"""
+        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
+        con.inputStream.bufferedReader().use(BufferedReader::readText)
+    } catch (_: Exception) {}
+}
+
+/* رصيد المستخدم */
+private suspend fun fetchUserBalance(uid: String): Double? = withContext(Dispatchers.IO) {
+    try {
+        val con = (URL("$API_BASE/api/users/balance?uid=$uid").openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"; connectTimeout = 7000; readTimeout = 7000
+        }
+        val raw = con.inputStream.bufferedReader().use(BufferedReader::readText)
+        JSONObject(raw).optDouble("balance")
+    } catch (_: Exception) { null }
+}
+
+/* إشعارات */
+private suspend fun fetchNotices(uid: String, forOwner: Boolean): List<AppNotice>? =
+    withContext(Dispatchers.IO) {
+        try {
+            val role = if (forOwner) "owner" else "user"
+            val con = (URL("$API_BASE/api/notifications/list?uid=$uid&role=$role").openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"; connectTimeout = 8000; readTimeout = 8000
+            }
+            val raw = con.inputStream.bufferedReader().use(BufferedReader::readText)
+            val arr = JSONArray(raw)
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                AppNotice(
+                    id = o.optString("id"),
+                    title = o.optString("title"),
+                    body = o.optString("body"),
+                    ts = o.optLong("ts"),
+                    forOwner = o.optBoolean("forOwner", false),
+                    read = o.optBoolean("read", false)
+                )
+            }
+        } catch (_: Exception) { null }
+    }
+private suspend fun markAllRead(uid: String, forOwner: Boolean) = withContext(Dispatchers.IO) {
+    try {
+        val role = if (forOwner) "owner" else "user"
+        val con = (URL("$API_BASE/api/notifications/mark_read").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; doOutput = true
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        }
+        val body = """{"uid":"$uid","role":"$role"}"""
+        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
+        con.inputStream.bufferedReader().use(BufferedReader::readText)
+    } catch (_: Exception) { }
+}
+
+/* طلب خدمة مزوّد */
+private suspend fun placeProviderOrder(
+    uid: String,
+    service: ServiceDef,
+    link: String,
+    quantity: Int
+): Triple<Boolean, String?, String?> = withContext(Dispatchers.IO) {
+    try {
+        val con = (URL("$API_BASE/api/provider/order").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; doOutput = true
+            connectTimeout = 10_000; readTimeout = 10_000
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        }
+        val payload = JSONObject()
+            .put("uid", uid)
+            .put("service_id", service.serviceId)
+            .put("quantity", quantity)
+            .put("link", link)
+            .toString()
+        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(payload) }
+        val code = con.responseCode
+        val txt = (if (code in 200..299) con.inputStream else con.errorStream).bufferedReader().use(BufferedReader::readText)
+        if (code in 200..299) {
+            val j = JSONObject(txt)
+            Triple(true, j.optString("order_id", null), txt)
+        } else Triple(false, null, txt)
+    } catch (e: Exception) {
+        Triple(false, null, e.message)
+    }
+}
+
+/* طلبات المستخدم */
+private suspend fun fetchUserOrders(uid: String): List<JSONObject>? = withContext(Dispatchers.IO) {
+    try {
+        val con = (URL("$API_BASE/api/orders/list?uid=$uid").openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"; connectTimeout = 8000; readTimeout = 8000
+        }
+        val raw = con.inputStream.bufferedReader().use(BufferedReader::readText)
+        val arr = JSONArray(raw)
+        (0 until arr.length()).map { arr.getJSONObject(it) }
+    } catch (_: Exception) { null }
+}
+
+/* شحن أسيا سيل (يرسل للمالك) */
+private suspend fun submitAsiacellCard(uid: String, card: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val con = (URL("$API_BASE/api/wallet/asiacell/submit").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; doOutput = true
+            connectTimeout = 10_000; readTimeout = 10_000
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        }
+        val body = JSONObject().put("uid", uid).put("card", card).toString()
+        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
+        con.responseCode in 200..299
+    } catch (_: Exception) { false }
+}
+
+/* طلب يدوي (ايتونز/اتصالات/ببجي/لودو...) */
+private suspend fun createManualRequest(uid: String, name: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val con = (URL("$API_BASE/api/requests/manual").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; doOutput = true
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            connectTimeout = 10_000; readTimeout = 10_000
+        }
+        val body = JSONObject().put("uid", uid).put("name", name).toString()
+        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
+        con.responseCode in 200..299
+    } catch (_: Exception) { false }
+}
+
+/* ====== أدوات مزوّد: رصيد/حالة طلب ====== */
+private suspend fun checkProviderBalance(): Triple<Boolean, JSONObject?, String?> = withContext(Dispatchers.IO) {
+    val url = URL("$API_BASE/api/provider/balance")
+    try {
+        val con = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"; connectTimeout = 8000; readTimeout = 8000
+            setRequestProperty("Accept", "application/json")
+        }
+        val code = con.responseCode
+        val stream = if (code in 200..299) con.inputStream else con.errorStream
+        val raw = stream?.bufferedReader()?.use(BufferedReader::readText) ?: ""
+        if (code in 200..299) Triple(true, JSONObject(raw), raw) else Triple(false, null, raw)
+    } catch (e: Exception) { Triple(false, null, e.message) }
+}
+private suspend fun checkOrderStatus(orderId: String): Triple<Boolean, JSONObject?, String?> = withContext(Dispatchers.IO) {
+    val url = URL("$API_BASE/api/provider/order/status?order_id=$orderId")
+    try {
+        val con = (url.openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"; connectTimeout = 8000; readTimeout = 8000
+            setRequestProperty("Accept", "application/json")
+        }
+        val code = con.responseCode
+        val stream = if (code in 200..299) con.inputStream else con.errorStream
+        val raw = stream?.bufferedReader()?.use(BufferedReader::readText) ?: ""
+        if (code in 200..299) {
+            val j = JSONObject(raw).optJSONObject("data") ?: JSONObject(raw)
+            Triple(true, j, raw)
+        } else Triple(false, null, raw)
+    } catch (e: Exception) { Triple(false, null, e.message) }
+}
+
+/* ====== مسارات الأدمن ====== */
+// جلب القوائم المعلّقة حسب النوع
+private suspend fun adminFetchList(kind: String): JSONArray? = withContext(Dispatchers.IO) {
+    try {
+        val con = (URL("$API_BASE/api/admin/pending/$kind").openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"; connectTimeout = 8000; readTimeout = 8000
+        }
+        val raw = con.inputStream.bufferedReader().use(BufferedReader::readText)
+        JSONArray(raw)
+    } catch (_: Exception) { null }
+}
+
+private suspend fun adminApprove(kind: String, id: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val con = (URL("$API_BASE/api/admin/pending/$kind/$id/approve").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; connectTimeout = 10_000; readTimeout = 10_000
+        }
+        con.responseCode in 200..299
+    } catch (_: Exception) { false }
+}
+
+private suspend fun adminReject(kind: String, id: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val con = (URL("$API_BASE/api/admin/pending/$kind/$id/reject").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; connectTimeout = 10_000; readTimeout = 10_000
+        }
+        con.responseCode in 200..299
+    } catch (_: Exception) { false }
+}
+
+// قبول كارت أسيا سيل بمبلغ
+private suspend fun adminApproveCard(id: String, amount: Double): Boolean = withContext(Dispatchers.IO) {
+    try {
+        val con = (URL("$API_BASE/api/admin/pending/cards/$id/approve").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"; doOutput = true
+            connectTimeout = 10_000; readTimeout = 10_000
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        }
+        val body = JSONObject().put("amount", amount).toString()
+        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
+        con.responseCode in 200..299
+    } catch (_: Exception) { false }
 }

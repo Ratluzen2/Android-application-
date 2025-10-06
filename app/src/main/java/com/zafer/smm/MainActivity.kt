@@ -176,12 +176,8 @@ fun AppRoot() {
                 ownerMode = true
                 setOwnerMode(ctx, true)
                 settingsOpen = false
-                // افتح اللوحة فورًا
-                // وستبقى مفتوحة بعد إعادة تشغيل التطبيق
-                // بسبب حفظ ownerMode في SharedPreferences
-                LaunchedEffect(Unit) {
-                    // مجرد تفعيل الحالة في نفس الإطار
-                }
+                // افتح اللوحة فورًا (بدون LaunchedEffect داخل كولباك)
+                showOwnerDashboard = true
             },
             onDismiss = { settingsOpen = false }
         )

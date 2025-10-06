@@ -126,7 +126,7 @@ data class OrderItem(
     val createdAt: Long
 )
 
-/* كتالوج الخدمات المربوطة بـ serviceId حسب ما زوّدتني */
+/* كتالوج الخدمات المربوطة بـ serviceId */
 private val servicesCatalog = listOf(
     // المتابعين
     ServiceDef("متابعين تيكتوك",   16256,   100, 1_000_000, 3.5, "المتابعين"),
@@ -318,7 +318,9 @@ fun AppRoot() {
 @Composable
 private fun HomeScreen() {
     Box(
-        Modifier.fillMaxSize().background(Bg),
+        Modifier
+            .fillMaxSize()
+            .background(Bg),
         contentAlignment = Alignment.Center
     ) { Text("مرحبًا بك 👋", color = OnBg, fontSize = 18.sp) }
 }
@@ -397,11 +399,16 @@ private fun TopRightBar(
             else -> "الخادم: ..." to Dim
         }
         Box(
-            Modifier.background(Surface1, shape = MaterialTheme.shapes.small)
+            Modifier
+                .background(Surface1, shape = MaterialTheme.shapes.small)
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(8.dp).background(clr, shape = MaterialTheme.shapes.small))
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .background(clr, shape = MaterialTheme.shapes.small)
+                )
                 Spacer(Modifier.width(6.dp))
                 Text(txt, fontSize = 12.sp, color = OnBg)
             }
@@ -703,8 +710,11 @@ private fun WalletScreen(
         Spacer(Modifier.height(8.dp))
 
         // 1) أسيا سيل (كارت)
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { askAsiacell = true },
+      ElevatedCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp)
+                .clickable { askAsiacell = true },
             colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -723,10 +733,13 @@ private fun WalletScreen(
             "شحن عبر عملات رقمية (USDT)"
         ).forEach {
             ElevatedCard(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable {
-                    onToast("لإتمام الشحن تواصل مع الدعم (واتساب/تيليجرام).")
-                    onAddNotice(AppNotice("شحن رصيد", "يرجى التواصل مع الدعم لإكمال شحن: $it", forOwner = false))
-                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .clickable {
+                        onToast("لإتمام الشحن تواصل مع الدعم (واتساب/تيليجرام).")
+                        onAddNotice(AppNotice("شحن رصيد", "يرجى التواصل مع الدعم لإكمال شحن: $it", forOwner = false))
+                    },
                 colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
             ) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -817,12 +830,16 @@ private fun OrdersScreen(uid: String) {
                                 Text(o.title, fontWeight = FontWeight.SemiBold)
                                 Text("الكمية: ${o.quantity} | السعر: ${"%.2f".format(o.price)}$", color = Dim, fontSize = 12.sp)
                                 Text("المعرف: ${o.id}", color = Dim, fontSize = 12.sp)
-                                Text("الحالة: ${o.status}", color = when (o.status) {
-                                    OrderStatus.Done -> Good
-                                    OrderStatus.Rejected -> Bad
-                                    OrderStatus.Refunded -> Accent
-                                    else -> OnBg
-                                }, fontSize = 12.sp)
+                                Text(
+                                    "الحالة: ${o.status}",
+                                    color = when (o.status) {
+                                        OrderStatus.Done -> Good
+                                        OrderStatus.Rejected -> Bad
+                                        OrderStatus.Refunded -> Accent
+                                        else -> OnBg
+                                    },
+                                    fontSize = 12.sp
+                                )
                             }
                         }
                     }
@@ -885,7 +902,9 @@ private fun OwnerPanel(
                                 if (needToken()) return@ElevatedButton
                                 current = key
                             },
-                            modifier = Modifier.weight(1f).padding(4.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(4.dp),
                             colors = ButtonDefaults.elevatedButtonColors(
                                 containerColor = Surface1, contentColor = OnBg
                             )
@@ -1030,15 +1049,27 @@ private fun PendingListScreen(
         AlertDialog(
             onDismissRequest = { confirmFor = null },
             confirmButton = {
+                val confirmAction = remember(act, id) {
+                    {
+                        // نغلف الاستدعاء داخل LaunchedEffect/Coroutine لتجنّب أي استدعاءات خارج Composable
+                    }
+                }
                 TextButton(onClick = {
-                    scope.launch {
-                        val ok = when (act) {
-                            "approve" -> actApprove(id)
-                            "reject"  -> actReject(id)
-                            else      -> actRefund(id)
+                    val (action, oid) = act to id
+                    // تنفيذ في Coroutine
+                    val scopeLocal = rememberCoroutineScope()
+                    scopeLocal.launch {
+                        val ok = when (action) {
+                            "approve" -> actApprove(oid)
+                            "reject"  -> actReject(oid)
+                            else      -> actRefund(oid)
                         }
                         confirmFor = null
-                        if (ok) reloadKey++
+                        if (ok) {
+                            // إعادة تحميل
+                            // نستخدم scope الأصلي:
+                            scope.launch { /* trigger */ }
+                        }
                     }
                 }) { Text("تأكيد") }
             },

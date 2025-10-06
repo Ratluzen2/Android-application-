@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -176,7 +178,7 @@ fun AppRoot() {
                 ownerMode = true
                 setOwnerMode(ctx, true)
                 settingsOpen = false
-                // افتح اللوحة فورًا (بدون LaunchedEffect داخل كولباك)
+                // افتح اللوحة فورًا
                 showOwnerDashboard = true
             },
             onDismiss = { settingsOpen = false }
@@ -460,7 +462,7 @@ private fun OwnerPinDialog(
 }
 
 /* =========================
-   لوحة تحكم المالك — أزرار فقط
+   لوحة تحكم المالك — أزرار فقط (بتمرير)
    تبقى مفتوحة بعد إعادة تشغيل التطبيق
    ========================= */
 @Composable
@@ -469,16 +471,18 @@ private fun OwnerDashboard(
     onKeepOpen: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    val ctx = LocalContext.current
 
-    var showBalanceResult by remember { mutableStateOf<String?>(null) }
+    // حوارات النتائج
+    var balanceDialog by remember { mutableStateOf<String?>(null) }
+
     var showOrderDialog by remember { mutableStateOf(false) }
+    var orderLoading by remember { mutableStateOf(false) }
+    var orderError by remember { mutableStateOf<String?>(null) }
     var orderResult by remember { mutableStateOf<String?>(null) }
 
     Surface(
         color = Bg.copy(alpha = 0.98f),
-        modifier = Modifier
-            .fillMaxSize()
+        modifier = Modifier.fillMaxSize()
     ) {
         Column(
             Modifier
@@ -495,7 +499,6 @@ private fun OwnerDashboard(
 
             Spacer(Modifier.height(12.dp))
 
-            // مجموعة أزرار — بالترتيب المطلوب
             val buttons = listOf(
                 "تعديل الأسعار والكميات",
                 "الطلبات المعلقة (الخدمات)",
@@ -520,105 +523,105 @@ private fun OwnerDashboard(
                 "المتصدرين 🎉"
             )
 
-            buttons.forEach { label ->
-                val act: () -> Unit = when (label) {
-                    "فحص رصيد API" -> {
-                        {
-                            showBalanceResult = null
-                            scope.launch {
-                                val res = checkProviderBalance()
-                                showBalanceResult = res
-                            }
-                        }
-                    }
-                    "فحص حالة طلب API" -> {
-                        { showOrderDialog = true; orderResult = null }
-                    }
-                    else -> { { /* مستقبلًا تربطها بأنظمة داخل التطبيق */ } }
-                }
-
-                ElevatedButton(
-                    onClick = act,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp),
-                    colors = ButtonDefaults.elevatedButtonColors(
-                        containerColor = Surface1,
-                        contentColor = OnBg
-                    )
-                ) { Text(label) }
-            }
-
-            // نتيجة فحص الرصيد
-            if (showBalanceResult != null) {
-                Spacer(Modifier.height(10.dp))
-                ElevatedCard {
-                    Column(Modifier.padding(12.dp)) {
-                        Text("نتيجة فحص رصيد API:", fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(6.dp))
-                        Text(showBalanceResult!!)
-                    }
-                }
-            }
-
-            // حوار إدخال رقم الطلب + فحص الحالة
-            if (showOrderDialog) {
-                var orderId by remember { mutableStateOf("") }
-                var loading by remember { mutableStateOf(false) }
-                var err by remember { mutableStateOf<String?>(null) }
-
-                AlertDialog(
-                    onDismissRequest = { showOrderDialog = false },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                if (orderId.isBlank()) {
-                                    err = "أدخل رقم الطلب"
-                                    return@TextButton
-                                }
-                                loading = true
-                                err = null
-                                orderResult = null
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 120.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(buttons) { label ->
+                    val onClick = when (label) {
+                        "فحص رصيد API" -> {
+                            {
+                                // افتح حوار ثم اجلب الرصيد
+                                balanceDialog = "جارٍ الفحص..."
                                 scope.launch {
-                                    val res = checkOrderStatusFlexible(orderId.trim())
-                                    orderResult = res
-                                    loading = false
-                                }
-                            }
-                        ) { Text(if (loading) "جارٍ..." else "تحقق") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showOrderDialog = false }) { Text("إغلاق") }
-                    },
-                    title = { Text("فحص حالة طلب API") },
-                    text = {
-                        Column {
-                            OutlinedTextField(
-                                value = orderId,
-                                onValueChange = { orderId = it },
-                                label = { Text("رقم الطلب") },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                            )
-                            if (err != null) {
-                                Spacer(Modifier.height(8.dp))
-                                Text(err!!, color = Bad, fontSize = 12.sp)
-                            }
-                            if (orderResult != null) {
-                                Spacer(Modifier.height(10.dp))
-                                ElevatedCard {
-                                    Column(Modifier.padding(12.dp)) {
-                                        Text("النتيجة:", fontWeight = FontWeight.SemiBold)
-                                        Spacer(Modifier.height(6.dp))
-                                        Text(orderResult!!)
-                                    }
+                                    val res = checkProviderBalance()
+                                    balanceDialog = res
                                 }
                             }
                         }
+                        "فحص حالة طلب API" -> {
+                            { showOrderDialog = true; orderError = null; orderResult = null }
+                        }
+                        else -> ({ /* للربط لاحقًا */ })
                     }
-                )
+
+                    ElevatedButton(
+                        onClick = onClick,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.elevatedButtonColors(
+                            containerColor = Surface1,
+                            contentColor = OnBg
+                        )
+                    ) { Text(label) }
+                }
             }
         }
+    }
+
+    // حوار نتيجة الرصيد
+    if (balanceDialog != null) {
+        AlertDialog(
+            onDismissRequest = { balanceDialog = null },
+            confirmButton = { TextButton(onClick = { balanceDialog = null }) { Text("إغلاق") } },
+            title = { Text("نتيجة فحص رصيد API") },
+            text = { Text(balanceDialog!!) }
+        )
+    }
+
+    // حوار فحص حالة الطلب
+    if (showOrderDialog) {
+        var orderId by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showOrderDialog = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (orderId.isBlank()) {
+                            orderError = "أدخل رقم الطلب"
+                            return@TextButton
+                        }
+                        orderLoading = true
+                        orderError = null
+                        orderResult = null
+                        // طلب الشبكة
+                        val id = orderId.trim()
+                        LaunchedEffect(id) {
+                            val res = checkOrderStatusFlexible(id)
+                            orderResult = res
+                            orderLoading = false
+                        }
+                    }
+                ) { Text(if (orderLoading) "جارٍ..." else "تحقق") }
+            },
+            dismissButton = { TextButton(onClick = { showOrderDialog = false }) { Text("إغلاق") } },
+            title = { Text("فحص حالة طلب API") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = orderId,
+                        onValueChange = { orderId = it },
+                        label = { Text("رقم الطلب") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    if (orderError != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(orderError!!, color = Bad, fontSize = 12.sp)
+                    }
+                    if (orderResult != null) {
+                        Spacer(Modifier.height(10.dp))
+                        ElevatedCard {
+                            Column(Modifier.padding(12.dp)) {
+                                Text("النتيجة:", fontWeight = FontWeight.SemiBold)
+                                Spacer(Modifier.height(6.dp))
+                                Text(orderResult!!)
+                            }
+                        }
+                    }
+                }
+            }
+        )
     }
 }
 
@@ -696,7 +699,6 @@ private suspend fun checkProviderBalance(): String = withContext(Dispatchers.IO)
             val body = (if (code in 200..299) con.inputStream else con.errorStream)
                 ?.bufferedReader()?.use(BufferedReader::readText) ?: ""
             if (code in 200..299) {
-                // محاولة فهم JSON
                 return@withContext try {
                     val j = JSONObject(body)
                     val ok = j.optBoolean("ok", false)
@@ -707,7 +709,6 @@ private suspend fun checkProviderBalance(): String = withContext(Dispatchers.IO)
                         "فشل: $body"
                     }
                 } catch (_: Exception) {
-                    // قد يكون body نصًّا بسيطاً
                     "الرصيد: $body"
                 }
             }
@@ -719,10 +720,17 @@ private suspend fun checkProviderBalance(): String = withContext(Dispatchers.IO)
 /* ----- فحص حالة طلب المزود عبر الباكند (مسارات مرنة) ----- */
 private suspend fun checkOrderStatusFlexible(orderId: String): String = withContext(Dispatchers.IO) {
     val enc = URLEncoder.encode(orderId, "UTF-8")
+
+    // GET بأنماط متعددة
     val getEndpoints = listOf(
         "$API_BASE/api/smm/order-status?order_id=$enc",
-        "$API_BASE/api/smm/order_status?order_id=$enc"
+        "$API_BASE/api/smm/order-status?id=$enc",
+        "$API_BASE/api/smm/order_status?order_id=$enc",
+        "$API_BASE/api/smm/order_status?id=$enc",
+        "$API_BASE/api/smm/order-status/$enc",
+        "$API_BASE/api/smm/order_status/$enc"
     )
+    // POST JSON بأنماط متعددة
     val postEndpoints = listOf(
         "$API_BASE/api/smm/order-status",
         "$API_BASE/api/smm/order_status"
@@ -734,16 +742,14 @@ private suspend fun checkOrderStatusFlexible(orderId: String): String = withCont
             val url = URL(ep)
             val con = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 7000
-                readTimeout = 7000
+                connectTimeout = 8000
+                readTimeout = 8000
             }
             val code = con.responseCode
             val body = (if (code in 200..299) con.inputStream else con.errorStream)
                 ?.bufferedReader()?.use(BufferedReader::readText) ?: ""
             if (code in 200..299) {
                 return@withContext parseOrderStatusBody(body)
-            } else {
-                // تابع المحاولة التالية
             }
         } catch (_: Exception) { /* جرّب التالي */ }
     }
@@ -755,8 +761,8 @@ private suspend fun checkOrderStatusFlexible(orderId: String): String = withCont
             val con = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 doOutput = true
-                connectTimeout = 7000
-                readTimeout = 7000
+                connectTimeout = 8000
+                readTimeout = 8000
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
             }
             val bodyOut = """{"order_id":"$orderId"}"""
@@ -768,7 +774,6 @@ private suspend fun checkOrderStatusFlexible(orderId: String): String = withCont
             if (code in 200..299) {
                 return@withContext parseOrderStatusBody(body)
             } else {
-                // جمع خطأ واضح
                 try {
                     val err = JSONObject(body)
                     val msg = err.optString("error", body)
@@ -777,10 +782,7 @@ private suspend fun checkOrderStatusFlexible(orderId: String): String = withCont
                     return@withContext "فشل الطلب ($code): $body"
                 }
             }
-        } catch (e: Exception) {
-            // آخر محاولة فاشلة
-            // تابع الحلقة
-        }
+        } catch (_: Exception) { /* تابع */ }
     }
 
     return@withContext "تعذر التحقق من حالة الطلب. تأكد من مسار الباكند وإعدادات المزود ورقم الطلب."
@@ -789,19 +791,24 @@ private suspend fun checkOrderStatusFlexible(orderId: String): String = withCont
 private fun parseOrderStatusBody(body: String): String {
     return try {
         val j = JSONObject(body)
-        val ok = j.optBoolean("ok", false)
+        val ok = j.optBoolean("ok", true) // بعض الباكند لا يرسل ok
         if (ok) {
-            val result = j.optJSONObject("result") ?: j
-            val status = result.optString("status", "غير معروفة")
-            val charge = result.optString("charge", "-")
-            val remains = result.optString("remains", "-")
-            "الحالة: $status\nالكلفة: $charge\nالمتبقي: $remains"
+            val result = j.optJSONObject("result") ?: j.optJSONObject("data") ?: j
+            val status = result.optString("status", result.optString("order_status", "غير معروفة"))
+            val charge = result.optString("charge", result.optString("price", "-"))
+            val remains = result.optString("remains", result.optString("remaining", "-"))
+            val start = result.optString("start_count", "")
+            buildString {
+                appendLine("الحالة: $status")
+                appendLine("الكلفة: $charge")
+                appendLine("المتبقي: $remains")
+                if (start.isNotBlank()) appendLine("البداية: $start")
+            }.trim()
         } else {
             val msg = j.optString("error", body)
             "فشل: $msg"
         }
     } catch (_: Exception) {
-        // ربما نص بسيط
-        if (body.isBlank()) "لا يوجد رد" else body
+        if (body.isBlank()) "لا يوجد رد" else body // نص خام
     }
 }

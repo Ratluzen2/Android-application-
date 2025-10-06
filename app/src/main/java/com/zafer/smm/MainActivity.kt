@@ -452,6 +452,7 @@ private fun ServicesScreen(
     onAddNotice: (AppNotice) -> Unit,
     onToast: (String) -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     var selectedCategory by remember { mutableStateOf<String?>(null) }
     var selectedService by remember { mutableStateOf<ServiceDef?>(null) }
 
@@ -626,6 +627,7 @@ private fun ManualSectionsScreen(
     onToast: (String) -> Unit,
     onAddNotice: (AppNotice) -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     val items = when (title) {
         "قسم شراء رصيد ايتونز" -> listOf("شراء رصيد ايتونز")
         "قسم شراء رصيد هاتف"  -> listOf("شراء رصيد اثير", "شراء رصيد اسياسيل", "شراء رصيد كورك")
@@ -650,10 +652,16 @@ private fun ManualSectionsScreen(
                     .fillMaxWidth()
                     .padding(bottom = 8.dp)
                     .clickable {
-                        onToast("تم استلام طلبك ($name)، سيتم مراجعته من المالك.")
-                        apiCreateManualOrder(uid, name)
-                        onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $name للمراجعة.", forOwner = false))
-                        onAddNotice(AppNotice("طلب يدوي جديد", "طلب $name من UID=$uid يحتاج مراجعة.", forOwner = true))
+                        scope.launch {
+                            val ok = apiCreateManualOrder(uid, name)
+                            if (ok) {
+                                onToast("تم استلام طلبك ($name)، سيتم مراجعته من المالك.")
+                                onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $name للمراجعة.", forOwner = false))
+                                onAddNotice(AppNotice("طلب يدوي جديد", "طلب $name من UID=$uid يحتاج مراجعة.", forOwner = true))
+                            } else {
+                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
+                            }
+                        }
                     },
                 colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
             ) {
@@ -676,9 +684,11 @@ private fun WalletScreen(
     onAddNotice: (AppNotice) -> Unit,
     onToast: (String) -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     var balance by remember { mutableStateOf<Double?>(null) }
     var askAsiacell by remember { mutableStateOf(false) }
     var cardNumber by remember { mutableStateOf("") }
+    var sending by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         balance = apiGetBalance(uid)
@@ -704,7 +714,7 @@ private fun WalletScreen(
             }
         }
 
-        // 2..6) باقي الطرق — توجيه للدعم (مع تسجيل تذكرة في الخادم إن رغبت لاحقًا)
+        // 2..6) باقي الطرق — توجيه للدعم
         listOf(
             "شحن عبر هلا بي",
             "شحن عبر نقاط سنتات",
@@ -730,24 +740,28 @@ private fun WalletScreen(
 
     if (askAsiacell) {
         AlertDialog(
-            onDismissRequest = { askAsiacell = false },
+            onDismissRequest = { if (!sending) askAsiacell = false },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(enabled = !sending, onClick = {
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
-                    val ok = apiSubmitAsiacellCard(uid, digits)
-                    if (ok) {
-                        onAddNotice(AppNotice("تم استلام كارتك", "تم إرسال كارت أسيا سيل إلى المالك للمراجعة.", forOwner = false))
-                        onAddNotice(AppNotice("كارت أسيا سيل جديد", "UID=$uid | كارت: $digits", forOwner = true))
-                        onToast("تم إرسال الكارت للمراجعة.")
-                        cardNumber = ""
-                        askAsiacell = false
-                    } else {
-                        onToast("تعذر إرسال الكارت. حاول مجددًا.")
+                    sending = true
+                    scope.launch {
+                        val ok = apiSubmitAsiacellCard(uid, digits)
+                        sending = false
+                        if (ok) {
+                            onAddNotice(AppNotice("تم استلام كارتك", "تم إرسال كارت أسيا سيل إلى المالك للمراجعة.", forOwner = false))
+                            onAddNotice(AppNotice("كارت أسيا سيل جديد", "UID=$uid | كارت: $digits", forOwner = true))
+                            onToast("تم إرسال الكارت للمراجعة.")
+                            cardNumber = ""
+                            askAsiacell = false
+                        } else {
+                            onToast("تعذر إرسال الكارت. حاول مجددًا.")
+                        }
                     }
-                }) { Text("إرسال") }
+                }) { Text(if (sending) "يرسل..." else "إرسال") }
             },
-            dismissButton = { TextButton(onClick = { askAsiacell = false }) { Text("إلغاء") } },
+            dismissButton = { TextButton(enabled = !sending, onClick = { askAsiacell = false }) { Text("إلغاء") } },
             title = { Text("شحن عبر أسيا سيل") },
             text = {
                 Column {
@@ -868,13 +882,8 @@ private fun OwnerPanel(
                     row.forEach { (title, key) ->
                         ElevatedButton(
                             onClick = {
-                                if (key == "provider_balance") {
-                                    if (needToken()) return@ElevatedButton
-                                    current = key
-                                } else {
-                                    if (needToken()) return@ElevatedButton
-                                    current = key
-                                }
+                                if (needToken()) return@ElevatedButton
+                                current = key
                             },
                             modifier = Modifier.weight(1f).padding(4.dp),
                             colors = ButtonDefaults.elevatedButtonColors(
@@ -965,13 +974,15 @@ private fun PendingListScreen(
     actRefund: suspend (String) -> Boolean,
     onBack: () -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     var list by remember { mutableStateOf<List<OrderItem>?>(null) }
     var loading by remember { mutableStateOf(true) }
     var err by remember { mutableStateOf<String?>(null) }
+    var reloadKey by remember { mutableStateOf(0) }
 
     var confirmFor: Pair<String, String>? by remember { mutableStateOf(null) } // (action, id)
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(reloadKey) {
         loading = true
         err = null
         list = fetch()
@@ -1020,18 +1031,14 @@ private fun PendingListScreen(
             onDismissRequest = { confirmFor = null },
             confirmButton = {
                 TextButton(onClick = {
-                    // تنفيذ الإجراء
-                    LaunchedEffect(act to id) {
+                    scope.launch {
                         val ok = when (act) {
                             "approve" -> actApprove(id)
                             "reject"  -> actReject(id)
                             else      -> actRefund(id)
                         }
                         confirmFor = null
-                        // إعادة تحميل
-                        if (ok) {
-                            // refresh
-                        }
+                        if (ok) reloadKey++
                     }
                 }) { Text("تأكيد") }
             },
@@ -1308,7 +1315,7 @@ private suspend fun httpGet(path: String, headers: Map<String, String> = emptyMa
             }
             val code = con.responseCode
             val txt = (if (code in 200..299) con.inputStream else con.errorStream)
-                ?.bufferedReader()?.use(BufferedReader::readText)
+                ?.bufferedReader()?.use { it.readText() }
             code to txt
         } catch (e: Exception) {
             -1 to null
@@ -1330,7 +1337,7 @@ private suspend fun httpPost(path: String, json: JSONObject, headers: Map<String
             OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(json.toString()) }
             val code = con.responseCode
             val txt = (if (code in 200..299) con.inputStream else con.errorStream)
-                ?.bufferedReader()?.use(BufferedReader::readText)
+                ?.bufferedReader()?.use { it.readText() }
             code to txt
         } catch (e: Exception) {
             -1 to null
@@ -1375,28 +1382,21 @@ private suspend fun apiCreateProviderOrder(
 }
 
 /* طلب يدوي */
-private fun apiCreateManualOrder(uid: String, name: String) {
-    // يمكن تعديل endpoint حسب باكندك
+private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     val body = JSONObject()
         .put("uid", uid)
         .put("title", name)
-    // إطلاق ضمن IO بلا انتظار
-    @Suppress("CoroutineCreationDuringComposition")
-    LaunchedEffect(uid to name) {
-        httpPost("/api/orders/create/manual", body)
-    }
+    val (code, txt) = httpPost("/api/orders/create/manual", body)
+    return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
 /* إرسال كارت أسيا سيل */
-private fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
-    var ok = false
-    @Suppress("CoroutineCreationDuringComposition")
-    LaunchedEffect(uid to card) {
-        val (code, txt) = httpPost("/api/wallet/asiacell/submit", JSONObject().put("uid", uid).put("card", card))
-        ok = code in 200..299 && (txt?.contains("ok", true) == true)
-    }
-    // ملاحظة: هذا رجع فورًا؛ إن أردته متزامنًا استخدم نسخة معلّقة عند الاستدعاء
-    return true
+private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
+    val (code, txt) = httpPost(
+        "/api/wallet/asiacell/submit",
+        JSONObject().put("uid", uid).put("card", card)
+    )
+    return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
 /* طلبات المستخدم */

@@ -11,14 +11,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -29,6 +25,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -37,11 +34,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.BufferedReader
-import java.io.InputStream
+import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
+import java.net.URL
 import kotlin.random.Random
 
 /* =========================
@@ -49,6 +46,10 @@ import kotlin.random.Random
    ========================= */
 private const val API_BASE =
     "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // عدّلها إن لزم
+private const val PREFS_NAME = "app_prefs"
+private const val KEY_UID = "uid"
+private const val KEY_OWNER = "owner_mode"
+private const val OWNER_PIN = "2000"
 
 /* =========================
    Theme
@@ -91,12 +92,6 @@ class MainActivity : ComponentActivity() {
    ========================= */
 private enum class Tab { HOME, SUPPORT, WALLET, ORDERS, SERVICES }
 
-/* مفاتيح التخزين المحلي */
-private const val SP_NAME = "app_prefs"
-private const val SP_UID = "uid"
-private const val SP_OWNER = "owner_enabled"
-private const val OWNER_PIN = "2000"
-
 @Composable
 fun AppRoot() {
     val ctx = LocalContext.current
@@ -106,10 +101,9 @@ fun AppRoot() {
     var uid by remember { mutableStateOf(loadOrCreateUid(ctx)) }
     var settingsOpen by remember { mutableStateOf(false) }
 
-    // وضع المالك محفوظ دائماً
-    var ownerEnabled by remember {
-        mutableStateOf(ctx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE).getBoolean(SP_OWNER, false))
-    }
+    // وضع المالك — يبقى محفوظ بعد إعادة فتح التطبيق
+    var ownerMode by remember { mutableStateOf(getOwnerMode(ctx)) }
+    var showOwnerDashboard by remember { mutableStateOf(ownerMode) }
 
     // حالة السيرفر
     var online by remember { mutableStateOf<Boolean?>(null) }
@@ -124,13 +118,6 @@ fun AppRoot() {
     }
 
     var current by remember { mutableStateOf(Tab.HOME) }
-
-    // حوارات لوحة المالك
-    var showOwnerLogin by remember { mutableStateOf(false) }
-    var showOwnerPanel by remember { mutableStateOf(false) }
-    var showOrderStatus by remember { mutableStateOf(false) } // فحص حالة الطلب
-    var showBalanceDialog by remember { mutableStateOf(false) }
-    var balanceResult by remember { mutableStateOf<String?>(null) }
 
     // الحاوية الرئيسية
     Box(
@@ -147,7 +134,7 @@ fun AppRoot() {
             Tab.SERVICES -> EmptyScreen()
         }
 
-        // حالة السيرفر أعلى يمين + زر إعدادات (يعرض UID و"تسجيل المالك")
+        // حالة السيرفر أعلى يمين + زر إعدادات (يعرض UID + تسجيل المالك)
         ServerStatusPill(
             online = online,
             onOpenSettings = { settingsOpen = true },
@@ -163,68 +150,42 @@ fun AppRoot() {
             onChange = { current = it },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
+
+        // لوحة المالك — تبقى ظاهرة إذا كان المالك مسجل
+        if (showOwnerDashboard) {
+            OwnerDashboard(
+                onClose = {
+                    // زر للخروج من وضع المالك (تعطيل دائم حتى إعادة التسجيل)
+                    showOwnerDashboard = false
+                    ownerMode = false
+                    setOwnerMode(ctx, false)
+                },
+                onKeepOpen = {
+                    // إبقاءها مفتوحة (لا تغيير للحالة)
+                    showOwnerDashboard = true
+                }
+            )
+        }
     }
 
-    /* ====== الحوارات ====== */
-
-    // إعدادات: تُظهر UID + زر تسجيل المالك / لوحة المالك
     if (settingsOpen) {
         SettingsDialog(
             uid = uid,
-            ownerEnabled = ownerEnabled,
-            onOwnerLogin = { settingsOpen = false; showOwnerLogin = true },
-            onOpenOwnerPanel = { settingsOpen = false; showOwnerPanel = true },
+            isOwner = ownerMode,
+            onOwnerLoginSuccess = {
+                ownerMode = true
+                setOwnerMode(ctx, true)
+                settingsOpen = false
+                // افتح اللوحة فورًا
+                // وستبقى مفتوحة بعد إعادة تشغيل التطبيق
+                // بسبب حفظ ownerMode في SharedPreferences
+                LaunchedEffect(Unit) {
+                    // مجرد تفعيل الحالة في نفس الإطار
+                }
+            },
             onDismiss = { settingsOpen = false }
         )
     }
-
-    // تسجيل المالك
-    OwnerLoginDialog(
-        visible = showOwnerLogin,
-        onCancel = { showOwnerLogin = false },
-        onSuccess = {
-            showOwnerLogin = false
-            val sp = ctx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
-            sp.edit().putBoolean(SP_OWNER, true).apply()
-            ownerEnabled = true
-            showOwnerPanel = true
-        }
-    )
-
-    // لوحة المالك
-    OwnerPanelDialog(
-        visible = showOwnerPanel && ownerEnabled,
-        onClose = { showOwnerPanel = false },
-        onCheckBalance = {
-            // فحص رصيد API
-            scope.launch {
-                balanceResult = "جارٍ التحقق..."
-                val res = getSmmBalanceFromServer()
-                balanceResult = res
-                showBalanceDialog = true
-            }
-        },
-        onCheckOrderStatus = {
-            // فتح حوار إدخال رقم الطلب
-            showOrderStatus = true
-        }
-    )
-
-    // نتيجة فحص الرصيد
-    if (showBalanceDialog) {
-        AlertDialog(
-            onDismissRequest = { showBalanceDialog = false },
-            title = { Text("نتيجة فحص رصيد API") },
-            text = { Text(balanceResult ?: "—") },
-            confirmButton = { TextButton(onClick = { showBalanceDialog = false }) { Text("حسناً") } }
-        )
-    }
-
-    // حوار فحص حالة الطلب (إدخال رقم الطلب ثم استعلام السيرفر)
-    OrderStatusDialog(
-        visible = showOrderStatus,
-        onClose = { showOrderStatus = false }
-    )
 }
 
 /* =========================
@@ -239,7 +200,9 @@ private fun EmptyScreen() {
     )
 }
 
-/* دعم */
+/* -------------------------
+   شاشة الدعم (واتساب + تيليجرام)
+   ------------------------- */
 @Composable
 private fun SupportScreen() {
     val uri = LocalUriHandler.current
@@ -288,8 +251,7 @@ private fun ContactCard(
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(horizontal = 0.dp),
+            .clickable { onClick() },
         colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
     ) {
         Row(
@@ -415,23 +377,17 @@ private fun RowScope.NavItem(
 @Composable
 private fun SettingsDialog(
     uid: String,
-    ownerEnabled: Boolean,
-    onOwnerLogin: () -> Unit,
-    onOpenOwnerPanel: () -> Unit,
+    isOwner: Boolean,
+    onOwnerLoginSuccess: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val clip: ClipboardManager = LocalClipboardManager.current
+    var openPin by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (ownerEnabled) {
-                    TextButton(onClick = onOpenOwnerPanel) { Text("لوحة المالك") }
-                } else {
-                    TextButton(onClick = onOwnerLogin) { Text("تسجيل المالك") }
-                }
-                TextButton(onClick = onDismiss) { Text("إغلاق") }
-            }
+            TextButton(onClick = onDismiss) { Text("إغلاق") }
         },
         title = { Text("الإعدادات") },
         text = {
@@ -445,6 +401,12 @@ private fun SettingsDialog(
                         clip.setText(AnnotatedString(uid))
                     }) { Text("نسخ") }
                 }
+                Spacer(Modifier.height(14.dp))
+                ElevatedButton(
+                    onClick = { openPin = true },
+                    enabled = !isOwner
+                ) { Text(if (isOwner) "المالك مسجل" else "تسجيل المالك") }
+
                 Spacer(Modifier.height(10.dp))
                 Text(
                     "يُنشأ UID تلقائياً عند أول تشغيل ويتم ربطه بحسابك على الخادم.",
@@ -454,187 +416,235 @@ private fun SettingsDialog(
             }
         }
     )
+
+    if (openPin) {
+        OwnerPinDialog(
+            onSuccess = {
+                openPin = false
+                onOwnerLoginSuccess()
+            },
+            onClose = { openPin = false }
+        )
+    }
 }
 
-/* =========================
-   حوار تسجيل المالك (PIN = 2000)
-   ========================= */
 @Composable
-private fun OwnerLoginDialog(
-    visible: Boolean,
-    onCancel: () -> Unit,
-    onSuccess: () -> Unit
+private fun OwnerPinDialog(
+    onSuccess: () -> Unit,
+    onClose: () -> Unit
 ) {
-    if (!visible) return
-    var pin by rememberSaveable { mutableStateOf("") }
+    var pin by remember { mutableStateOf("") }
     var err by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
-        onDismissRequest = onCancel,
+        onDismissRequest = onClose,
+        confirmButton = {
+            TextButton(onClick = {
+                if (pin == OWNER_PIN) onSuccess() else err = "الرمز غير صحيح"
+            }) { Text("تأكيد") }
+        },
+        dismissButton = { TextButton(onClick = onClose) { Text("إلغاء") } },
         title = { Text("تسجيل المالك") },
         text = {
             Column {
                 OutlinedTextField(
                     value = pin,
-                    onValueChange = { pin = it; err = null },
-                    label = { Text("كلمة المرور") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    onValueChange = { pin = it },
+                    label = { Text("أدخل كلمة مرور المالك") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    singleLine = true
                 )
                 if (err != null) {
                     Spacer(Modifier.height(8.dp))
-                    Text(err!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    Text(err!!, color = Bad, fontSize = 12.sp)
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                if (pin == OWNER_PIN) onSuccess() else err = "كلمة المرور غير صحيحة"
-            }) { Text("تأكيد") }
-        },
-        dismissButton = {
-            TextButton(onClick = onCancel) { Text("إلغاء") }
         }
     )
 }
 
 /* =========================
-   حوار لوحة المالك — أزرار فقط (قابل للتمرير)
+   لوحة تحكم المالك — أزرار فقط
+   تبقى مفتوحة بعد إعادة تشغيل التطبيق
    ========================= */
 @Composable
-private fun OwnerPanelDialog(
-    visible: Boolean,
+private fun OwnerDashboard(
     onClose: () -> Unit,
-    onCheckBalance: () -> Unit,
-    onCheckOrderStatus: () -> Unit
+    onKeepOpen: () -> Unit
 ) {
-    if (!visible) return
+    val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
 
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text("لوحة تحكم المالك") },
-        text = {
-            // <<< إضافة التمرير حتى لا تختفي الأزرار على الشاشات الصغيرة
-            Column(
-                modifier = Modifier
-                    .heightIn(max = 520.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OwnerActionButton("تعديل الأسعار والكميات", Icons.Filled.Tune) {}
-                OwnerActionButton("الطلبات المعلقة (الخدمات)", Icons.Filled.List) {}
-                OwnerActionButton("الكارتات المعلقة", Icons.Filled.CreditCard) {}
-                OwnerActionButton("طلبات شدات ببجي", Icons.Filled.SportsEsports) {}
-                OwnerActionButton("طلبات شحن الايتونز", Icons.Filled.MusicNote) {}
-                OwnerActionButton("طلبات الارصدة المعلقة", Icons.Filled.AccountBalanceWallet) {}
-                OwnerActionButton("طلبات لودو المعلقة", Icons.Filled.Extension) {}
-                OwnerActionButton("إضافة الرصيد", Icons.Filled.AddCircle) {}
-                OwnerActionButton("خصم الرصيد", Icons.Filled.RemoveCircle) {}
-                OwnerActionButton("فحص رصيد API", Icons.Filled.Verified) { onCheckBalance() }
-                OwnerActionButton("فحص حالة طلب API", Icons.Filled.Search) { onCheckOrderStatus() }
-                OwnerActionButton("عدد المستخدمين", Icons.Filled.Groups) {}
-                OwnerActionButton("رصيد المستخدمين", Icons.Filled.AccountBox) {}
-                OwnerActionButton("إدارة المشرفين", Icons.Filled.AdminPanelSettings) {}
-                OwnerActionButton("حظر المستخدم", Icons.Filled.Block) {}
-                OwnerActionButton("الغاء حظر المستخدم", Icons.Filled.CheckCircle) {}
-                OwnerActionButton("اعلان البوت", Icons.Filled.Campaign) {}
-                OwnerActionButton("أكواد خدمات API", Icons.Filled.Code) {}
-                OwnerActionButton("نظام الإحالة", Icons.Filled.Share) {}
-                OwnerActionButton("شرح الخصومات", Icons.Filled.Info) {}
-                OwnerActionButton("المتصدرين 🎉", Icons.Filled.EmojiEvents) {}
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onClose) { Text("إغلاق") }
-        }
-    )
-}
+    var showBalanceResult by remember { mutableStateOf<String?>(null) }
+    var showOrderDialog by remember { mutableStateOf(false) }
+    var orderResult by remember { mutableStateOf<String?>(null) }
 
-@Composable
-private fun OwnerActionButton(
-    text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit
-) {
-    ElevatedButton(
-        onClick = onClick,
-        colors = ButtonDefaults.elevatedButtonColors(
-            containerColor = Surface1,
-            contentColor = OnBg
-        ),
-        modifier = Modifier.fillMaxWidth()
+    Surface(
+        color = Bg.copy(alpha = 0.98f),
+        modifier = Modifier
+            .fillMaxSize()
     ) {
-        Icon(icon, contentDescription = null, tint = Accent)
-        Spacer(Modifier.width(8.dp))
-        Text(text)
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("لوحة تحكم المالك", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onKeepOpen) { Text("إبقاء مفتوحة") }
+                Spacer(Modifier.width(6.dp))
+                OutlinedButton(onClick = onClose) { Text("خروج من وضع المالك") }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // مجموعة أزرار — بالترتيب المطلوب
+            val buttons = listOf(
+                "تعديل الأسعار والكميات",
+                "الطلبات المعلقة (الخدمات)",
+                "الكارتات المعلقة",
+                "طلبات شدات ببجي",
+                "طلبات شحن الايتونز",
+                "طلبات الارصدة المعلقة",
+                "طلبات لودو المعلقة",
+                "إضافة الرصيد",
+                "خصم الرصيد",
+                "فحص رصيد API",
+                "فحص حالة طلب API",
+                "عدد المستخدمين",
+                "رصيد المستخدمين",
+                "إدارة المشرفين",
+                "حظر المستخدم",
+                "الغاء حظر المستخدم",
+                "اعلان البوت",
+                "أكواد خدمات API",
+                "نظام الإحالة",
+                "شرح الخصومات",
+                "المتصدرين 🎉"
+            )
+
+            buttons.forEach { label ->
+                val act: () -> Unit = when (label) {
+                    "فحص رصيد API" -> {
+                        {
+                            showBalanceResult = null
+                            scope.launch {
+                                val res = checkProviderBalance()
+                                showBalanceResult = res
+                            }
+                        }
+                    }
+                    "فحص حالة طلب API" -> {
+                        { showOrderDialog = true; orderResult = null }
+                    }
+                    else -> { { /* مستقبلًا تربطها بأنظمة داخل التطبيق */ } }
+                }
+
+                ElevatedButton(
+                    onClick = act,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp),
+                    colors = ButtonDefaults.elevatedButtonColors(
+                        containerColor = Surface1,
+                        contentColor = OnBg
+                    )
+                ) { Text(label) }
+            }
+
+            // نتيجة فحص الرصيد
+            if (showBalanceResult != null) {
+                Spacer(Modifier.height(10.dp))
+                ElevatedCard {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("نتيجة فحص رصيد API:", fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(6.dp))
+                        Text(showBalanceResult!!)
+                    }
+                }
+            }
+
+            // حوار إدخال رقم الطلب + فحص الحالة
+            if (showOrderDialog) {
+                var orderId by remember { mutableStateOf("") }
+                var loading by remember { mutableStateOf(false) }
+                var err by remember { mutableStateOf<String?>(null) }
+
+                AlertDialog(
+                    onDismissRequest = { showOrderDialog = false },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                if (orderId.isBlank()) {
+                                    err = "أدخل رقم الطلب"
+                                    return@TextButton
+                                }
+                                loading = true
+                                err = null
+                                orderResult = null
+                                scope.launch {
+                                    val res = checkOrderStatusFlexible(orderId.trim())
+                                    orderResult = res
+                                    loading = false
+                                }
+                            }
+                        ) { Text(if (loading) "جارٍ..." else "تحقق") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showOrderDialog = false }) { Text("إغلاق") }
+                    },
+                    title = { Text("فحص حالة طلب API") },
+                    text = {
+                        Column {
+                            OutlinedTextField(
+                                value = orderId,
+                                onValueChange = { orderId = it },
+                                label = { Text("رقم الطلب") },
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
+                            if (err != null) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(err!!, color = Bad, fontSize = 12.sp)
+                            }
+                            if (orderResult != null) {
+                                Spacer(Modifier.height(10.dp))
+                                ElevatedCard {
+                                    Column(Modifier.padding(12.dp)) {
+                                        Text("النتيجة:", fontWeight = FontWeight.SemiBold)
+                                        Spacer(Modifier.height(6.dp))
+                                        Text(orderResult!!)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+        }
     }
 }
 
 /* =========================
-   حوار فحص حالة الطلب (إدخال رقم الطلب)
+   منطق UID + الشبكة + وضع المالك
    ========================= */
-@Composable
-private fun OrderStatusDialog(
-    visible: Boolean,
-    onClose: () -> Unit
-) {
-    if (!visible) return
+private fun getPrefs(ctx: Context) =
+    ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    val scope = rememberCoroutineScope()
-    var orderId by rememberSaveable { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
-    var result by remember { mutableStateOf<String?>(null) }
-
-    AlertDialog(
-        onDismissRequest = { if (!loading) onClose() },
-        title = { Text("فحص حالة الطلب (API)") },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = orderId,
-                    onValueChange = { orderId = it },
-                    label = { Text("رقم الطلب") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
-                Spacer(Modifier.height(8.dp))
-                if (loading) {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                }
-                if (!loading && result != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(result!!, color = Dim, fontSize = 13.sp)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = orderId.isNotBlank() && !loading,
-                onClick = {
-                    scope.launch {
-                        loading = true
-                        result = null
-                        result = getOrderStatusFromServer(orderId)
-                        loading = false
-                    }
-                }
-            ) { Text("تحقق") }
-        },
-        dismissButton = {
-            TextButton(enabled = !loading, onClick = onClose) { Text("إغلاق") }
-        }
-    )
+private fun setOwnerMode(ctx: Context, enabled: Boolean) {
+    getPrefs(ctx).edit().putBoolean(KEY_OWNER, enabled).apply()
 }
 
-/* =========================
-   منطق UID + الشبكة
-   ========================= */
+private fun getOwnerMode(ctx: Context): Boolean =
+    getPrefs(ctx).getBoolean(KEY_OWNER, false)
+
 private fun loadOrCreateUid(ctx: Context): String {
-    val sp = ctx.getSharedPreferences(SP_NAME, Context.MODE_PRIVATE)
-    val existing = sp.getString(SP_UID, null)
+    val sp = getPrefs(ctx)
+    val existing = sp.getString(KEY_UID, null)
     if (existing != null) return existing
     val fresh = "U" + (100000..999999).random(Random(System.currentTimeMillis()))
-    sp.edit().putString(SP_UID, fresh).apply()
+    sp.edit().putString(KEY_UID, fresh).apply()
     return fresh
 }
 
@@ -671,101 +681,131 @@ private suspend fun tryUpsertUid(uid: String) = withContext(Dispatchers.IO) {
     }
 }
 
-/* مساعد قراءة الاستجابة (للنجاح أو الخطأ) */
-private fun readBody(con: HttpURLConnection): String {
-    val stream: InputStream? = try {
-        if (con.responseCode in 200..299) con.inputStream else con.errorStream
-    } catch (_: Exception) {
-        con.errorStream
-    }
-    return try {
-        stream?.bufferedReader()?.use { it.readText() } ?: ""
-    } catch (e: Exception) {
-        e.message ?: ""
-    }
-}
-
-/* فحص رصيد API */
-private suspend fun getSmmBalanceFromServer(): String = withContext(Dispatchers.IO) {
-    try {
-        val url = URL("$API_BASE/api/smm/balance")
-        val con = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 6000
-            readTimeout = 6000
-        }
-        val code = con.responseCode
-        val body = readBody(con)
-        if (code in 200..299) {
-            return@withContext runCatching {
-                val json = JSONObject(body)
-                if (json.optBoolean("ok", false)) {
-                    val bal = json.opt("balance")?.toString() ?: "-"
-                    "الرصيد: $bal"
-                } else {
-                    json.optString("detail", json.optString("message", body))
-                }
-            }.getOrElse { body }
-        } else {
-            "فشل الطلب (${code}): $body"
-        }
-    } catch (e: Exception) {
-        "خطأ في الاتصال: ${e.message}"
-    }
-}
-
-/* فحص حالة الطلب API — GET مع ترميز، ثم محاولة POST إن لزم */
-private suspend fun getOrderStatusFromServer(orderId: String): String = withContext(Dispatchers.IO) {
-    val id = orderId.trim()
-    if (id.isEmpty()) return@withContext "الرجاء إدخال رقم الطلب."
-
-    fun parseStatusJson(body: String): String {
-        return runCatching {
-            val json = JSONObject(body)
-            if (json.optBoolean("ok", false)) {
-                val res = json.optJSONObject("result")
-                val status = res?.optString("status") ?: "غير معروف"
-                val charge = res?.optString("charge") ?: "-"
-                val remains = res?.optString("remains") ?: "-"
-                "الحالة: $status\nالكلفة: $charge\nالمتبقي: $remains"
-            } else {
-                json.optString("detail", json.optString("message", body))
+/* ----- فحص رصيد المزود عبر الباكند ----- */
+private suspend fun checkProviderBalance(): String = withContext(Dispatchers.IO) {
+    val endpoints = listOf(
+        "$API_BASE/api/smm/balance",
+        "$API_BASE/api/smm/get-balance",
+        "$API_BASE/api/smm/get_balance"
+    )
+    for (ep in endpoints) {
+        try {
+            val url = URL(ep)
+            val con = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 6000
+                readTimeout = 6000
             }
-        }.getOrElse { body }
+            val code = con.responseCode
+            val body = (if (code in 200..299) con.inputStream else con.errorStream)
+                ?.bufferedReader()?.use(BufferedReader::readText) ?: ""
+            if (code in 200..299) {
+                // محاولة فهم JSON
+                return@withContext try {
+                    val j = JSONObject(body)
+                    val ok = j.optBoolean("ok", false)
+                    if (ok) {
+                        val bal = j.optString("balance", j.optString("result", body))
+                        "الرصيد: $bal"
+                    } else {
+                        "فشل: $body"
+                    }
+                } catch (_: Exception) {
+                    // قد يكون body نصًّا بسيطاً
+                    "الرصيد: $body"
+                }
+            }
+        } catch (_: Exception) { /* جرّب التالي */ }
+    }
+    return@withContext "تعذر الحصول على الرصيد من الخادم. تأكد من وجود مسار رصيد صالح."
+}
+
+/* ----- فحص حالة طلب المزود عبر الباكند (مسارات مرنة) ----- */
+private suspend fun checkOrderStatusFlexible(orderId: String): String = withContext(Dispatchers.IO) {
+    val enc = URLEncoder.encode(orderId, "UTF-8")
+    val getEndpoints = listOf(
+        "$API_BASE/api/smm/order-status?order_id=$enc",
+        "$API_BASE/api/smm/order_status?order_id=$enc"
+    )
+    val postEndpoints = listOf(
+        "$API_BASE/api/smm/order-status",
+        "$API_BASE/api/smm/order_status"
+    )
+
+    // 1) جرّب GET
+    for (ep in getEndpoints) {
+        try {
+            val url = URL(ep)
+            val con = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 7000
+                readTimeout = 7000
+            }
+            val code = con.responseCode
+            val body = (if (code in 200..299) con.inputStream else con.errorStream)
+                ?.bufferedReader()?.use(BufferedReader::readText) ?: ""
+            if (code in 200..299) {
+                return@withContext parseOrderStatusBody(body)
+            } else {
+                // تابع المحاولة التالية
+            }
+        } catch (_: Exception) { /* جرّب التالي */ }
     }
 
-    try {
-        // 1) GET مع ترميز آمن
-        val q = URLEncoder.encode(id, "UTF-8")
-        var con = (URL("$API_BASE/api/smm/order-status?order_id=$q").openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 7000
-            readTimeout = 7000
-        }
-        var code = con.responseCode
-        var body = readBody(con)
-        if (code in 200..299) {
-            return@withContext parseStatusJson(body)
-        }
+    // 2) جرّب POST JSON
+    for (ep in postEndpoints) {
+        try {
+            val url = URL(ep)
+            val con = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                connectTimeout = 7000
+                readTimeout = 7000
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            }
+            val bodyOut = """{"order_id":"$orderId"}"""
+            OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(bodyOut) }
 
-        // 2) محاولة POST JSON احتياطية
-        con = (URL("$API_BASE/api/smm/order-status").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            connectTimeout = 7000
-            readTimeout = 7000
-            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            val code = con.responseCode
+            val body = (if (code in 200..299) con.inputStream else con.errorStream)
+                ?.bufferedReader()?.use(BufferedReader::readText) ?: ""
+            if (code in 200..299) {
+                return@withContext parseOrderStatusBody(body)
+            } else {
+                // جمع خطأ واضح
+                try {
+                    val err = JSONObject(body)
+                    val msg = err.optString("error", body)
+                    return@withContext "فشل الطلب ($code): $msg"
+                } catch (_: Exception) {
+                    return@withContext "فشل الطلب ($code): $body"
+                }
+            }
+        } catch (e: Exception) {
+            // آخر محاولة فاشلة
+            // تابع الحلقة
         }
-        val payload = """{"order_id":"$id"}"""
-        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(payload) }
-        code = con.responseCode
-        body = readBody(con)
-        if (code in 200..299) {
-            return@withContext parseStatusJson(body)
+    }
+
+    return@withContext "تعذر التحقق من حالة الطلب. تأكد من مسار الباكند وإعدادات المزود ورقم الطلب."
+}
+
+private fun parseOrderStatusBody(body: String): String {
+    return try {
+        val j = JSONObject(body)
+        val ok = j.optBoolean("ok", false)
+        if (ok) {
+            val result = j.optJSONObject("result") ?: j
+            val status = result.optString("status", "غير معروفة")
+            val charge = result.optString("charge", "-")
+            val remains = result.optString("remains", "-")
+            "الحالة: $status\nالكلفة: $charge\nالمتبقي: $remains"
         } else {
-            return@withContext "فشل الطلب (${code}): $body"
+            val msg = j.optString("error", body)
+            "فشل: $msg"
         }
-    } catch (e: Exception) {
-        return@withContext "حدث خطأ: ${e.message}"
+    } catch (_: Exception) {
+        // ربما نص بسيط
+        if (body.isBlank()) "لا يوجد رد" else body
     }
 }

@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,11 +66,15 @@ private object AdminEndpoints {
     fun cardsAccept(id: String)     = "/api/admin/pending/cards/$id/accept"
     fun cardsReject(id: String)     = "/api/admin/pending/cards/$id/reject"
 
-    fun itunesDeliver(id: String)   = "/api/admin/pending/itunes/$id/deliver"   // NEW
-    fun itunesReject(id: String)    = "/api/admin/pending/itunes/$id/reject"    // NEW
+    fun itunesDeliver(id: String)   = "/api/admin/pending/itunes/$id/deliver"
+    fun itunesReject(id: String)    = "/api/admin/pending/itunes/$id/reject"
 
     fun pubgDeliver(id: String)     = "/api/admin/pending/pubg/$id/deliver"
     fun pubgReject(id: String)      = "/api/admin/pending/pubg/$id/reject"
+
+    // ✅ أضفنا هاتين الدالتين لتفادي Unresolved reference
+    fun ludoDeliver(id: String)     = "/api/admin/pending/ludo/$id/deliver"
+    fun ludoReject(id: String)      = "/api/admin/pending/ludo/$id/reject"
 
     // رصيد المستخدم
     fun topup(uid: String)          = "/api/admin/users/$uid/topup"
@@ -708,7 +713,7 @@ private fun WalletScreen(
     onToast: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    val uri = LocalUriHandler.current
+    val uri = LocalUriHandler.current   // نحتفظ به هنا ونستخدمه لاحقًا
     var balance by remember { mutableStateOf<Double?>(null) }
     var askAsiacell by remember { mutableStateOf(false) }
     var cardNumber by remember { mutableStateOf("") }
@@ -780,6 +785,8 @@ private fun WalletScreen(
                     sending = true
                     val uidLocal = uid
                     val cardLocal = digits
+                    // نستخدم "uri" المخزون أعلاه (إصلاح @Composable invocations)
+                    val uriLocal = uri
                     scope.launch {
                         val ok = apiSubmitAsiacellCard(uidLocal, cardLocal)
                         sending = false
@@ -791,7 +798,7 @@ private fun WalletScreen(
                             askAsiacell = false
                         } else {
                             val msg = "أرغب بشحن الرصيد داخل التطبيق.\nUID=$uidLocal\nكارت أسيا سيل: $cardLocal"
-                            LocalUriHandler.current.openUri(
+                            uriLocal.openUri(
                                 "https://wa.me/9647763410970?text=" + java.net.URLEncoder.encode(msg, "UTF-8")
                             )
                             onToast("تعذر الاتصال بالخادم — تم فتح واتساب لإرسال الكارت للدعم.")
@@ -914,7 +921,7 @@ private fun OwnerPanel(
         if (current == null) {
             val buttons = listOf(
                 "الطلبات المعلقة (الخدمات)" to "pending_services",
-                "طلبات شحن الايتونز"      to "pending_itunes",   // موجود
+                "طلبات شحن الايتونز"      to "pending_itunes",
                 "الكارتات المعلقة"         to "pending_cards",
                 "طلبات شدات ببجي"         to "pending_pubg",
                 "طلبات لودو المعلقة"       to "pending_ludo",
@@ -955,23 +962,20 @@ private fun OwnerPanel(
                     approveWithText = null,
                     onBack = { current = null }
                 )
-
-                // NEW: شاشة الايتونز — تنفيذ يطلب gift_code
                 "pending_itunes" -> PendingListScreen(
                     title = "طلبات شحن الايتونز",
                     fetch = { apiAdminGetList(token!!, AdminEndpoints.pendingItunes) },
-                    actApprove = { _ -> false },  // لن تُستخدم هنا
+                    actApprove = { _ -> false },
                     actReject  = { id -> apiAdminRejectItunes(token!!, id) },
                     actRefund  = { id -> apiAdminRejectItunes(token!!, id) },
                     approveWithAmount = null,
                     approveWithText = { id, code -> apiAdminDeliverItunes(token!!, id, code) },
                     onBack = { current = null }
                 )
-
                 "pending_cards" -> PendingListScreen(
                     title = "الكارتات المعلقة",
                     fetch = { apiAdminGetList(token!!, AdminEndpoints.pendingCards) },
-                    actApprove = { _ -> true }, // سيظهر مربع مبلغ
+                    actApprove = { _ -> true },
                     actReject  = { id -> apiAdminRejectCard(token!!, id) },
                     actRefund  = { id -> apiAdminRejectCard(token!!, id) },
                     approveWithAmount = { id, amount -> apiAdminApproveCard(token!!, id, amount) },
@@ -1049,8 +1053,8 @@ private fun PendingListScreen(
     var askAmountForId by remember { mutableStateOf<String?>(null) }
     var amountText by remember { mutableStateOf("") }
 
-    var askTextForId by remember { mutableStateOf<String?>(null) }  // NEW for gift_code
-    var textValue by remember { mutableStateOf("") }                 // NEW
+    var askTextForId by remember { mutableStateOf<String?>(null) }  // لآيتونز
+    var textValue by remember { mutableStateOf("") }
 
     var toast by remember { mutableStateOf<String?>(null) }
 
@@ -1107,13 +1111,10 @@ private fun PendingListScreen(
                             Spacer(Modifier.height(8.dp))
                             Row {
                                 TextButton(onClick = {
-                                    // إن كانت شاشة آيتونز سنطلب gift_code
                                     if (approveWithText != null) {
                                         askTextForId = o.id
                                         textValue = ""
-                                    }
-                                    // إن كانت كارت أسيا سيل سنطلب المبلغ
-                                    else if (looksLikeCard(o) && approveWithAmount != null) {
+                                    } else if (looksLikeCard(o) && approveWithAmount != null) {
                                         askAmountForId = o.id
                                         amountText = ""
                                     } else {
@@ -1193,7 +1194,7 @@ private fun PendingListScreen(
         )
     }
 
-    // NEW: مربع إدخال gift_code لطلبات الآيتونز
+    // مربع إدخال gift_code لطلبات الآيتونز
     askTextForId?.let { oid ->
         AlertDialog(
             onDismissRequest = { askTextForId = null },
@@ -1733,7 +1734,7 @@ private suspend fun apiAdminRejectCard(token: String, id: String): Boolean {
     return code in 200..299
 }
 
-/* NEW: آيتونز */
+/* آيتونز */
 private suspend fun apiAdminDeliverItunes(token: String, id: String, giftCode: String): Boolean {
     val (code, _) = httpPost(
         AdminEndpoints.itunesDeliver(id),

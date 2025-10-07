@@ -1,7 +1,15 @@
+// app/src/main/java/com/zafer/smm/MainActivity.kt
 @file:Suppress("UnusedImport", "SpellCheckingInspection")
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
+
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 
 import android.content.Context
 import android.os.Bundle
@@ -35,6 +43,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.BufferedReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
@@ -49,27 +58,34 @@ import kotlin.random.Random
    ========================= */
 private const val API_BASE = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
 
-/** مسارات الأدمن — طابقتها مع الراوتر الذي زوّدتني به */
+/** مسارات الأدمن — تطابق باكندك الحالي */
 private object AdminEndpoints {
-    const val login             = "/api/admin/login"                // غير مستخدم حاليًا (نستخدم header مباشرة)
-    const val pendingServices   = "/api/admin/pending/services"     // GET
-    const val pendingItunes     = "/api/admin/pending/itunes"       // GET
-    const val pendingTopups     = "/api/admin/pending/cards"        // GET
-    const val pendingPubg       = "/api/admin/pending/pubg"         // GET
-    const val pendingLudo       = "/api/admin/pending/ludo"         // GET
+    // PENDING
+    const val pendingServices = "/api/admin/pending/services"
+    const val pendingCards    = "/api/admin/pending/cards"
+    const val pendingItunes   = "/api/admin/pending/itunes"
+    const val pendingPhone    = "/api/admin/pending/phone"
+    const val pendingPubg     = "/api/admin/pending/pubg"
+    const val pendingLudo     = "/api/admin/pending/ludo"
 
-    // تنفيذ/رفض/رد رصيد لطلبات الخدمات (الموفّر) — ممررة عبر PendingListScreen للخدمات فقط
-    fun serviceApprove(id: String) = "/api/admin/pending/services/$id/approve"
-    fun serviceReject(id: String)  = "/api/admin/pending/services/$id/reject"
-    // لا يوجد endpoint عام لرد الرصيد بالخادم في الكود الحالي، يُستخدم reject ويرجّع الرصيد
+    // خدمات (approve/reject)
+    fun approveService(id: String) = "/api/admin/pending/services/$id/approve"
+    fun rejectService(id: String)  = "/api/admin/pending/services/$id/reject"
 
-    // شحن/خصم رصيد مستخدم
+    // كروت أسيا سيل (accept/reject)
+    fun acceptCard(id: String)     = "/api/admin/pending/cards/$id/accept"
+    fun rejectCard(id: String)     = "/api/admin/pending/cards/$id/reject"
+
+    // رصيد المستخدم
     fun topup(uid: String)  = "/api/admin/users/$uid/topup"
     fun deduct(uid: String) = "/api/admin/users/$uid/deduct"
 
-    const val usersCount        = "/api/admin/users/count"          // GET
-    const val usersBalances     = "/api/admin/users/balances"       // GET (قائمة، سنجمعها مجموع)
-    const val providerBalance   = "/api/admin/provider/balance"     // GET
+    // إحصائيات
+    const val usersCount     = "/api/admin/users/count"
+    const val usersBalances  = "/api/admin/users/balances"
+
+    // مزود
+    const val providerBalance = "/api/admin/provider/balance"
 }
 
 /* =========================
@@ -111,7 +127,7 @@ data class AppNotice(
 
 data class ServiceDef(
     val uiKey: String,
-    val serviceId: Long,    // رقم الخدمة للمزوّد
+    val serviceId: Long,
     val min: Int,
     val max: Int,
     val pricePerK: Double,
@@ -130,28 +146,24 @@ data class OrderItem(
     val createdAt: Long
 )
 
-/* كتالوج الخدمات */
+data class PendingCardItem(
+    val id: String,
+    val uid: String,
+    val cardNumber: String,
+    val createdAt: Long
+)
+
+/* كتالوج مختصر */
 private val servicesCatalog = listOf(
-    // المتابعين
     ServiceDef("متابعين تيكتوك",   16256,   100, 1_000_000, 3.5, "المتابعين"),
     ServiceDef("متابعين انستغرام", 16267,   100, 1_000_000, 3.0, "المتابعين"),
-
-    // اللايكات
     ServiceDef("لايكات تيكتوك",    12320,   100, 1_000_000, 1.0, "الايكات"),
     ServiceDef("لايكات انستغرام",  1066500, 100, 1_000_000, 1.0, "الايكات"),
-
-    // المشاهدات
     ServiceDef("مشاهدات تيكتوك",    9448,     100, 1_000_000, 0.1, "المشاهدات"),
     ServiceDef("مشاهدات انستغرام",  64686464, 100, 1_000_000, 0.1, "المشاهدات"),
-
-    // البث المباشر
     ServiceDef("مشاهدات بث تيكتوك", 14442, 100, 1_000_000, 2.0, "مشاهدات البث المباشر"),
     ServiceDef("مشاهدات بث انستا",   646464,100, 1_000_000, 2.0, "مشاهدات البث المباشر"),
-
-    // رفع سكور
     ServiceDef("رفع سكور البث",     14662, 100, 1_000_000, 2.0, "رفع سكور تيكتوك"),
-
-    // التلغرام
     ServiceDef("اعضاء قنوات تلي",   955656, 100, 1_000_000, 3.0, "خدمات التليجرام"),
     ServiceDef("اعضاء كروبات تلي",  644656, 100, 1_000_000, 3.0, "خدمات التليجرام"),
 )
@@ -188,7 +200,7 @@ fun AppRoot() {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    val uid by remember { mutableStateOf(loadOrCreateUid(ctx)) }
+    var uid by remember { mutableStateOf(loadOrCreateUid(ctx)) }
     var ownerMode by remember { mutableStateOf(loadOwnerMode(ctx)) }
     var ownerToken by remember { mutableStateOf(loadOwnerToken(ctx)) }
 
@@ -204,7 +216,6 @@ fun AppRoot() {
 
     var currentTab by remember { mutableStateOf(Tab.HOME) }
 
-    // فحص الصحة + تسجيل UID
     LaunchedEffect(Unit) {
         scope.launch { tryUpsertUid(uid) }
         while (true) {
@@ -213,7 +224,6 @@ fun AppRoot() {
         }
     }
 
-    // هيكل الواجهة
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -252,7 +262,6 @@ fun AppRoot() {
             Tab.SUPPORT -> SupportScreen()
         }
 
-        // شريط علوي يمين — جرس وإعدادات (للمستخدم/للمالك)
         TopRightBar(
             online = online,
             unread = if (ownerMode) unreadOwner else unreadUser,
@@ -379,7 +388,7 @@ private fun ContactCard(
 }
 
 /* =========================
-   الشريط العلوي يمين: جرس + حالة الخادم + إعدادات
+   الشريط العلوي يمين
    ========================= */
 @Composable
 private fun TopRightBar(
@@ -393,7 +402,6 @@ private fun TopRightBar(
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // جرس الإشعارات
         BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
             IconButton(onClick = onOpenNotices, modifier = Modifier.size(24.dp)) {
                 Icon(Icons.Filled.Notifications, contentDescription = "الإشعارات", tint = OnBg)
@@ -401,7 +409,6 @@ private fun TopRightBar(
         }
         Spacer(Modifier.width(6.dp))
 
-        // حالة الخادم
         val (txt, clr) = when (online) {
             true -> "الخادم: متصل" to Good
             false -> "الخادم: غير متصل" to Bad
@@ -419,14 +426,13 @@ private fun TopRightBar(
         }
         Spacer(Modifier.width(6.dp))
 
-        // إعدادات
         IconButton(onClick = onOpenSettings, modifier = Modifier.size(22.dp)) {
             Icon(Icons.Filled.Settings, contentDescription = "الإعدادات", tint = OnBg)
         }
     }
 }
 
-/* مركز الإشعارات داخل التطبيق */
+/* مركز الإشعارات */
 @Composable
 private fun NoticeCenterDialog(
     notices: List<AppNotice>, onClear: () -> Unit, onDismiss: () -> Unit
@@ -558,7 +564,7 @@ private fun ServicesScreen(
     }
 }
 
-/* حوار تنفيذ طلب خدمة مربوطة بالمزوّد */
+/* حوار تنفيذ طلب خدمة */
 @Composable
 private fun ServiceOrderDialog(
     uid: String,
@@ -645,7 +651,7 @@ private fun ServiceOrderDialog(
     )
 }
 
-/* الأقسام اليدوية (تنفيذ يدوي من المالك) */
+/* الأقسام اليدوية */
 @Composable
 private fun ManualSectionsScreen(
     title: String,
@@ -737,7 +743,6 @@ private fun WalletScreen(
         Text("طرق الشحن:", fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
 
-        // 1) أسيا سيل (كارت)
         ElevatedCard(
             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { askAsiacell = true },
             colors = CardDefaults.elevatedCardColors(
@@ -752,7 +757,6 @@ private fun WalletScreen(
             }
         }
 
-        // 2..6) باقي الطرق — توجيه للدعم
         listOf(
             "شحن عبر هلا بي",
             "شحن عبر نقاط سنتات",
@@ -797,11 +801,8 @@ private fun WalletScreen(
                             cardNumber = ""
                             askAsiacell = false
                         } else {
-                            // خطة بديلة: افتح واتساب برسالة جاهزة إذا فشل الخادم
-                            val msg = "أرغب بشحن الرصيد لرقمي داخل التطبيق.\nUID=$uid\nكارت أسيا سيل: $digits"
-                            uri.openUri(
-                                "https://wa.me/9647763410970?text=" + java.net.URLEncoder.encode(msg, "UTF-8")
-                            )
+                            val msg = "أرغب بشحن الرصيد داخل التطبيق.\nUID=$uid\nكارت أسيا سيل: $digits"
+                            uri.openUri("https://wa.me/9647763410970?text=" + java.net.URLEncoder.encode(msg, "UTF-8"))
                             onToast("تعذر الاتصال بالخادم — تم فتح واتساب لإرسال الكارت للدعم.")
                             cardNumber = ""
                             askAsiacell = false
@@ -833,7 +834,7 @@ private fun WalletScreen(
 }
 
 /* =========================
-   تبويب طلباتي — من الخادم
+   تبويب طلباتي
    ========================= */
 @Composable
 private fun OrdersScreen(uid: String) {
@@ -898,12 +899,11 @@ private fun OwnerPanel(
     onToast: (String) -> Unit,
     onRequireLogin: () -> Unit
 ) {
-    var current by remember { mutableStateOf<String?>(null) } // اسم الشاشة الفرعية
+    var current by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text("لوحة تحكم المالك", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            // جرس إشعارات المالك أعلى يمين
             IconButton(onClick = onShowOwnerNotices) {
                 Icon(Icons.Filled.Notifications, contentDescription = "إشعارات المالك", tint = OnBg)
             }
@@ -923,7 +923,7 @@ private fun OwnerPanel(
             val buttons = listOf(
                 "الطلبات المعلقة (الخدمات)" to "pending_services",
                 "طلبات شحن الايتونز"      to "pending_itunes",
-                "الكارتات المعلقة"         to "pending_topups",
+                "الكارتات المعلقة"         to "pending_cards",
                 "طلبات شدات ببجي"         to "pending_pubg",
                 "طلبات لودو المعلقة"       to "pending_ludo",
                 "إضافة الرصيد"             to "topup",
@@ -952,48 +952,21 @@ private fun OwnerPanel(
                 }
             }
         } else {
-            // شاشات فرعية
             when (current) {
                 "pending_services" -> PendingListScreen(
                     title = "الطلبات المعلقة (الخدمات)",
-                    fetch = { apiAdminGetPending(token!!, AdminEndpoints.pendingServices) },
+                    fetch = { apiAdminGetPendingServices(token!!) },
                     actApprove = { id -> apiAdminApproveService(token!!, id) },
                     actReject = { id -> apiAdminRejectService(token!!, id) },
-                    actRefund = { _ -> true }, // غير متاح افتراضيًا
                     onBack = { current = null }
                 )
-                "pending_itunes" -> PendingListScreen(
-                    title = "طلبات شحن الايتونز",
-                    fetch = { apiAdminGetPending(token!!, AdminEndpoints.pendingItunes) },
-                    actApprove = { _ -> true }, // التسليم له endpoints مختلفة
-                    actReject = { _ -> true },
-                    actRefund = { _ -> true },
+                "pending_cards" -> PendingCardsScreen(
+                    token = token!!,
                     onBack = { current = null }
                 )
-                "pending_topups" -> PendingListScreen(
-                    title = "الكارتات المعلقة",
-                    fetch = { apiAdminGetPending(token!!, AdminEndpoints.pendingTopups) },
-                    actApprove = { _ -> true }, // القبول له endpoint خاص بالكارت
-                    actReject = { _ -> true },
-                    actRefund = { _ -> true },
-                    onBack = { current = null }
-                )
-                "pending_pubg" -> PendingListScreen(
-                    title = "طلبات شدات ببجي",
-                    fetch = { apiAdminGetPending(token!!, AdminEndpoints.pendingPubg) },
-                    actApprove = { _ -> true },
-                    actReject = { _ -> true },
-                    actRefund = { _ -> true },
-                    onBack = { current = null }
-                )
-                "pending_ludo" -> PendingListScreen(
-                    title = "طلبات لودو المعلقة",
-                    fetch = { apiAdminGetPending(token!!, AdminEndpoints.pendingLudo) },
-                    actApprove = { _ -> true },
-                    actReject = { _ -> true },
-                    actRefund = { _ -> true },
-                    onBack = { current = null }
-                )
+                "pending_itunes" -> SimpleInfoScreen("طلبات شحن الايتونز", onBack = { current = null })
+                "pending_pubg"   -> SimpleInfoScreen("طلبات شدات ببجي", onBack = { current = null })
+                "pending_ludo"   -> SimpleInfoScreen("طلبات لودو المعلقة", onBack = { current = null })
                 "topup" -> TopupDeductScreen(
                     title = "إضافة الرصيد",
                     onSubmit = { u, amt -> apiAdminTopup(token!!, u, amt) },
@@ -1009,7 +982,7 @@ private fun OwnerPanel(
                     onBack = { current = null }
                 )
                 "users_balances" -> UsersBalancesScreen(
-                    fetch = { apiAdminUsersBalances(token!!) },
+                    fetch = { apiAdminUsersBalancesTotal(token!!) },
                     onBack = { current = null }
                 )
                 "provider_balance" -> ProviderBalanceScreen(
@@ -1021,14 +994,13 @@ private fun OwnerPanel(
     }
 }
 
-/* قائمة معلّقة عامة للأدمن */
+/* قائمة معلّقات الخدمات */
 @Composable
 private fun PendingListScreen(
     title: String,
     fetch: suspend () -> List<OrderItem>?,
     actApprove: suspend (String) -> Boolean,
     actReject: suspend (String) -> Boolean,
-    actRefund: suspend (String) -> Boolean,
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -1036,8 +1008,6 @@ private fun PendingListScreen(
     var loading by remember { mutableStateOf(true) }
     var err by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
-
-    var confirmFor: Pair<String, String>? by remember { mutableStateOf(null) } // (action, id)
 
     LaunchedEffect(reloadKey) {
         loading = true
@@ -1074,9 +1044,83 @@ private fun PendingListScreen(
                             Text("الحالة: ${o.status}", color = OnBg, fontSize = 12.sp)
                             Spacer(Modifier.height(8.dp))
                             Row {
-                                TextButton(onClick = { confirmFor = "approve" to o.id }) { Text("تنفيذ") }
-                                TextButton(onClick = { confirmFor = "reject" to o.id }) { Text("رفض") }
-                                TextButton(onClick = { confirmFor = "refund" to o.id }) { Text("رد رصيد") }
+                                TextButton(onClick = {
+                                    scope.launch { if (actApprove(o.id)) reloadKey++ }
+                                }) { Text("تنفيذ") }
+                                TextButton(onClick = {
+                                    scope.launch { if (actReject(o.id)) reloadKey++ }
+                                }) { Text("رفض") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* شاشة الكارتات المعلّقة (تُظهر رقم الكارت + نسخ + تنفيذ مع إدخال مبلغ) */
+@Composable
+private fun PendingCardsScreen(token: String, onBack: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val clip: ClipboardManager = LocalClipboardManager.current
+
+    var list by remember { mutableStateOf<List<PendingCardItem>?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var err by remember { mutableStateOf<String?>(null) }
+    var reloadKey by remember { mutableStateOf(0) }
+
+    var askAmountForId by remember { mutableStateOf<String?>(null) }
+    var amountText by remember { mutableStateOf("") }
+    var sending by remember { mutableStateOf(false) }
+
+    LaunchedEffect(reloadKey) {
+        loading = true
+        err = null
+        list = apiAdminCardsPending(token)
+        loading = false
+        if (list == null) err = "تعذر جلب الكارتات"
+    }
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null) }
+            Spacer(Modifier.width(6.dp))
+            Text("الكارتات المعلقة", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(10.dp))
+
+        if (loading) Text("يتم التحميل...", color = Dim)
+        else if (err != null) Text(err!!, color = Bad)
+        else if (list.isNullOrEmpty()) Text("لا يوجد كروت معلّقة.", color = Dim)
+        else {
+            LazyColumn {
+                items(list!!) { c ->
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = Surface1,
+                            contentColor = OnBg
+                        )
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text("UID: ${c.uid}", fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(4.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("الكارت: ${c.cardNumber}")
+                                Spacer(Modifier.width(8.dp))
+                                TextButton(onClick = {
+                                    clip.setText(AnnotatedString(c.cardNumber))
+                                }) { Text("نسخ") }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            Row {
+                                TextButton(onClick = { askAmountForId = c.id; amountText = "" }) { Text("تنفيذ") }
+                                TextButton(onClick = {
+                                    scope.launch {
+                                        if (apiAdminCardReject(token, c.id)) reloadKey++
+                                    }
+                                }) { Text("رفض") }
                             }
                         }
                     }
@@ -1085,31 +1129,58 @@ private fun PendingListScreen(
         }
     }
 
-    // حوار تأكيد
-    confirmFor?.let { (act, id) ->
+    // حوار إدخال مبلغ الشحن عند التنفيذ
+    askAmountForId?.let { id ->
         AlertDialog(
-            onDismissRequest = { confirmFor = null },
+            onDismissRequest = { if (!sending) askAmountForId = null },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(enabled = !sending, onClick = {
+                    val amt = amountText.toDoubleOrNull() ?: return@TextButton
+                    sending = true
                     scope.launch {
-                        val ok = when (act) {
-                            "approve" -> actApprove(id)
-                            "reject"  -> actReject(id)
-                            else      -> actRefund(id)
+                        val ok = apiAdminCardAccept(token, id, amt)
+                        sending = false
+                        if (ok) {
+                            askAmountForId = null
+                            reloadKey++
                         }
-                        confirmFor = null
-                        if (ok) reloadKey++
                     }
-                }) { Text("تأكيد") }
+                }) { Text(if (sending) "يرسل..." else "تأكيد") }
             },
-            dismissButton = { TextButton(onClick = { confirmFor = null }) { Text("إلغاء") } },
-            title = { Text("تأكيد الإجراء") },
-            text = { Text("هل تريد $act على الطلب $id ؟") }
+            dismissButton = { TextButton(enabled = !sending, onClick = { askAmountForId = null }) { Text("إلغاء") } },
+            title = { Text("أدخل مبلغ الشحن بالدولار") },
+            text = {
+                OutlinedTextField(
+                    value = amountText,
+                    onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) amountText = s },
+                    singleLine = true,
+                    label = { Text("المبلغ (USD)") },
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        cursorColor = Accent,
+                        focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                        focusedLabelColor = OnBg, unfocusedLabelColor = Dim
+                    )
+                )
+            }
         )
     }
 }
 
-/* شاشات بسيطة للأدمن */
+/* شاشات بسيطة Placeholder */
+@Composable
+private fun SimpleInfoScreen(title: String, onBack: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null) }
+            Spacer(Modifier.width(6.dp))
+            Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("سيتم تخصيص هذه الشاشة لاحقًا.", color = Dim)
+    }
+}
+
+/* شاشات إحصائية */
 @Composable
 private fun TopupDeductScreen(
     title: String,
@@ -1344,37 +1415,18 @@ private fun RowScope.NavItem(
 /* =========================
    تخزين محلي + شبكة
    ========================= */
-private object PrefKeys {
-    const val FILE = "app_prefs"
-    const val UID  = "uid"
-    const val OWNER_MODE  = "owner_mode"
-    const val OWNER_TOKEN = "owner_token"
-    const val NOTICES     = "notices_json"
-}
+private fun prefs(ctx: Context) = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
-private fun prefs(ctx: Context) = ctx.getSharedPreferences(PrefKeys.FILE, Context.MODE_PRIVATE)
+private fun loadOwnerMode(ctx: Context): Boolean = prefs(ctx).getBoolean("owner_mode", false)
+private fun saveOwnerMode(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("owner_mode", on).apply() }
 
-/** دمجنا الدالة هنا — احذف OwnerApiFixes.kt لتجنّب التعارض */
-fun loadOrCreateUid(ctx: Context): String {
-    val sp = prefs(ctx)
-    val existing = sp.getString(PrefKeys.UID, null)
-    if (!existing.isNullOrBlank()) return existing
-
-    val fresh = "U" + (100000..999999).random(Random(System.currentTimeMillis()))
-    sp.edit().putString(PrefKeys.UID, fresh).apply()
-    return fresh
-}
-
-private fun loadOwnerMode(ctx: Context): Boolean = prefs(ctx).getBoolean(PrefKeys.OWNER_MODE, false)
-private fun saveOwnerMode(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean(PrefKeys.OWNER_MODE, on).apply() }
-
-private fun loadOwnerToken(ctx: Context): String? = prefs(ctx).getString(PrefKeys.OWNER_TOKEN, null)
+private fun loadOwnerToken(ctx: Context): String? = prefs(ctx).getString("owner_token", null)
 private fun saveOwnerToken(ctx: Context, token: String?) {
-    prefs(ctx).edit().putString(PrefKeys.OWNER_TOKEN, token).apply()
+    prefs(ctx).edit().putString("owner_token", token).apply()
 }
 
 private fun loadNotices(ctx: Context): List<AppNotice> {
-    val raw = prefs(ctx).getString(PrefKeys.NOTICES, "[]") ?: "[]"
+    val raw = prefs(ctx).getString("notices_json", "[]") ?: "[]"
     return try {
         val arr = JSONArray(raw)
         (0 until arr.length()).map { i ->
@@ -1398,7 +1450,7 @@ private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
         o.put("forOwner", it.forOwner)
         arr.put(o)
     }
-    prefs(ctx).edit().putString(PrefKeys.NOTICES, arr.toString()).apply()
+    prefs(ctx).edit().putString("notices_json", arr.toString()).apply()
 }
 
 /* ===== شبكة عامة صغيرة ===== */
@@ -1446,11 +1498,7 @@ private suspend fun httpPost(path: String, json: JSONObject, headers: Map<String
 /* ===== وظائف مشتركة مع الخادم ===== */
 private suspend fun pingHealth(): Boolean? {
     val (code, _) = httpGet("/health")
-    return when {
-        code in 200..299 -> true
-        code == -1 -> false
-        else -> false
-    }
+    return code in 200..299
 }
 
 private suspend fun tryUpsertUid(uid: String) {
@@ -1465,7 +1513,7 @@ private suspend fun apiGetBalance(uid: String): Double? {
     } else null
 }
 
-/* طلب موفّر (الخدمات المربوطة) */
+/* طلب مزوّد */
 private suspend fun apiCreateProviderOrder(
     uid: String, serviceId: Long, serviceName: String, link: String, quantity: Int, price: Double
 ): Boolean {
@@ -1487,7 +1535,7 @@ private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
-/* إرسال كارت أسيا سيل */
+/* كارت أسيا سيل */
 private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
     val (code, txt) = httpPost(
         "/api/wallet/asiacell/submit",
@@ -1501,11 +1549,7 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
     val (code, txt) = httpGet("/api/orders/my?uid=$uid")
     if (code !in 200..299 || txt == null) return null
     return try {
-        // نقبل إمّا Array مباشرة أو Object فيه list
-        val arr = try { JSONArray(txt) } catch (_: Exception) {
-            val root = JSONObject(txt)
-            root.optJSONArray("list") ?: JSONArray()
-        }
+        val arr = JSONArray(txt)
         (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             OrderItem(
@@ -1529,10 +1573,7 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
 
 /* دخول المالك */
 private suspend fun apiAdminLogin(password: String): String? {
-    // نقبل الرمز 2000 محلياً ونستخدمه كـ x-admin-pass لجميع نداءات لوحة المالك
     if (password == "2000") return password
-
-    // محاولة تحقق سريعة من الخادم إن كان الرمز مختلفاً:
     return try {
         val headers = mapOf("x-admin-pass" to password)
         val (code, _) = httpGet(AdminEndpoints.pendingServices, headers = headers)
@@ -1542,54 +1583,72 @@ private suspend fun apiAdminLogin(password: String): String? {
     }
 }
 
-/* جلب المعلّقات (عام) */
-private suspend fun apiAdminGetPending(token: String, endpoint: String): List<OrderItem>? {
-    val (code, txt) = httpGet(endpoint, headers = mapOf("x-admin-pass" to token))
+/* معلّقات الخدمات — يقرأ {ok,list} */
+private suspend fun apiAdminGetPendingServices(token: String): List<OrderItem>? {
+    val (code, txt) = httpGet(AdminEndpoints.pendingServices, mapOf("x-admin-pass" to token))
     if (code !in 200..299 || txt == null) return null
     return try {
-        val arr = try { JSONArray(txt) } catch (_: Exception) {
-            JSONObject(txt).optJSONArray("list") ?: JSONArray()
-        }
+        val root = JSONObject(txt)
+        val arr = root.optJSONArray("list") ?: JSONArray()
         (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             OrderItem(
-                id = o.optString("id", o.optString("order_id", "")),
-                title = o.optString("title"),
-                quantity = o.optInt("quantity", o.optInt("qty", 0)),
-                price = o.optDouble("price", 0.0),
-                linkOrPayload = o.optString("payload", o.optString("link", "")),
+                id = o.optString("id"),
+                title = o.optString("service_key"),
+                quantity = o.optInt("quantity"),
+                price = o.optDouble("price"),
+                linkOrPayload = o.optString("link"),
                 status = OrderStatus.Pending,
-                createdAt = o.optLong("created_at", System.currentTimeMillis())
+                createdAt = o.optLong("created_at")
             )
         }
     } catch (_: Exception) { null }
 }
 
-/* إجراءات على طلبات الخدمات (service_orders) */
+/* تنفيذ/رفض خدمة */
 private suspend fun apiAdminApproveService(token: String, id: String): Boolean {
-    val (code, _) = httpPost(AdminEndpoints.serviceApprove(id), JSONObject(), mapOf("x-admin-pass" to token))
+    val (code, _) = httpPost(AdminEndpoints.approveService(id), JSONObject(), mapOf("x-admin-pass" to token))
     return code in 200..299
 }
 private suspend fun apiAdminRejectService(token: String, id: String): Boolean {
-    val (code, _) = httpPost(AdminEndpoints.serviceReject(id), JSONObject(), mapOf("x-admin-pass" to token))
+    val (code, _) = httpPost(AdminEndpoints.rejectService(id), JSONObject(), mapOf("x-admin-pass" to token))
     return code in 200..299
 }
 
-/* شحن/خصم رصيد */
+/* الكروت المعلّقة */
+private suspend fun apiAdminCardsPending(token: String): List<PendingCardItem>? {
+    val (code, txt) = httpGet(AdminEndpoints.pendingCards, mapOf("x-admin-pass" to token))
+    if (code !in 200..299 || txt == null) return null
+    return try {
+        val root = JSONObject(txt)
+        val arr = root.optJSONArray("list") ?: JSONArray()
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            PendingCardItem(
+                id = o.optString("id"),
+                uid = o.optString("uid"),
+                cardNumber = o.optString("card_number"),
+                createdAt = o.optLong("created_at")
+            )
+        }
+    } catch (_: Exception) { null }
+}
+private suspend fun apiAdminCardAccept(token: String, id: String, amount: Double): Boolean {
+    val (code, _) = httpPost(AdminEndpoints.acceptCard(id), JSONObject().put("amount_usd", amount), mapOf("x-admin-pass" to token))
+    return code in 200..299
+}
+private suspend fun apiAdminCardReject(token: String, id: String): Boolean {
+    val (code, _) = httpPost(AdminEndpoints.rejectCard(id), JSONObject(), mapOf("x-admin-pass" to token))
+    return code in 200..299
+}
+
+/* شحن/خصم رصيد (تصحيح المسارات) */
 private suspend fun apiAdminTopup(token: String, uid: String, amount: Double): Boolean {
-    val (code, _) = httpPost(
-        AdminEndpoints.topup(uid),
-        JSONObject().put("amount", amount),
-        mapOf("x-admin-pass" to token)
-    )
+    val (code, _) = httpPost(AdminEndpoints.topup(uid), JSONObject().put("amount", amount), mapOf("x-admin-pass" to token))
     return code in 200..299
 }
 private suspend fun apiAdminDeduct(token: String, uid: String, amount: Double): Boolean {
-    val (code, _) = httpPost(
-        AdminEndpoints.deduct(uid),
-        JSONObject().put("amount", amount),
-        mapOf("x-admin-pass" to token)
-    )
+    val (code, _) = httpPost(AdminEndpoints.deduct(uid), JSONObject().put("amount", amount), mapOf("x-admin-pass" to token))
     return code in 200..299
 }
 
@@ -1599,23 +1658,22 @@ private suspend fun apiAdminUsersCount(token: String): Int? {
     if (code !in 200..299 || txt == null) return null
     return try { JSONObject(txt).optInt("count") } catch (_: Exception) { null }
 }
-private suspend fun apiAdminUsersBalances(token: String): Double? {
+private suspend fun apiAdminUsersBalancesTotal(token: String): Double? {
     val (code, txt) = httpGet(AdminEndpoints.usersBalances, mapOf("x-admin-pass" to token))
     if (code !in 200..299 || txt == null) return null
     return try {
-        // الخادم يعيد list من {uid,balance} — سنجمعها
         val root = JSONObject(txt)
         val arr = root.optJSONArray("list") ?: JSONArray()
         var sum = 0.0
-        for (i in 0 until arr.length()) sum += arr.getJSONObject(i).optDouble("balance", 0.0)
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            sum += o.optDouble("balance", 0.0)
+        }
         sum
     } catch (_: Exception) { null }
 }
 private suspend fun apiAdminProviderBalance(token: String): Double? {
     val (code, txt) = httpGet(AdminEndpoints.providerBalance, mapOf("x-admin-pass" to token))
     if (code !in 200..299 || txt == null) return null
-    return try {
-        val root = JSONObject(txt)
-        root.optDouble("balance", root.optDouble("data", 0.0))
-    } catch (_: Exception) { null }
+    return try { JSONObject(txt).optDouble("balance") } catch (_: Exception) { null }
 }

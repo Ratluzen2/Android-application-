@@ -60,7 +60,7 @@ private object AdminEndpoints {
     const val actReject         = "/api/admin/orders/reject"
     const val actRefund         = "/api/admin/orders/refund"
 
-    // لاحظ: الواجهة الخلفية الحالية تعتمد uid في المسار
+    // مسارات الرصيد
     const val userPrefix        = "/api/admin/users"
     const val usersCount        = "/api/admin/stats/users-count"
     const val usersBalances     = "/api/admin/stats/users-balances"
@@ -412,8 +412,8 @@ private fun NoticeCenterDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
-        dismissButton = { TextButton(onClick = onClear) { Text("مسح الإشعارات") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق", color = OnBg) } },
+        dismissButton = { TextButton(onClick = onClear) { Text("مسح الإشعارات", color = OnBg) } },
         title = { Text("الإشعارات", color = OnBg) },
         text = {
             if (notices.isEmpty()) {
@@ -597,8 +597,9 @@ private fun ServiceOrderDialog(
                     onValueChange = { s -> if (s.all { it.isDigit() }) qtyText = s },
                     label = { Text("الكمية", color = OnBg) },
                     singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(color = OnBg),
                     colors = TextFieldDefaults.outlinedTextFieldColors(
-                        textColor = OnBg, cursorColor = Accent,
+                        cursorColor = Accent,
                         focusedBorderColor = Accent, unfocusedBorderColor = Dim,
                         focusedLabelColor = OnBg, unfocusedLabelColor = Dim
                     )
@@ -608,8 +609,9 @@ private fun ServiceOrderDialog(
                     value = link, onValueChange = { link = it },
                     label = { Text("الرابط (أرسل الرابط وليس اليوزر)", color = OnBg) },
                     singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(color = OnBg),
                     colors = TextFieldDefaults.outlinedTextFieldColors(
-                        textColor = OnBg, cursorColor = Accent,
+                        cursorColor = Accent,
                         focusedBorderColor = Accent, unfocusedBorderColor = Dim,
                         focusedLabelColor = OnBg, unfocusedLabelColor = Dim
                     )
@@ -764,8 +766,7 @@ private fun WalletScreen(
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
                     sending = true
-                    val scopeLocal = rememberCoroutineScope()
-                    scopeLocal.launch {
+                    scope.launch {
                         val ok = apiSubmitAsiacellCard(uid, digits)
                         sending = false
                         if (ok) {
@@ -797,8 +798,9 @@ private fun WalletScreen(
                         onValueChange = { s -> if (s.all { it.isDigit() }) cardNumber = s },
                         singleLine = true,
                         label = { Text("رقم الكارت", color = OnBg) },
+                        textStyle = LocalTextStyle.current.copy(color = OnBg),
                         colors = TextFieldDefaults.outlinedTextFieldColors(
-                            textColor = OnBg, cursorColor = Accent,
+                            cursorColor = Accent,
                             focusedBorderColor = Accent, unfocusedBorderColor = Dim,
                             focusedLabelColor = OnBg, unfocusedLabelColor = Dim
                         )
@@ -996,7 +998,7 @@ private fun OwnerPanel(
     }
 }
 
-/* قائمة معلّقة عامة + حوار مبلغ الكارت + رسائل أخطاء واضحة */
+/* قائمة معلّقة عامة + حوار مبلغ الكارت */
 @Composable
 private fun PendingListScreen(
     title: String,
@@ -1015,7 +1017,6 @@ private fun PendingListScreen(
     var confirmId by remember { mutableStateOf<String?>(null) }
     var confirmAction by remember { mutableStateOf<String?>(null) }
 
-    // للحالات الخاصة بالكارت — طلب المبلغ
     var askAmountForCardId by remember { mutableStateOf<String?>(null) }
     var amountText by remember { mutableStateOf("") }
     var toast by remember { mutableStateOf<String?>(null) }
@@ -1139,8 +1140,9 @@ private fun PendingListScreen(
                     onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) amountText = s },
                     singleLine = true,
                     label = { Text("المبلغ بالدولار", color = OnBg) },
+                    textStyle = LocalTextStyle.current.copy(color = OnBg),
                     colors = TextFieldDefaults.outlinedTextFieldColors(
-                        textColor = OnBg, cursorColor = Accent,
+                        cursorColor = Accent,
                         focusedBorderColor = Accent, unfocusedBorderColor = Dim,
                         focusedLabelColor = OnBg, unfocusedLabelColor = Dim
                     )
@@ -1174,8 +1176,10 @@ private fun TopupDeductScreen(
             value = uid,
             onValueChange = { uid = it },
             label = { Text("UID المستخدم", color = OnBg) },
+            singleLine = true,
+            textStyle = LocalTextStyle.current.copy(color = OnBg),
             colors = TextFieldDefaults.outlinedTextFieldColors(
-                textColor = OnBg, cursorColor = Accent,
+                cursorColor = Accent,
                 focusedBorderColor = Accent, unfocusedBorderColor = Dim,
                 focusedLabelColor = OnBg, unfocusedLabelColor = Dim
             )
@@ -1185,8 +1189,10 @@ private fun TopupDeductScreen(
             value = amount,
             onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) amount = s },
             label = { Text("المبلغ", color = OnBg) },
+            singleLine = true,
+            textStyle = LocalTextStyle.current.copy(color = OnBg),
             colors = TextFieldDefaults.outlinedTextFieldColors(
-                textColor = OnBg, cursorColor = Accent,
+                cursorColor = Accent,
                 focusedBorderColor = Accent, unfocusedBorderColor = Dim,
                 focusedLabelColor = OnBg, unfocusedLabelColor = Dim
             )
@@ -1353,8 +1359,9 @@ private fun SettingsDialog(
                         onValueChange = { pass = it },
                         singleLine = true,
                         label = { Text("أدخل كلمة المرور أو الرمز", color = OnBg) },
+                        textStyle = LocalTextStyle.current.copy(color = OnBg),
                         colors = TextFieldDefaults.outlinedTextFieldColors(
-                            textColor = OnBg, cursorColor = Accent,
+                            cursorColor = Accent,
                             focusedBorderColor = Accent, unfocusedBorderColor = Dim,
                             focusedLabelColor = OnBg, unfocusedLabelColor = Dim
                         )
@@ -1615,12 +1622,7 @@ private suspend fun apiAdminRefund(token: String, id: String): Boolean {
 
 /* تنفيذ كارت أسيا سيل مع مبلغ */
 private suspend fun apiAdminApproveWalletCard(id: String, amountUsd: Double): Boolean {
-    // لا حاجة للتوكن هنا لأن لوحة المالك مفتوحة أصلًا؛ نأخذه من التخزين
-    // لتحاشي تمريره بين الكثير من الدوال
-    // سنفترض أن التوكن محفوظ في SharedPreferences
-    // (استخدام getOwnerToken من خلال Context غير ممكن هنا، لذلك نستخدم Hack صغير)
-    // الحل الأبسط: نستخدم رمز 2000 الذي اعتمدته
-    val token = "2000"
+    val token = "2000" // يعتمد على رمز المالك المعتمد في تطبيقك
     val (code, _) = httpPost(
         AdminEndpoints.actApprove,
         JSONObject().put("order_id", id).put("amount_usd", amountUsd),
@@ -1629,7 +1631,7 @@ private suspend fun apiAdminApproveWalletCard(id: String, amountUsd: Double): Bo
     return code in 200..299
 }
 
-/* شحن/خصم رصيد (مسارات متوافقة مع الخادم الحالي) */
+/* شحن/خصم رصيد */
 private suspend fun apiAdminTopup(token: String, uid: String, amount: Double): Boolean {
     val path = "${AdminEndpoints.userPrefix}/$uid/topup"
     val (code, _) = httpPost(path, JSONObject().put("amount", amount), mapOf("x-admin-pass" to token))

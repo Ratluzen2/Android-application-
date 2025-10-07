@@ -3,13 +3,6 @@
 
 package com.zafer.smm
 
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.AlertDialog
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -56,9 +49,7 @@ import kotlin.random.Random
    ========================= */
 private const val API_BASE = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
 
-/** مسارات الأدمن — تطابق باكندك الحالي */
 private object AdminEndpoints {
-    // Pending lists
     const val pendingServices = "/api/admin/pending/services"
     const val pendingCards    = "/api/admin/pending/cards"
     const val pendingItunes   = "/api/admin/pending/itunes"
@@ -66,26 +57,22 @@ private object AdminEndpoints {
     const val pendingPubg     = "/api/admin/pending/pubg"
     const val pendingLudo     = "/api/admin/pending/ludo"
 
-    // Services approve/reject
     fun approveService(id: String) = "/api/admin/pending/services/$id/approve"
     fun rejectService(id: String)  = "/api/admin/pending/services/$id/reject"
 
-    // Asiacell cards accept/reject
     fun acceptCard(id: String)     = "/api/admin/pending/cards/$id/accept"
     fun rejectCard(id: String)     = "/api/admin/pending/cards/$id/reject"
 
-    // User balance
     fun topup(uid: String)  = "/api/admin/users/$uid/topup"
     fun deduct(uid: String) = "/api/admin/users/$uid/deduct"
 
-    // Stats & provider
     const val usersCount      = "/api/admin/users/count"
     const val usersBalances   = "/api/admin/users/balances"
     const val providerBalance = "/api/admin/provider/balance"
 }
 
 /* =========================
-   Theme (تحسين التباين)
+   Theme
    ========================= */
 private val Bg       = Color(0xFF0F1113)
 private val Surface1 = Color(0xFF161B20)
@@ -118,7 +105,9 @@ data class AppNotice(
     val title: String,
     val body: String,
     val ts: Long = System.currentTimeMillis(),
-    val forOwner: Boolean = false
+    val forOwner: Boolean = false,
+    val details: String? = null,   // تفاصيل موسّعة
+    val copyText: String? = null   // نص للنسخ (مثلاً رقم كارت، أو JSON مختصر)
 )
 
 data class ServiceDef(
@@ -220,6 +209,20 @@ fun AppRoot() {
         }
     }
 
+    // توابع مساعدة للإشعارات المفصّلة
+    fun pushUserNotice(title: String, details: String, copy: String? = null) {
+        val n = AppNotice(title = title, body = title, details = details, copyText = copy, forOwner = false)
+        val all = loadNotices(ctx) + n
+        saveNotices(ctx, all)
+        notices = all
+    }
+    fun pushOwnerNotice(title: String, details: String, copy: String? = null) {
+        val n = AppNotice(title = title, body = title, details = details, copyText = copy, forOwner = true)
+        val all = loadNotices(ctx) + n
+        saveNotices(ctx, all)
+        notices = all
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -232,7 +235,8 @@ fun AppRoot() {
                         token = ownerToken,
                         onShowOwnerNotices = { showNoticeCenter = true },
                         onToast = { toast = it },
-                        onRequireLogin = { showSettings = true }
+                        onRequireLogin = { showSettings = true },
+                        onOwnerNotify = { t, d, c -> pushOwnerNotice(t, d, c) }
                     )
                 } else {
                     HomeScreen()
@@ -240,17 +244,15 @@ fun AppRoot() {
             }
             Tab.SERVICES -> ServicesScreen(
                 uid = uid,
-                onAddNotice = {
-                    notices = notices + it
-                    saveNotices(ctx, notices)
+                onAddDetailedNotice = { forOwner, title, details, copy ->
+                    if (forOwner) pushOwnerNotice(title, details, copy) else pushUserNotice(title, details, copy)
                 },
                 onToast = { toast = it }
             )
             Tab.WALLET -> WalletScreen(
                 uid = uid,
-                onAddNotice = {
-                    notices = notices + it
-                    saveNotices(ctx, notices)
+                onAddDetailedNotice = { forOwner, title, details, copy ->
+                    if (forOwner) pushOwnerNotice(title, details, copy) else pushUserNotice(title, details, copy)
                 },
                 onToast = { toast = it }
             )
@@ -313,8 +315,8 @@ fun AppRoot() {
         NoticeCenterDialog(
             notices = if (ownerMode) notices.filter { it.forOwner } else notices.filter { !it.forOwner },
             onClear = {
-                notices = if (ownerMode) notices.filter { !it.forOwner } else notices.filter { it.forOwner }
-                saveNotices(ctx, notices)
+                val left = if (ownerMode) notices.filter { !it.forOwner } else notices.filter { it.forOwner }
+                saveNotices(ctx, left); notices = left
             },
             onDismiss = { showNoticeCenter = false }
         )
@@ -324,14 +326,8 @@ fun AppRoot() {
 /* =========================
    شاشات عامة
    ========================= */
-@Composable
-private fun HomeScreen() {
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Bg),
-        contentAlignment = Alignment.Center
-    ) {
+@Composable private fun HomeScreen() {
+    Box(Modifier.fillMaxSize().background(Bg), contentAlignment = Alignment.Center) {
         Text("مرحبًا بك 👋", color = OnBg, fontSize = 18.sp)
     }
 }
@@ -366,10 +362,7 @@ private fun ContactCard(
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = Surface1,
-            contentColor = OnBg
-        )
+        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = Accent, modifier = Modifier.size(28.dp))
@@ -428,11 +421,14 @@ private fun TopRightBar(
     }
 }
 
-/* مركز الإشعارات */
+/* =========================
+   مركز الإشعارات — يعرض تفاصيل + زر نسخ
+   ========================= */
 @Composable
 private fun NoticeCenterDialog(
     notices: List<AppNotice>, onClear: () -> Unit, onDismiss: () -> Unit
 ) {
+    val clip: ClipboardManager = LocalClipboardManager.current
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
@@ -446,8 +442,16 @@ private fun NoticeCenterDialog(
                     items(notices.sortedByDescending { it.ts }) { itx ->
                         val dt = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(itx.ts))
                         Text("• ${itx.title}", fontWeight = FontWeight.SemiBold)
-                        Text(itx.body, color = Dim, fontSize = 12.sp)
+                        itx.details?.let {
+                            Spacer(Modifier.height(4.dp))
+                            Text(it, color = OnBg, fontSize = 12.sp)
+                        }
                         Text(dt, color = Dim, fontSize = 10.sp)
+                        Row {
+                            if (itx.copyText != null) {
+                                TextButton(onClick = { clip.setText(AnnotatedString(itx.copyText)) }) { Text("نسخ التفاصيل") }
+                            }
+                        }
                         Divider(Modifier.padding(vertical = 8.dp), color = Surface1)
                     }
                 }
@@ -462,7 +466,7 @@ private fun NoticeCenterDialog(
 @Composable
 private fun ServicesScreen(
     uid: String,
-    onAddNotice: (AppNotice) -> Unit,
+    onAddDetailedNotice: (forOwner: Boolean, title: String, details: String, copy: String?) -> Unit,
     onToast: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -479,10 +483,7 @@ private fun ServicesScreen(
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
                         .clickable { selectedCategory = cat },
-                    colors = CardDefaults.elevatedCardColors(
-                        containerColor = Surface1,
-                        contentColor = OnBg
-                    )
+                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                 ) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.ChevronLeft, null, tint = Accent)
@@ -522,10 +523,7 @@ private fun ServicesScreen(
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
                         .clickable { selectedService = svc },
-                    colors = CardDefaults.elevatedCardColors(
-                        containerColor = Surface1,
-                        contentColor = OnBg
-                    )
+                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text(svc.uiKey, fontWeight = FontWeight.SemiBold)
@@ -541,7 +539,7 @@ private fun ServicesScreen(
             uid = uid,
             onBack = { selectedCategory = null },
             onToast = onToast,
-            onAddNotice = onAddNotice
+            onAddDetailedNotice = onAddDetailedNotice
         )
     }
 
@@ -549,11 +547,22 @@ private fun ServicesScreen(
         ServiceOrderDialog(
             uid = uid, service = svc,
             onDismiss = { selectedService = null },
-            onOrdered = { ok, msg ->
+            onOrdered = { ok, msg, detail ->
                 onToast(msg)
                 if (ok) {
-                    onAddNotice(AppNotice("طلب جديد (${svc.uiKey})", "تم استلام طلبك وسيتم تنفيذه قريبًا.", forOwner = false))
-                    onAddNotice(AppNotice("طلب خدمات معلّق", "طلب ${svc.uiKey} من UID=$uid بانتظار المعالجة/التنفيذ", forOwner = true))
+                    // إشعار مفصّل للمستخدم + المالك
+                    onAddDetailedNotice(
+                        false,
+                        "طلب جديد (${svc.uiKey})",
+                        detail,
+                        copy = detail
+                    )
+                    onAddDetailedNotice(
+                        true,
+                        "طلب خدمات معلّق",
+                        "UID=$uid\nالخدمة=${svc.uiKey}\nID مزود=${svc.serviceId}\n$detail",
+                        copy = "UID=$uid\n$detail"
+                    )
                 }
             }
         )
@@ -566,7 +575,7 @@ private fun ServiceOrderDialog(
     uid: String,
     service: ServiceDef,
     onDismiss: () -> Unit,
-    onOrdered: (Boolean, String) -> Unit
+    onOrdered: (Boolean, String, String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     var link by remember { mutableStateOf("") }
@@ -577,9 +586,7 @@ private fun ServiceOrderDialog(
     var loading by remember { mutableStateOf(false) }
     var userBalance by remember { mutableStateOf<Double?>(null) }
 
-    LaunchedEffect(Unit) {
-        userBalance = apiGetBalance(uid)
-    }
+    LaunchedEffect(Unit) { userBalance = apiGetBalance(uid) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -587,12 +594,19 @@ private fun ServiceOrderDialog(
             TextButton(
                 enabled = !loading,
                 onClick = {
-                    if (link.isBlank()) { onOrdered(false, "الرجاء إدخال الرابط"); return@TextButton }
-                    if (qty < service.min || qty > service.max) { onOrdered(false, "الكمية يجب أن تكون بين ${service.min} و ${service.max}"); return@TextButton }
+                    if (link.isBlank()) { onOrdered(false, "الرجاء إدخال الرابط", ""); return@TextButton }
+                    if (qty < service.min || qty > service.max) { onOrdered(false, "الكمية يجب أن تكون بين ${service.min} و ${service.max}", ""); return@TextButton }
                     val bal = userBalance ?: 0.0
-                    if (bal < price) { onOrdered(false, "رصيدك غير كافٍ. السعر: $price\$ | رصيدك: ${"%.2f".format(bal)}\$"); return@TextButton }
+                    if (bal < price) { onOrdered(false, "رصيدك غير كافٍ. السعر: $price\$ | رصيدك: ${"%.2f".format(bal)}\$", ""); return@TextButton }
 
                     loading = true
+                    val details = buildString {
+                        appendLine("الخدمة: ${service.uiKey}")
+                        appendLine("الكمية: $qty")
+                        appendLine("السعر: $price$")
+                        appendLine("الرابط: $link")
+                        append("الوقت: ${SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date())}")
+                    }
                     scope.launch {
                         val ok = apiCreateProviderOrder(
                             uid = uid,
@@ -603,8 +617,8 @@ private fun ServiceOrderDialog(
                             price = price
                         )
                         loading = false
-                        if (ok) onOrdered(true, "تم إرسال الطلب بنجاح.")
-                        else onOrdered(false, "فشل إرسال الطلب.")
+                        if (ok) onOrdered(true, "تم إرسال الطلب بنجاح.", details)
+                        else onOrdered(false, "فشل إرسال الطلب.", details)
                         onDismiss()
                     }
                 }
@@ -654,7 +668,7 @@ private fun ManualSectionsScreen(
     uid: String,
     onBack: () -> Unit,
     onToast: (String) -> Unit,
-    onAddNotice: (AppNotice) -> Unit
+    onAddDetailedNotice: (Boolean, String, String, String?) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val items = when (title) {
@@ -667,9 +681,7 @@ private fun ManualSectionsScreen(
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = "رجوع", tint = OnBg)
-            }
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = "رجوع", tint = OnBg) }
             Spacer(Modifier.width(6.dp))
             Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
@@ -683,19 +695,17 @@ private fun ManualSectionsScreen(
                     .clickable {
                         scope.launch {
                             val ok = apiCreateManualOrder(uid, name)
+                            val detail = "النوع: $name\nUID=$uid\nالوقت: ${SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date())}"
                             if (ok) {
                                 onToast("تم استلام طلبك ($name)، سيتم مراجعته من المالك.")
-                                onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $name للمراجعة.", forOwner = false))
-                                onAddNotice(AppNotice("طلب يدوي جديد", "طلب $name من UID=$uid يحتاج مراجعة.", forOwner = true))
+                                onAddDetailedNotice(false, "طلب معلّق", detail, detail)
+                                onAddDetailedNotice(true, "طلب يدوي جديد", detail, detail)
                             } else {
                                 onToast("تعذر إرسال الطلب. حاول لاحقًا.")
                             }
                         }
                     },
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = Surface1,
-                    contentColor = OnBg
-                )
+                colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
             ) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.ChevronLeft, null, tint = Accent)
@@ -713,7 +723,7 @@ private fun ManualSectionsScreen(
 @Composable
 private fun WalletScreen(
     uid: String,
-    onAddNotice: (AppNotice) -> Unit,
+    onAddDetailedNotice: (forOwner: Boolean, title: String, details: String, copy: String?) -> Unit,
     onToast: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -723,28 +733,20 @@ private fun WalletScreen(
     var cardNumber by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        balance = apiGetBalance(uid)
-    }
+    LaunchedEffect(Unit) { balance = apiGetBalance(uid) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("رصيدي", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text(
-            "الرصيد الحالي: ${balance?.let { "%.2f".format(it) } ?: "..."}$",
-            fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold
-        )
+        Text("الرصيد الحالي: ${balance?.let { "%.2f".format(it) } ?: "..."}$", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(16.dp))
         Text("طرق الشحن:", fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
 
+        // أسيا سيل (كارت)
         ElevatedCard(
             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { askAsiacell = true },
-            colors = CardDefaults.elevatedCardColors(
-                containerColor = Surface1,
-                contentColor = OnBg
-            )
+            colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.SimCard, null, tint = Accent)
@@ -753,30 +755,24 @@ private fun WalletScreen(
             }
         }
 
-        listOf(
-            "شحن عبر هلا بي",
-            "شحن عبر نقاط سنتات",
-            "شحن عبر سوبركي",
-            "شحن عبر زين كاش",
-            "شحن عبر عملات رقمية (USDT)"
-        ).forEach {
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable {
-                    onToast("لإتمام الشحن تواصل مع الدعم (واتساب/تيليجرام).")
-                    onAddNotice(AppNotice("شحن رصيد", "يرجى التواصل مع الدعم لإكمال شحن: $it", forOwner = false))
-                },
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = Surface1,
-                    contentColor = OnBg
-                )
-            ) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.AttachMoney, null, tint = Accent)
-                    Spacer(Modifier.width(8.dp))
-                    Text(it, fontWeight = FontWeight.SemiBold)
+        // قنوات أخرى — توجيه للدعم
+        listOf("شحن عبر هلا بي","شحن عبر نقاط سنتات","شحن عبر سوبركي","شحن عبر زين كاش","شحن عبر عملات رقمية (USDT)")
+            .forEach {
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable {
+                        onToast("لإتمام الشحن تواصل مع الدعم (واتساب/تيليجرام).")
+                        val det = "طريقة: $it\nUID=$uid\nالوقت: ${SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date())}"
+                        onAddDetailedNotice(false, "طلب شحن", det, det)
+                    },
+                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.AttachMoney, null, tint = Accent)
+                        Spacer(Modifier.width(8.dp))
+                        Text(it, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
-        }
     }
 
     if (askAsiacell) {
@@ -787,22 +783,22 @@ private fun WalletScreen(
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
                     sending = true
+                    val detUser = "تم إرسال كارت أسيا سيل للمراجعة.\nآخر 4: ${digits.takeLast(4)}\nUID=$uid\nالوقت: ${SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date())}"
+                    val detOwner = "طلب كارت أسيا سيل جديد:\nUID=$uid\nالكارت: $digits\nالوقت: ${SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date())}"
+                    val copyOwner = "UID=$uid\nAsiacell=$digits"
                     scope.launch {
                         val ok = apiSubmitAsiacellCard(uid, digits)
                         sending = false
                         if (ok) {
-                            onAddNotice(AppNotice("تم استلام كارتك", "تم إرسال كارت أسيا سيل إلى المالك للمراجعة.", forOwner = false))
-                            onAddNotice(AppNotice("كارت أسيا سيل جديد", "UID=$uid | كارت: $digits", forOwner = true))
+                            onAddDetailedNotice(false, "تم استلام كارتك", detUser, detUser)
+                            onAddDetailedNotice(true, "كارت أسيا سيل جديد", detOwner, copyOwner)
                             onToast("تم إرسال الكارت للمراجعة.")
-                            cardNumber = ""
-                            askAsiacell = false
                         } else {
                             val msg = "أرغب بشحن الرصيد داخل التطبيق.\nUID=$uid\nكارت أسيا سيل: $digits"
                             uri.openUri("https://wa.me/9647763410970?text=" + java.net.URLEncoder.encode(msg, "UTF-8"))
                             onToast("تعذر الاتصال بالخادم — تم فتح واتساب لإرسال الكارت للدعم.")
-                            cardNumber = ""
-                            askAsiacell = false
                         }
+                        cardNumber = ""; askAsiacell = false
                     }
                 }) { Text(if (sending) "يرسل..." else "إرسال") }
             },
@@ -839,8 +835,7 @@ private fun OrdersScreen(uid: String) {
     var err by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(uid) {
-        loading = true
-        err = null
+        loading = true; err = null
         orders = apiGetMyOrders(uid).also { loading = false }
         if (orders == null) err = "تعذر جلب الطلبات"
     }
@@ -849,22 +844,16 @@ private fun OrdersScreen(uid: String) {
         Text("طلباتي", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
 
-        if (loading) {
-            Text("يتم التحميل...", color = Dim)
-        } else if (err != null) {
-            Text(err!!, color = Bad)
-        } else {
-            if (orders.isNullOrEmpty()) {
-                Text("لا توجد طلبات حتى الآن.", color = Dim)
-            } else {
+        when {
+            loading -> Text("يتم التحميل...", color = Dim)
+            err != null -> Text(err!!, color = Bad)
+            orders.isNullOrEmpty() -> Text("لا توجد طلبات حتى الآن.", color = Dim)
+            else -> {
                 LazyColumn {
                     items(orders!!) { o ->
                         ElevatedCard(
                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                            colors = CardDefaults.elevatedCardColors(
-                                containerColor = Surface1,
-                                contentColor = OnBg
-                            )
+                            colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                         ) {
                             Column(Modifier.padding(16.dp)) {
                                 Text(o.title, fontWeight = FontWeight.SemiBold)
@@ -893,7 +882,8 @@ private fun OwnerPanel(
     token: String?,
     onShowOwnerNotices: () -> Unit,
     onToast: (String) -> Unit,
-    onRequireLogin: () -> Unit
+    onRequireLogin: () -> Unit,
+    onOwnerNotify: (title: String, details: String, copy: String?) -> Unit
 ) {
     var current by remember { mutableStateOf<String?>(null) }
 
@@ -933,10 +923,7 @@ private fun OwnerPanel(
                 Row(Modifier.fillMaxWidth()) {
                     row.forEach { (title, key) ->
                         ElevatedButton(
-                            onClick = {
-                                if (needToken()) return@ElevatedButton
-                                current = key
-                            },
+                            onClick = { if (!needToken()) current = key },
                             modifier = Modifier.weight(1f).padding(4.dp),
                             colors = ButtonDefaults.elevatedButtonColors(
                                 containerColor = Accent.copy(alpha = 0.18f),
@@ -952,39 +939,47 @@ private fun OwnerPanel(
                 "pending_services" -> PendingListScreen(
                     title = "الطلبات المعلقة (الخدمات)",
                     fetch = { apiAdminGetPendingServices(token!!) },
-                    actApprove = { id -> apiAdminApproveService(token!!, id) },
-                    actReject = { id -> apiAdminRejectService(token!!, id) },
+                    actApprove = { id ->
+                        val ok = apiAdminApproveService(token!!, id)
+                        if (ok) onOwnerNotify("تنفيذ طلب", "تم تنفيذ الطلب #$id", "order_id=$id")
+                        ok
+                    },
+                    actReject = { id ->
+                        val ok = apiAdminRejectService(token!!, id)
+                        if (ok) onOwnerNotify("رفض طلب", "تم رفض الطلب #$id", "order_id=$id")
+                        ok
+                    },
                     onBack = { current = null }
                 )
                 "pending_cards" -> PendingCardsScreen(
                     token = token!!,
-                    onBack = { current = null }
+                    onBack = { current = null },
+                    onNotify = onOwnerNotify
                 )
                 "pending_itunes" -> SimpleInfoScreen("طلبات شحن الايتونز", onBack = { current = null })
                 "pending_pubg"   -> SimpleInfoScreen("طلبات شدات ببجي", onBack = { current = null })
                 "pending_ludo"   -> SimpleInfoScreen("طلبات لودو المعلقة", onBack = { current = null })
                 "topup" -> TopupDeductScreen(
                     title = "إضافة الرصيد",
-                    onSubmit = { u, amt -> apiAdminTopup(token!!, u, amt) },
+                    onSubmit = { u, amt ->
+                        val ok = apiAdminTopup(token!!, u, amt)
+                        if (ok) onOwnerNotify("إضافة رصيد", "UID=$u\n+${"%.2f".format(amt)}$", "UID=$u,+$amt")
+                        ok
+                    },
                     onBack = { current = null }
                 )
                 "deduct" -> TopupDeductScreen(
                     title = "خصم الرصيد",
-                    onSubmit = { u, amt -> apiAdminDeduct(token!!, u, amt) },
+                    onSubmit = { u, amt ->
+                        val ok = apiAdminDeduct(token!!, u, amt)
+                        if (ok) onOwnerNotify("خصم رصيد", "UID=$u\n-${"%.2f".format(amt)}$", "UID=$u,-$amt")
+                        ok
+                    },
                     onBack = { current = null }
                 )
-                "users_count" -> UsersCountScreen(
-                    fetch = { apiAdminUsersCount(token!!) },
-                    onBack = { current = null }
-                )
-                "users_balances" -> UsersBalancesScreen(
-                    fetch = { apiAdminUsersBalancesTotal(token!!) },
-                    onBack = { current = null }
-                )
-                "provider_balance" -> ProviderBalanceScreen(
-                    fetch = { apiAdminProviderBalance(token!!) },
-                    onBack = { current = null }
-                )
+                "users_count" -> UsersCountScreen(fetch = { apiAdminUsersCount(token!!) }, onBack = { current = null })
+                "users_balances" -> UsersBalancesScreen(fetch = { apiAdminUsersBalancesTotal(token!!) }, onBack = { current = null })
+                "provider_balance" -> ProviderBalanceScreen(fetch = { apiAdminProviderBalance(token!!) }, onBack = { current = null })
             }
         }
     }
@@ -1006,8 +1001,7 @@ private fun PendingListScreen(
     var reloadKey by remember { mutableStateOf(0) }
 
     LaunchedEffect(reloadKey) {
-        loading = true
-        err = null
+        loading = true; err = null
         list = fetch()
         loading = false
         if (list == null) err = "تعذر جلب البيانات"
@@ -1021,31 +1015,25 @@ private fun PendingListScreen(
         }
         Spacer(Modifier.height(10.dp))
 
-        if (loading) Text("يتم التحميل...", color = Dim)
-        else if (err != null) Text(err!!, color = Bad)
-        else if (list.isNullOrEmpty()) Text("لا يوجد شيء معلق.", color = Dim)
-        else {
-            LazyColumn {
+        when {
+            loading -> Text("يتم التحميل...", color = Dim)
+            err != null -> Text(err!!, color = Bad)
+            list.isNullOrEmpty() -> Text("لا يوجد شيء معلق.", color = Dim)
+            else -> LazyColumn {
                 items(list!!) { o ->
                     ElevatedCard(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = Surface1,
-                            contentColor = OnBg
-                        )
+                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Text(o.title, fontWeight = FontWeight.SemiBold)
                             Text("ID: ${o.id} | الكمية: ${o.quantity} | السعر: ${"%.2f".format(o.price)}$", color = Dim, fontSize = 12.sp)
+                            Text("الرابط/البيانات: ${o.linkOrPayload}", color = Dim, fontSize = 12.sp)
                             Text("الحالة: ${o.status}", color = OnBg, fontSize = 12.sp)
                             Spacer(Modifier.height(8.dp))
                             Row {
-                                TextButton(onClick = {
-                                    scope.launch { if (actApprove(o.id)) reloadKey++ }
-                                }) { Text("تنفيذ") }
-                                TextButton(onClick = {
-                                    scope.launch { if (actReject(o.id)) reloadKey++ }
-                                }) { Text("رفض") }
+                                TextButton(onClick = { scope.launch { if (actApprove(o.id)) reloadKey++ } }) { Text("تنفيذ") }
+                                TextButton(onClick = { scope.launch { if (actReject(o.id))  reloadKey++ } }) { Text("رفض") }
                             }
                         }
                     }
@@ -1057,7 +1045,11 @@ private fun PendingListScreen(
 
 /* شاشة الكارتات المعلّقة */
 @Composable
-private fun PendingCardsScreen(token: String, onBack: () -> Unit) {
+private fun PendingCardsScreen(
+    token: String,
+    onBack: () -> Unit,
+    onNotify: (title: String, details: String, copy: String?) -> Unit
+) {
     val scope = rememberCoroutineScope()
     val clip: ClipboardManager = LocalClipboardManager.current
 
@@ -1071,8 +1063,7 @@ private fun PendingCardsScreen(token: String, onBack: () -> Unit) {
     var sending by remember { mutableStateOf(false) }
 
     LaunchedEffect(reloadKey) {
-        loading = true
-        err = null
+        loading = true; err = null
         list = apiAdminCardsPending(token)
         loading = false
         if (list == null) err = "تعذر جلب الكارتات"
@@ -1086,18 +1077,15 @@ private fun PendingCardsScreen(token: String, onBack: () -> Unit) {
         }
         Spacer(Modifier.height(10.dp))
 
-        if (loading) Text("يتم التحميل...", color = Dim)
-        else if (err != null) Text(err!!, color = Bad)
-        else if (list.isNullOrEmpty()) Text("لا يوجد كروت معلّقة.", color = Dim)
-        else {
-            LazyColumn {
+        when {
+            loading -> Text("يتم التحميل...", color = Dim)
+            err != null -> Text(err!!, color = Bad)
+            list.isNullOrEmpty() -> Text("لا يوجد كروت معلّقة.", color = Dim)
+            else -> LazyColumn {
                 items(list!!) { c ->
                     ElevatedCard(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = Surface1,
-                            contentColor = OnBg
-                        )
+                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Text("UID: ${c.uid}", fontWeight = FontWeight.SemiBold)
@@ -1105,16 +1093,17 @@ private fun PendingCardsScreen(token: String, onBack: () -> Unit) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("الكارت: ${c.cardNumber}")
                                 Spacer(Modifier.width(8.dp))
-                                TextButton(onClick = {
-                                    clip.setText(AnnotatedString(c.cardNumber))
-                                }) { Text("نسخ") }
+                                TextButton(onClick = { clip.setText(AnnotatedString(c.cardNumber)) }) { Text("نسخ") }
                             }
                             Spacer(Modifier.height(8.dp))
                             Row {
                                 TextButton(onClick = { askAmountForId = c.id; amountText = "" }) { Text("تنفيذ") }
                                 TextButton(onClick = {
                                     scope.launch {
-                                        if (apiAdminCardReject(token, c.id)) reloadKey++
+                                        if (apiAdminCardReject(token, c.id)) {
+                                            onNotify("رفض كارت أسيا سيل", "تم رفض الكارت للمستخدم $${c.uid}\nالكارت=${c.cardNumber}", c.cardNumber)
+                                            reloadKey++
+                                        }
                                     }
                                 }) { Text("رفض") }
                             }
@@ -1135,7 +1124,10 @@ private fun PendingCardsScreen(token: String, onBack: () -> Unit) {
                     scope.launch {
                         val ok = apiAdminCardAccept(token, id, amt)
                         sending = false
-                        if (ok) { askAmountForId = null; reloadKey++ }
+                        if (ok) {
+                            onNotify("قبول كارت أسيا سيل", "تم شحن رصيد بقيمة ${"%.2f".format(amt)}$\nطلب=$id", "amount=$amt,card_id=$id")
+                            askAmountForId = null; reloadKey++
+                        }
                     }
                 }) { Text(if (sending) "يرسل..." else "تأكيد") }
             },
@@ -1159,8 +1151,7 @@ private fun PendingCardsScreen(token: String, onBack: () -> Unit) {
 }
 
 /* شاشات بسيطة Placeholder */
-@Composable
-private fun SimpleInfoScreen(title: String, onBack: () -> Unit) {
+@Composable private fun SimpleInfoScreen(title: String, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null) }
@@ -1193,23 +1184,18 @@ private fun TopupDeductScreen(
         Spacer(Modifier.height(10.dp))
 
         OutlinedTextField(
-            value = uid,
-            onValueChange = { uid = it },
-            label = { Text("UID المستخدم") },
+            value = uid, onValueChange = { uid = it }, label = { Text("UID المستخدم") },
             colors = TextFieldDefaults.outlinedTextFieldColors(
-                cursorColor = Accent,
-                focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                cursorColor = Accent, focusedBorderColor = Accent, unfocusedBorderColor = Dim,
                 focusedLabelColor = OnBg, unfocusedLabelColor = Dim
             )
         )
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(
-            value = amount,
-            onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) amount = s },
+            value = amount, onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) amount = s },
             label = { Text("المبلغ") },
             colors = TextFieldDefaults.outlinedTextFieldColors(
-                cursorColor = Accent,
-                focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                cursorColor = Accent, focusedBorderColor = Accent, unfocusedBorderColor = Dim,
                 focusedLabelColor = OnBg, unfocusedLabelColor = Dim
             )
         )
@@ -1219,61 +1205,10 @@ private fun TopupDeductScreen(
                 val a = amount.toDoubleOrNull() ?: return@Button
                 scope.launch { toast = if (onSubmit(uid, a)) "تم بنجاح" else "فشل التنفيذ" }
             },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Accent,
-                contentColor = Color.Black
-            )
+            colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color.Black)
         ) { Text("تنفيذ") }
 
-        toast?.let {
-            Spacer(Modifier.height(10.dp))
-            Text(it, color = OnBg)
-        }
-    }
-}
-
-@Composable
-private fun UsersCountScreen(fetch: suspend () -> Int?, onBack: () -> Unit) {
-    var v by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(Unit) { v = fetch() }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null) }
-            Spacer(Modifier.width(6.dp))
-            Text("عدد المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(16.dp))
-        Text("القيمة: ${v ?: "..."}", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun UsersBalancesScreen(fetch: suspend () -> Double?, onBack: () -> Unit) {
-    var v by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(Unit) { v = fetch() }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null) }
-            Spacer(Modifier.width(6.dp))
-            Text("رصيد المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(16.dp))
-        Text("الإجمالي: ${v?.let { "%.2f".format(it) } ?: "..."}$", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun ProviderBalanceScreen(fetch: suspend () -> Double?, onBack: () -> Unit) {
-    var v by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(Unit) { v = fetch() }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null) }
-            Spacer(Modifier.width(6.dp))
-            Text("رصيد المزوّد (API)", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(16.dp))
-        Text("الرصيد: ${v?.let { "%.2f".format(it) } ?: "..."}$", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+        toast?.let { Spacer(Modifier.height(10.dp)); Text(it, color = OnBg) }
     }
 }
 
@@ -1281,9 +1216,7 @@ private fun ProviderBalanceScreen(fetch: suspend () -> Double?, onBack: () -> Un
    شريط سفلي
    ========================= */
 @Composable
-private fun BottomNavBar(
-    current: Tab, onChange: (Tab) -> Unit, modifier: Modifier = Modifier
-) {
+private fun BottomNavBar(current: Tab, onChange: (Tab) -> Unit, modifier: Modifier = Modifier) {
     NavigationBar(modifier = modifier.fillMaxWidth(), containerColor = Surface1) {
         NavItem(current == Tab.HOME,   { onChange(Tab.HOME) },   Icons.Filled.Home,                "الرئيسية")
         NavItem(current == Tab.SERVICES, { onChange(Tab.SERVICES) }, Icons.Filled.List,                "الخدمات")
@@ -1292,18 +1225,12 @@ private fun BottomNavBar(
         NavItem(current == Tab.SUPPORT, { onChange(Tab.SUPPORT) }, Icons.Filled.ChatBubble,           "الدعم")
     }
 }
-
 @Composable
-private fun RowScope.NavItem(
-    selected: Boolean, onClick: () -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector, label: String
-) {
+private fun RowScope.NavItem(selected: Boolean, onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
     NavigationBarItem(
         selected = selected, onClick = onClick,
         icon = { Icon(icon, contentDescription = label) },
-        label = {
-            Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-        },
+        label = { Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal) },
         colors = NavigationBarItemDefaults.colors(
             selectedIconColor = Color.White, selectedTextColor = Color.White,
             indicatorColor = Accent.copy(alpha = 0.25f),
@@ -1317,7 +1244,6 @@ private fun RowScope.NavItem(
    ========================= */
 private fun prefs(ctx: Context) = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
-/** مدموج هنا لتجنّب أي تعارضات ملفات خارجية */
 private fun loadOrCreateUid(ctx: Context): String {
     val sp = prefs(ctx)
     val existing = sp.getString("uid", null)
@@ -1326,14 +1252,10 @@ private fun loadOrCreateUid(ctx: Context): String {
     sp.edit().putString("uid", fresh).apply()
     return fresh
 }
-
 private fun loadOwnerMode(ctx: Context): Boolean = prefs(ctx).getBoolean("owner_mode", false)
 private fun saveOwnerMode(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("owner_mode", on).apply() }
-
 private fun loadOwnerToken(ctx: Context): String? = prefs(ctx).getString("owner_token", null)
-private fun saveOwnerToken(ctx: Context, token: String?) {
-    prefs(ctx).edit().putString("owner_token", token).apply()
-}
+private fun saveOwnerToken(ctx: Context, token: String?) { prefs(ctx).edit().putString("owner_token", token).apply() }
 
 private fun loadNotices(ctx: Context): List<AppNotice> {
     val raw = prefs(ctx).getString("notices_json", "[]") ?: "[]"
@@ -1345,7 +1267,9 @@ private fun loadNotices(ctx: Context): List<AppNotice> {
                 title = o.optString("title"),
                 body = o.optString("body"),
                 ts = o.optLong("ts"),
-                forOwner = o.optBoolean("forOwner")
+                forOwner = o.optBoolean("forOwner"),
+                details = o.optString("details", null),
+                copyText = o.optString("copyText", null)
             )
         }
     } catch (_: Exception) { emptyList() }
@@ -1358,12 +1282,14 @@ private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
         o.put("body", it.body)
         o.put("ts", it.ts)
         o.put("forOwner", it.forOwner)
+        if (it.details != null) o.put("details", it.details)
+        if (it.copyText != null) o.put("copyText", it.copyText)
         arr.put(o)
     }
     prefs(ctx).edit().putString("notices_json", arr.toString()).apply()
 }
 
-/* ===== شبكة عامة صغيرة ===== */
+/* ===== شبكة ===== */
 private suspend fun httpGet(path: String, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
     withContext(Dispatchers.IO) {
         try {
@@ -1378,9 +1304,7 @@ private suspend fun httpGet(path: String, headers: Map<String, String> = emptyMa
             val txt = (if (code in 200..299) con.inputStream else con.errorStream)
                 ?.bufferedReader()?.use { it.readText() }
             code to txt
-        } catch (e: Exception) {
-            -1 to null
-        }
+        } catch (_: Exception) { -1 to null }
     }
 
 private suspend fun httpPost(path: String, json: JSONObject, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
@@ -1400,61 +1324,38 @@ private suspend fun httpPost(path: String, json: JSONObject, headers: Map<String
             val txt = (if (code in 200..299) con.inputStream else con.errorStream)
                 ?.bufferedReader()?.use { it.readText() }
             code to txt
-        } catch (e: Exception) {
-            -1 to null
-        }
+        } catch (_: Exception) { -1 to null }
     }
 
-/* ===== وظائف مشتركة مع الخادم ===== */
+/* ===== واجهة الخادم ===== */
 private suspend fun pingHealth(): Boolean? {
     val (code, _) = httpGet("/health")
     return code in 200..299
 }
+private suspend fun tryUpsertUid(uid: String) { httpPost("/api/users/upsert", JSONObject().put("uid", uid)) }
 
-private suspend fun tryUpsertUid(uid: String) {
-    httpPost("/api/users/upsert", JSONObject().put("uid", uid))
-}
-
-/* رصيد المستخدم */
 private suspend fun apiGetBalance(uid: String): Double? {
     val (code, txt) = httpGet("/api/wallet/balance?uid=$uid")
-    return if (code in 200..299 && txt != null) {
-        try { JSONObject(txt).optDouble("balance") } catch (_: Exception) { null }
-    } else null
+    return if (code in 200..299 && txt != null) try { JSONObject(txt).optDouble("balance") } catch (_: Exception) { null } else null
 }
 
-/* طلب مزوّد */
-private suspend fun apiCreateProviderOrder(
-    uid: String, serviceId: Long, serviceName: String, link: String, quantity: Int, price: Double
-): Boolean {
-    val body = JSONObject()
-        .put("uid", uid)
-        .put("service_id", serviceId)
-        .put("service_name", serviceName)
-        .put("link", link)
-        .put("quantity", quantity)
-        .put("price", price)
+private suspend fun apiCreateProviderOrder(uid: String, serviceId: Long, serviceName: String, link: String, quantity: Int, price: Double): Boolean {
+    val body = JSONObject().put("uid", uid).put("service_id", serviceId).put("service_name", serviceName).put("link", link).put("quantity", quantity).put("price", price)
     val (code, txt) = httpPost("/api/orders/create/provider", body)
     return code in 200..299 && (txt?.contains("ok", ignoreCase = true) == true)
 }
 
-/* طلب يدوي */
 private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     val body = JSONObject().put("uid", uid).put("title", name)
     val (code, txt) = httpPost("/api/orders/create/manual", body)
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
-/* كارت أسيا سيل */
 private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
-    val (code, txt) = httpPost(
-        "/api/wallet/asiacell/submit",
-        JSONObject().put("uid", uid).put("card", card)
-    )
+    val (code, txt) = httpPost("/api/wallet/asiacell/submit", JSONObject().put("uid", uid).put("card", card))
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
-/* طلبات المستخدم */
 private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
     val (code, txt) = httpGet("/api/orders/my?uid=$uid")
     if (code !in 200..299 || txt == null) return null
@@ -1481,17 +1382,7 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
     } catch (_: Exception) { null }
 }
 
-/* دخول المالك */
-private suspend fun apiAdminLogin(password: String): String? {
-    if (password == "2000") return password
-    return try {
-        val headers = mapOf("x-admin-pass" to password)
-        val (code, _) = httpGet(AdminEndpoints.pendingServices, headers = headers)
-        if (code in 200..299) password else null
-    } catch (_: Exception) { null }
-}
-
-/* معلّقات الخدمات — يقرأ {ok,list} */
+/* أدمن */
 private suspend fun apiAdminGetPendingServices(token: String): List<OrderItem>? {
     val (code, txt) = httpGet(AdminEndpoints.pendingServices, mapOf("x-admin-pass" to token))
     if (code !in 200..299 || txt == null) return null
@@ -1512,8 +1403,6 @@ private suspend fun apiAdminGetPendingServices(token: String): List<OrderItem>? 
         }
     } catch (_: Exception) { null }
 }
-
-/* تنفيذ/رفض خدمة */
 private suspend fun apiAdminApproveService(token: String, id: String): Boolean {
     val (code, _) = httpPost(AdminEndpoints.approveService(id), JSONObject(), mapOf("x-admin-pass" to token))
     return code in 200..299
@@ -1523,7 +1412,6 @@ private suspend fun apiAdminRejectService(token: String, id: String): Boolean {
     return code in 200..299
 }
 
-/* الكروت المعلّقة */
 private suspend fun apiAdminCardsPending(token: String): List<PendingCardItem>? {
     val (code, txt) = httpGet(AdminEndpoints.pendingCards, mapOf("x-admin-pass" to token))
     if (code !in 200..299 || txt == null) return null
@@ -1535,7 +1423,7 @@ private suspend fun apiAdminCardsPending(token: String): List<PendingCardItem>? 
             PendingCardItem(
                 id = o.optString("id"),
                 uid = o.optString("uid"),
-                cardNumber = o.optString("card_number", o.optString("card")), // دعم كلا الاسمين
+                cardNumber = o.optString("card_number", o.optString("card")),
                 createdAt = o.optLong("created_at")
             )
         }
@@ -1550,7 +1438,6 @@ private suspend fun apiAdminCardReject(token: String, id: String): Boolean {
     return code in 200..299
 }
 
-/* شحن/خصم رصيد */
 private suspend fun apiAdminTopup(token: String, uid: String, amount: Double): Boolean {
     val (code, _) = httpPost(AdminEndpoints.topup(uid), JSONObject().put("amount", amount), mapOf("x-admin-pass" to token))
     return code in 200..299
@@ -1560,7 +1447,6 @@ private suspend fun apiAdminDeduct(token: String, uid: String, amount: Double): 
     return code in 200..299
 }
 
-/* إحصائيات */
 private suspend fun apiAdminUsersCount(token: String): Int? {
     val (code, txt) = httpGet(AdminEndpoints.usersCount, mapOf("x-admin-pass" to token))
     if (code !in 200..299 || txt == null) return null
@@ -1573,10 +1459,7 @@ private suspend fun apiAdminUsersBalancesTotal(token: String): Double? {
         val root = JSONObject(txt)
         val arr = root.optJSONArray("list") ?: JSONArray()
         var sum = 0.0
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            sum += o.optDouble("balance", 0.0)
-        }
+        for (i in 0 until arr.length()) sum += arr.getJSONObject(i).optDouble("balance", 0.0)
         sum
     } catch (_: Exception) { null }
 }

@@ -778,18 +778,20 @@ private fun WalletScreen(
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
                     sending = true
+                    val uidLocal = uid
+                    val cardLocal = digits
                     scope.launch {
-                        val ok = apiSubmitAsiacellCard(uid, digits)
+                        val ok = apiSubmitAsiacellCard(uidLocal, cardLocal)
                         sending = false
                         if (ok) {
                             onAddNotice(AppNotice("تم استلام كارتك", "تم إرسال كارت أسيا سيل إلى المالك للمراجعة.", forOwner = false))
-                            onAddNotice(AppNotice("كارت أسيا سيل جديد", "UID=$uid | كارت: $digits", forOwner = true))
+                            onAddNotice(AppNotice("كارت أسيا سيل جديد", "UID=$uidLocal | كارت: $cardLocal", forOwner = true))
                             onToast("تم إرسال الكارت للمراجعة.")
                             cardNumber = ""
                             askAsiacell = false
                         } else {
-                            val msg = "أرغب بشحن الرصيد داخل التطبيق.\nUID=$uid\nكارت أسيا سيل: $digits"
-                            uri.openUri(
+                            val msg = "أرغب بشحن الرصيد داخل التطبيق.\nUID=$uidLocal\nكارت أسيا سيل: $cardLocal"
+                            LocalUriHandler.current.openUri(
                                 "https://wa.me/9647763410970?text=" + java.net.URLEncoder.encode(msg, "UTF-8")
                             )
                             onToast("تعذر الاتصال بالخادم — تم فتح واتساب لإرسال الكارت للدعم.")
@@ -912,6 +914,7 @@ private fun OwnerPanel(
         if (current == null) {
             val buttons = listOf(
                 "الطلبات المعلقة (الخدمات)" to "pending_services",
+                "طلبات شحن الايتونز"      to "pending_itunes",   // ← أُعيد زر الايتونز
                 "الكارتات المعلقة"         to "pending_cards",
                 "طلبات شدات ببجي"         to "pending_pubg",
                 "طلبات لودو المعلقة"       to "pending_ludo",
@@ -947,14 +950,26 @@ private fun OwnerPanel(
                     fetch = { apiAdminGetList(token!!, AdminEndpoints.pendingServices) },
                     actApprove = { id -> apiAdminApproveService(token!!, id) },
                     actReject  = { id -> apiAdminRejectService(token!!, id) },
-                    actRefund  = { id -> apiAdminRejectService(token!!, id) }, // رد = رفض مع رد رصيد بالسيرفر
+                    actRefund  = { id -> apiAdminRejectService(token!!, id) },
                     approveWithAmount = null,
                     onBack = { current = null }
                 )
+
+                // شاشة الايتونز (عرض فقط وإجراءات عامة افتراضية)
+                "pending_itunes" -> PendingListScreen(
+                    title = "طلبات شحن الايتونز",
+                    fetch = { apiAdminGetList(token!!, AdminEndpoints.pendingItunes) },
+                    actApprove = { _ -> false },  // تنفيذ يتطلب كود هدية — أبقيناه كما هو (لا تغيير آخر)
+                    actReject  = { _ -> false },
+                    actRefund  = { _ -> false },
+                    approveWithAmount = null,
+                    onBack = { current = null }
+                )
+
                 "pending_cards" -> PendingListScreen(
                     title = "الكارتات المعلقة",
                     fetch = { apiAdminGetList(token!!, AdminEndpoints.pendingCards) },
-                    actApprove = { _ -> true }, // سيتم طلب المبلغ محليًا ثم نستخدم approveWithAmount
+                    actApprove = { _ -> true }, // سيتم طلب المبلغ محليًا في Dialog (موجود مسبقًا)
                     actReject  = { id -> apiAdminRejectCard(token!!, id) },
                     actRefund  = { id -> apiAdminRejectCard(token!!, id) },
                     approveWithAmount = { id, amount -> apiAdminApproveCard(token!!, id, amount) },
@@ -1107,7 +1122,8 @@ private fun PendingListScreen(
                 TextButton(onClick = {
                     val id = confirmId!!
                     val act = confirmAction!!
-                    scope.launch {
+                    val scopeLocal = scope
+                    scopeLocal.launch {
                         val ok = when (act) {
                             "approve" -> actApprove(id)
                             "reject"  -> actReject(id)
@@ -1133,7 +1149,8 @@ private fun PendingListScreen(
                 TextButton(onClick = {
                     val amt = amountText.toDoubleOrNull()
                     if (amt == null || amt <= 0.0 || approveWithAmount == null) return@TextButton
-                    scope.launch {
+                    val scopeLocal = scope
+                    scopeLocal.launch {
                         val ok = approveWithAmount.invoke(oid, amt)
                         if (ok) { toast = "نجاح: تم شحن المستخدم +$amt\$"; reloadKey++ }
                         else toast = "فشل تنفيذ كارت أسيا سيل"
@@ -1213,7 +1230,8 @@ private fun TopupDeductScreen(
         Button(
             onClick = {
                 val a = amount.toDoubleOrNull() ?: return@Button
-                scope.launch {
+                val scopeLocal = scope
+                scopeLocal.launch {
                     val ok = onSubmit(uid, a)
                     msg = if (ok) "تم بنجاح" else "فشل التنفيذ"
                 }
@@ -1250,7 +1268,7 @@ private fun UsersCountScreen(fetch: suspend () -> JSONObject?, onBack: () -> Uni
 private fun UsersBalancesScreen(fetch: suspend () -> JSONObject?, onBack: () -> Unit) {
     var data by remember { mutableStateOf<JSONObject?>(null) }
     LaunchedEffect(Unit) { data = fetch() }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
+    Column(Modifier.fillMaxSize().padding(16	dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
             Spacer(Modifier.width(6.dp))
@@ -1323,7 +1341,7 @@ private fun SettingsDialog(
                     Spacer(Modifier.width(8.dp))
                     OutlinedButton(onClick = { clip.setText(AnnotatedString(uid)) }) { Text("نسخ") }
                 }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(12	dp))
                 Divider(color = Surface1)
                 Spacer(Modifier.height(12.dp))
 

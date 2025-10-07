@@ -1,5 +1,6 @@
 // app/src/main/java/com/zafer/smm/MainActivity.kt
 @file:Suppress("UnusedImport", "SpellCheckingInspection")
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
 
@@ -16,7 +17,28 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
+import androidx.compose.material3.ElevatedButton
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -107,7 +129,7 @@ data class AppNotice(
     val ts: Long = System.currentTimeMillis(),
     val forOwner: Boolean = false,
     val details: String? = null,   // تفاصيل موسّعة
-    val copyText: String? = null   // نص للنسخ (مثلاً رقم كارت، أو JSON مختصر)
+    val copyText: String? = null   // نص للنسخ
 )
 
 data class ServiceDef(
@@ -209,7 +231,7 @@ fun AppRoot() {
         }
     }
 
-    // توابع مساعدة للإشعارات المفصّلة
+    // إشعارات مفصلة
     fun pushUserNotice(title: String, details: String, copy: String? = null) {
         val n = AppNotice(title = title, body = title, details = details, copyText = copy, forOwner = false)
         val all = loadNotices(ctx) + n
@@ -422,7 +444,7 @@ private fun TopRightBar(
 }
 
 /* =========================
-   مركز الإشعارات — يعرض تفاصيل + زر نسخ
+   مركز الإشعارات — تفاصيل + نسخ
    ========================= */
 @Composable
 private fun NoticeCenterDialog(
@@ -466,7 +488,7 @@ private fun NoticeCenterDialog(
 @Composable
 private fun ServicesScreen(
     uid: String,
-    onAddDetailedNotice: (forOwner: Boolean, title: String, details: String, copy: String?) -> Unit,
+    onAddDetailedNotice: (Boolean, String, String, String?) -> Unit,
     onToast: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -550,19 +572,8 @@ private fun ServicesScreen(
             onOrdered = { ok, msg, detail ->
                 onToast(msg)
                 if (ok) {
-                    // إشعار مفصّل للمستخدم + المالك
-                    onAddDetailedNotice(
-                        false,
-                        "طلب جديد (${svc.uiKey})",
-                        detail,
-                        copy = detail
-                    )
-                    onAddDetailedNotice(
-                        true,
-                        "طلب خدمات معلّق",
-                        "UID=$uid\nالخدمة=${svc.uiKey}\nID مزود=${svc.serviceId}\n$detail",
-                        copy = "UID=$uid\n$detail"
-                    )
+                    onAddDetailedNotice(false, "طلب جديد (${svc.uiKey})", detail, detail)
+                    onAddDetailedNotice(true, "طلب خدمات معلّق", "UID=$uid\nالخدمة=${svc.uiKey}\nID مزود=${svc.serviceId}\n$detail", "UID=$uid\n$detail")
                 }
             }
         )
@@ -723,7 +734,7 @@ private fun ManualSectionsScreen(
 @Composable
 private fun WalletScreen(
     uid: String,
-    onAddDetailedNotice: (forOwner: Boolean, title: String, details: String, copy: String?) -> Unit,
+    onAddDetailedNotice: (Boolean, String, String, String?) -> Unit,
     onToast: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -883,7 +894,7 @@ private fun OwnerPanel(
     onShowOwnerNotices: () -> Unit,
     onToast: (String) -> Unit,
     onRequireLogin: () -> Unit,
-    onOwnerNotify: (title: String, details: String, copy: String?) -> Unit
+    onOwnerNotify: (String, String, String?) -> Unit
 ) {
     var current by remember { mutableStateOf<String?>(null) }
 
@@ -1048,7 +1059,7 @@ private fun PendingListScreen(
 private fun PendingCardsScreen(
     token: String,
     onBack: () -> Unit,
-    onNotify: (title: String, details: String, copy: String?) -> Unit
+    onNotify: (String, String, String?) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     val clip: ClipboardManager = LocalClipboardManager.current
@@ -1101,7 +1112,7 @@ private fun PendingCardsScreen(
                                 TextButton(onClick = {
                                     scope.launch {
                                         if (apiAdminCardReject(token, c.id)) {
-                                            onNotify("رفض كارت أسيا سيل", "تم رفض الكارت للمستخدم $${c.uid}\nالكارت=${c.cardNumber}", c.cardNumber)
+                                            onNotify("رفض كارت أسيا سيل", "تم رفض الكارت للمستخدم ${c.uid}\nالكارت=${c.cardNumber}", c.cardNumber)
                                             reloadKey++
                                         }
                                     }
@@ -1150,7 +1161,7 @@ private fun PendingCardsScreen(
     }
 }
 
-/* شاشات بسيطة Placeholder */
+/* شاشات Placeholder بسيطة */
 @Composable private fun SimpleInfoScreen(title: String, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1209,6 +1220,140 @@ private fun TopupDeductScreen(
         ) { Text("تنفيذ") }
 
         toast?.let { Spacer(Modifier.height(10.dp)); Text(it, color = OnBg) }
+    }
+}
+
+@Composable
+private fun UsersCountScreen(fetch: suspend () -> Int?, onBack: () -> Unit) {
+    var v by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(Unit) { v = fetch() }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null) }
+            Spacer(Modifier.width(6.dp))
+            Text("عدد المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("القيمة: ${v ?: "..."}", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun UsersBalancesScreen(fetch: suspend () -> Double?, onBack: () -> Unit) {
+    var v by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(Unit) { v = fetch() }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null) }
+            Spacer(Modifier.width(6.dp))
+            Text("رصيد المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("الإجمالي: ${v?.let { "%.2f".format(it) } ?: "..."}$", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun ProviderBalanceScreen(fetch: suspend () -> Double?, onBack: () -> Unit) {
+    var v by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(Unit) { v = fetch() }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null) }
+            Spacer(Modifier.width(6.dp))
+            Text("رصيد المزوّد (API)", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("الرصيد: ${v?.let { "%.2f".format(it) } ?: "..."}$", fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/* =========================
+   الإعدادات + دخول المالك
+   ========================= */
+@Composable
+private fun SettingsDialog(
+    uid: String,
+    ownerMode: Boolean,
+    onOwnerLogin: (String) -> Unit,
+    onOwnerLogout: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val clip: ClipboardManager = LocalClipboardManager.current
+    var showAdminLogin by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
+        title = { Text("الإعدادات") },
+        text = {
+            Column {
+                Text("المعرّف الخاص بك (UID):", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(uid, color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedButton(onClick = { clip.setText(AnnotatedString(uid)) }) { Text("نسخ") }
+                }
+                Spacer(Modifier.height(12.dp))
+                Divider(color = Surface1)
+                Spacer(Modifier.height(12.dp))
+
+                if (ownerMode) {
+                    Text("وضع المالك: مفعل", color = Good, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedButton(onClick = onOwnerLogout) { Text("تسجيل خروج المالك") }
+                } else {
+                    Text("تسجيل المالك (JWT):", fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedButton(onClick = { showAdminLogin = true }) { Text("تسجيل المالك") }
+                }
+            }
+        }
+    )
+
+    if (showAdminLogin) {
+        var pass by remember { mutableStateOf("") }
+        var err by remember { mutableStateOf<String?>(null) }
+        val scope = rememberCoroutineScope()
+
+        AlertDialog(
+            onDismissRequest = { showAdminLogin = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        err = null
+                        val token = apiAdminLogin(pass)
+                        if (token != null) {
+                            onOwnerLogin(token)
+                            showAdminLogin = false
+                        } else {
+                            err = "بيانات غير صحيحة"
+                        }
+                    }
+                }) { Text("تأكيد") }
+            },
+            dismissButton = { TextButton(onClick = { showAdminLogin = false }) { Text("إلغاء") } },
+            title = { Text("كلمة مرور/رمز المالك") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = pass,
+                        onValueChange = { pass = it },
+                        singleLine = true,
+                        label = { Text("أدخل كلمة المرور أو الرمز") },
+                        colors = TextFieldDefaults.outlinedTextFieldColors(
+                            cursorColor = Accent,
+                            focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                            focusedLabelColor = OnBg, unfocusedLabelColor = Dim
+                        )
+                    )
+                    if (err != null) {
+                        Spacer(Modifier.height(6.dp)); Text(err!!, color = Bad, fontSize = 12.sp)
+                    }
+                }
+            }
+        )
     }
 }
 
@@ -1467,4 +1612,14 @@ private suspend fun apiAdminProviderBalance(token: String): Double? {
     val (code, txt) = httpGet(AdminEndpoints.providerBalance, mapOf("x-admin-pass" to token))
     if (code !in 200..299 || txt == null) return null
     return try { JSONObject(txt).optDouble("balance") } catch (_: Exception) { null }
+}
+
+/* ===== دخول المالك (الرمز 2000 مقبول محليًا) ===== */
+private suspend fun apiAdminLogin(password: String): String? {
+    if (password == "2000") return password
+    return try {
+        val headers = mapOf("x-admin-pass" to password)
+        val (code, _) = httpGet(AdminEndpoints.pendingServices, headers = headers)
+        if (code in 200..299) password else null
+    } catch (_: Exception) { null }
 }

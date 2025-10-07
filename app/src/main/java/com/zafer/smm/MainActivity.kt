@@ -1,8 +1,13 @@
-
 @file:Suppress("UnusedImport", "SpellCheckingInspection")
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 
 import android.content.Context
 import android.os.Bundle
@@ -621,13 +626,9 @@ private fun ServiceOrderDialog(
                     label = { Text("الكمية") },
                     singleLine = true,
                     colors = TextFieldDefaults.outlinedTextFieldColors(
-                        focusedTextColor = OnBg,
-                        unfocusedTextColor = OnBg,
                         cursorColor = Accent,
-                        focusedBorderColor = Accent,
-                        unfocusedBorderColor = Dim,
-                        focusedLabelColor = OnBg,
-                        unfocusedLabelColor = Dim
+                        focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                        focusedLabelColor = OnBg, unfocusedLabelColor = Dim
                     )
                 )
                 Spacer(Modifier.height(6.dp))
@@ -636,13 +637,9 @@ private fun ServiceOrderDialog(
                     label = { Text("الرابط (أرسل الرابط وليس اليوزر)") },
                     singleLine = true,
                     colors = TextFieldDefaults.outlinedTextFieldColors(
-                        focusedTextColor = OnBg,
-                        unfocusedTextColor = OnBg,
                         cursorColor = Accent,
-                        focusedBorderColor = Accent,
-                        unfocusedBorderColor = Dim,
-                        focusedLabelColor = OnBg,
-                        unfocusedLabelColor = Dim
+                        focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                        focusedLabelColor = OnBg, unfocusedLabelColor = Dim
                     )
                 )
                 Spacer(Modifier.height(8.dp))
@@ -796,20 +793,18 @@ private fun WalletScreen(
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
                     sending = true
-                    val localUid = uid
-                    val localDigits = digits
                     scope.launch {
-                        val ok = apiSubmitAsiacellCard(localUid, localDigits)
+                        val ok = apiSubmitAsiacellCard(uid, digits)
                         sending = false
                         if (ok) {
                             onAddNotice(AppNotice("تم استلام كارتك", "تم إرسال كارت أسيا سيل إلى المالك للمراجعة.", forOwner = false))
-                            onAddNotice(AppNotice("كارت أسيا سيل جديد", "UID=$localUid | كارت: $localDigits", forOwner = true))
+                            onAddNotice(AppNotice("كارت أسيا سيل جديد", "UID=$uid | كارت: $digits", forOwner = true))
                             onToast("تم إرسال الكارت للمراجعة.")
                             cardNumber = ""
                             askAsiacell = false
                         } else {
                             // خطة بديلة: افتح واتساب برسالة جاهزة إذا فشل الخادم
-                            val msg = "أرغب بشحن الرصيد لرقمي داخل التطبيق.\nUID=$localUid\nكارت أسيا سيل: $localDigits"
+                            val msg = "أرغب بشحن الرصيد لرقمي داخل التطبيق.\nUID=$uid\nكارت أسيا سيل: $digits"
                             uri.openUri(
                                 "https://wa.me/9647763410970?text=" + java.net.URLEncoder.encode(msg, "UTF-8")
                             )
@@ -832,13 +827,9 @@ private fun WalletScreen(
                         singleLine = true,
                         label = { Text("رقم الكارت") },
                         colors = TextFieldDefaults.outlinedTextFieldColors(
-                            focusedTextColor = OnBg,
-                            unfocusedTextColor = OnBg,
                             cursorColor = Accent,
-                            focusedBorderColor = Accent,
-                            unfocusedBorderColor = Dim,
-                            focusedLabelColor = OnBg,
-                            unfocusedLabelColor = Dim
+                            focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                            focusedLabelColor = OnBg, unfocusedLabelColor = Dim
                         )
                     )
                 }
@@ -956,9 +947,7 @@ private fun OwnerPanel(
                                 if (needToken()) return@ElevatedButton
                                 current = key
                             },
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(4.dp),
+                            modifier = Modifier.weight(1f).padding(4.dp),
                             colors = ButtonDefaults.elevatedButtonColors(
                                 containerColor = Accent.copy(alpha = 0.18f),
                                 contentColor = OnBg
@@ -1151,13 +1140,9 @@ private fun TopupDeductScreen(
             onValueChange = { uid = it },
             label = { Text("UID المستخدم") },
             colors = TextFieldDefaults.outlinedTextFieldColors(
-                focusedTextColor = OnBg,
-                unfocusedTextColor = OnBg,
                 cursorColor = Accent,
-                focusedBorderColor = Accent,
-                unfocusedBorderColor = Dim,
-                focusedLabelColor = OnBg,
-                unfocusedLabelColor = Dim
+                focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                focusedLabelColor = OnBg, unfocusedLabelColor = Dim
             )
         )
         Spacer(Modifier.height(8.dp))
@@ -1166,13 +1151,9 @@ private fun TopupDeductScreen(
             onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) amount = s },
             label = { Text("المبلغ") },
             colors = TextFieldDefaults.outlinedTextFieldColors(
-                focusedTextColor = OnBg,
-                unfocusedTextColor = OnBg,
                 cursorColor = Accent,
-                focusedBorderColor = Accent,
-                unfocusedBorderColor = Dim,
-                focusedLabelColor = OnBg,
-                unfocusedLabelColor = Dim
+                focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                focusedLabelColor = OnBg, unfocusedLabelColor = Dim
             )
         )
         Spacer(Modifier.height(8.dp))
@@ -1317,13 +1298,9 @@ private fun SettingsDialog(
                         singleLine = true,
                         label = { Text("أدخل كلمة المرور أو الرمز") },
                         colors = TextFieldDefaults.outlinedTextFieldColors(
-                            focusedTextColor = OnBg,
-                            unfocusedTextColor = OnBg,
                             cursorColor = Accent,
-                            focusedBorderColor = Accent,
-                            unfocusedBorderColor = Dim,
-                            focusedLabelColor = OnBg,
-                            unfocusedLabelColor = Dim
+                            focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                            focusedLabelColor = OnBg, unfocusedLabelColor = Dim
                         )
                     )
                     if (err != null) {
@@ -1374,6 +1351,8 @@ private fun RowScope.NavItem(
    تخزين خفيف محلي (UID/مالك/الإشعارات) + شبكة
    ========================= */
 private fun prefs(ctx: Context) = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+/* PATCH: duplicate loadOrCreateUid removed
+
 
 private fun loadOrCreateUid(ctx: Context): String {
     val sp = prefs(ctx)
@@ -1383,6 +1362,8 @@ private fun loadOrCreateUid(ctx: Context): String {
     sp.edit().putString("uid", fresh).apply()
     return fresh
 }
+*/
+
 
 private fun loadOwnerMode(ctx: Context): Boolean = prefs(ctx).getBoolean("owner_mode", false)
 private fun saveOwnerMode(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("owner_mode", on).apply() }

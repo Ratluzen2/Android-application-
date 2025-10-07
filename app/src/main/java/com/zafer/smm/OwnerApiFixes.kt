@@ -1,7 +1,6 @@
 package com.zafer.smm
 
 import android.content.Context
-import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,13 +21,13 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
 
-// ========== إعدادات أساسية ==========
+// =================== إعدادات أساسية ===================
 object AppCfg {
-    // غيّر العنوان ليطابق هيروكو لديك
+    // حدّث الرابط ليطابق خدمة هيروكو لديك (بدون / في النهاية)
     const val BASE_URL = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com/api"
 }
 
-// ========== أدوات عامة للشبكة (بدون مكتبات إضافية) ==========
+// =================== أدوات الشبكة (GET/POST) ===================
 private suspend fun postJson(
     url: String,
     json: JSONObject,
@@ -49,9 +48,7 @@ private suspend fun postJson(
         }
         val code = conn.responseCode
         val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-        val body = stream?.let {
-            BufferedReader(InputStreamReader(it)).use { br -> br.readText() }
-        } ?: ""
+        val body = stream?.let { BufferedReader(InputStreamReader(it)).use { br -> br.readText() } } ?: ""
         code to body
     } finally {
         conn.disconnect()
@@ -73,90 +70,90 @@ private suspend fun getJson(
     try {
         val code = conn.responseCode
         val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-        val body = stream?.let {
-            BufferedReader(InputStreamReader(it)).use { br -> br.readText() }
-        } ?: ""
+        val body = stream?.let { BufferedReader(InputStreamReader(it)).use { br -> br.readText() } } ?: ""
         code to body
     } finally {
         conn.disconnect()
     }
 }
 
-// ========== UID: إنشاء/تحميل ==========
+// =================== UID: إنشاء/تحميل ===================
 fun loadOrCreateUid(ctx: Context): String {
     val sp = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
     var uid = sp.getString("uid", null)
     if (uid.isNullOrBlank()) {
         uid = UUID.randomUUID().toString().replace("-", "").lowercase()
         sp.edit().putString("uid", uid).apply()
-        // نبلّغ الخادم لإنشاء سجل المستخدم إن لم يوجد
-        try {
-            // fire-and-forget
-            val payload = JSONObject().put("uid", uid)
-            // نرسل على IO بدون انتظار (اختياري)
-        } catch (_: Exception) { }
+        // (اختياري) إبلاغ الخادم بإنشاء المستخدم إن لم يكن موجوداً
+        // يمكنك استدعاء نقطة API عامة هنا إن أردت
     }
     return uid!!
 }
 
-// ========== واجهات API (أدمن) لإضافة/خصم ==========
-suspend fun apiOwnerTopup(baseUrl: String, adminPass: String, uid: String, amount: Double): Result<Double> {
-    val url = "$baseUrl/admin/users/${uid}/topup"
+// =================== واجهات API (أدمن) إضافة/خصم ===================
+suspend fun apiOwnerTopup(
+    baseUrl: String,
+    adminPass: String,
+    uid: String,
+    amount: Double
+): Result<Double> {
+    val url = "$baseUrl/admin/users/$uid/topup"
     val (code, body) = postJson(
         url,
         JSONObject().put("amount", amount),
         headers = mapOf("X-Admin-Pass" to adminPass)
     )
     return if (code in 200..299) {
-        try {
-            val j = JSONObject(body)
-            Result.success(j.getDouble("balance"))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        runCatching { JSONObject(body).getDouble("balance") }
     } else {
         Result.failure(IllegalStateException("HTTP $code: $body"))
     }
 }
 
-suspend fun apiOwnerDeduct(baseUrl: String, adminPass: String, uid: String, amount: Double): Result<Double> {
-    val url = "$baseUrl/admin/users/${uid}/deduct"
+suspend fun apiOwnerDeduct(
+    baseUrl: String,
+    adminPass: String,
+    uid: String,
+    amount: Double
+): Result<Double> {
+    val url = "$baseUrl/admin/users/$uid/deduct"
     val (code, body) = postJson(
         url,
         JSONObject().put("amount", amount),
         headers = mapOf("X-Admin-Pass" to adminPass)
     )
     return if (code in 200..299) {
-        try {
-            val j = JSONObject(body)
-            Result.success(j.getDouble("balance"))
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+        runCatching { JSONObject(body).getDouble("balance") }
     } else {
         Result.failure(IllegalStateException("HTTP $code: $body"))
     }
 }
 
-// ========== واجهة API (مستخدم) لإرسال كارت أسيا سيل ==========
-suspend fun apiSubmitAsiacellCard(baseUrl: String, uid: String, cardNumber: String): Result<Unit> {
+// =================== واجهة API (مستخدم) شحن أسيا سيل ===================
+suspend fun apiSubmitAsiacellCard(
+    baseUrl: String,
+    uid: String,
+    cardNumber: String
+): Result<Unit> {
     val clean = cardNumber.replace(" ", "").replace("-", "")
     if (!clean.all { it.isDigit() } || (clean.length != 14 && clean.length != 16)) {
         return Result.failure(IllegalArgumentException("رقم الكارت يجب أن يكون 14 أو 16 رقمًا"))
     }
     val url = "$baseUrl/wallet/asiacell/submit"
-    val (code, body) = postJson(url, JSONObject().put("uid", uid).put("card_number", clean))
+    val (code, body) = postJson(
+        url,
+        JSONObject().put("uid", uid).put("card_number", clean)
+    )
     return if (code in 200..299) Result.success(Unit)
     else Result.failure(IllegalStateException("HTTP $code: $body"))
 }
 
-// ========== Composables اختيارية لنسخها في الشاشات ==========
+// =================== عناصر واجهة جاهزة للاستخدام ===================
 @Composable
 fun OwnerTopupDeductCard(
     baseUrl: String = AppCfg.BASE_URL,
-    ownerPassProvider: () -> String // أعطه دالة ترجع كلمة مرور الأدمن (مثلاً من SharedPreferences بعد نجاح تسجيل المالك)
+    ownerPassProvider: () -> String // أعد كلمة مرور الأدمن من التخزين لديك بعد تسجيله
 ) {
-    val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var uid by remember { mutableStateOf("") }
     var amountText by remember { mutableStateOf("") }
@@ -170,19 +167,24 @@ fun OwnerTopupDeductCard(
             Text("إدارة الرصيد عبر UID", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
-                value = uid, onValueChange = { uid = it.trim() },
+                value = uid,
+                onValueChange = { uid = it.trim() },
                 label = { Text("UID المستخدم") },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
-                value = amountText, onValueChange = { amountText = it },
+                value = amountText,
+                onValueChange = { amountText = it },
                 label = { Text("المبلغ (دولار)") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 Button(onClick = {
                     val amt = amountText.toDoubleOrNull()
                     val pass = ownerPassProvider()
@@ -226,7 +228,7 @@ fun OwnerTopupDeductCard(
 @Composable
 fun AsiacellRechargeCard(
     baseUrl: String = AppCfg.BASE_URL,
-    uidProvider: () -> String // أعطه دالة ترجع UID (مثلاً loadOrCreateUid(context))
+    uidProvider: () -> String // أعد UID المستخدم (مثلاً من loadOrCreateUid(context))
 ) {
     val scope = rememberCoroutineScope()
     var card by remember { mutableStateOf("") }
@@ -266,7 +268,7 @@ fun AsiacellRechargeCard(
     }
 }
 
-// ========== ألوان النص في شاشة الرصيد ==========
+// =================== عناصر نص رصيد بلون واضح ===================
 @Composable
 fun BalanceLine(label: String, value: String) {
     Row(

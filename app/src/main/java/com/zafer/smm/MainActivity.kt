@@ -1,15 +1,7 @@
 @file:Suppress("UnusedImport", "SpellCheckingInspection")
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
-
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 
 import android.content.Context
 import android.os.Bundle
@@ -43,7 +35,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
@@ -58,29 +49,27 @@ import kotlin.random.Random
    ========================= */
 private const val API_BASE = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
 
-/** مسارات الأدمن — مُعدّلة لتطابق الراوتر الذي شغّلناه في الباكند */
+/** مسارات الأدمن — طابقتها مع الراوتر الذي زوّدتني به */
 private object AdminEndpoints {
-    // القوائم المعلّقة
-    const val pendingServices   = "/api/admin/pending/services" // GET -> { ok, list: [...] }
-    const val pendingItunes     = "/api/admin/pending/itunes"   // GET -> { ok, list: [...] }
-    const val pendingCards      = "/api/admin/pending/cards"    // GET -> { ok, list: [...] }
-    const val pendingPubg       = "/api/admin/pending/pubg"     // GET -> { ok, list: [...] }
-    const val pendingLudo       = "/api/admin/pending/ludo"     // GET -> { ok, list: [...] }
+    const val login             = "/api/admin/login"                // غير مستخدم حاليًا (نستخدم header مباشرة)
+    const val pendingServices   = "/api/admin/pending/services"     // GET
+    const val pendingItunes     = "/api/admin/pending/itunes"       // GET
+    const val pendingTopups     = "/api/admin/pending/cards"        // GET
+    const val pendingPubg       = "/api/admin/pending/pubg"         // GET
+    const val pendingLudo       = "/api/admin/pending/ludo"         // GET
 
-    // تنفيذ/رفض (الخدمات المربوطة بالمزود)
-    fun actApproveService(id: String) = "/api/admin/pending/services/$id/approve" // POST
-    fun actRejectService(id: String)  = "/api/admin/pending/services/$id/reject"  // POST
+    // تنفيذ/رفض/رد رصيد لطلبات الخدمات (الموفّر) — ممررة عبر PendingListScreen للخدمات فقط
+    fun serviceApprove(id: String) = "/api/admin/pending/services/$id/approve"
+    fun serviceReject(id: String)  = "/api/admin/pending/services/$id/reject"
+    // لا يوجد endpoint عام لرد الرصيد بالخادم في الكود الحالي، يُستخدم reject ويرجّع الرصيد
 
-    // رصيد المستخدمين
-    fun topupBalance(uid: String)  = "/api/admin/users/$uid/topup"   // POST {amount}
-    fun deductBalance(uid: String) = "/api/admin/users/$uid/deduct"  // POST {amount}
+    // شحن/خصم رصيد مستخدم
+    fun topup(uid: String)  = "/api/admin/users/$uid/topup"
+    fun deduct(uid: String) = "/api/admin/users/$uid/deduct"
 
-    // إحصائيات
-    const val usersCount        = "/api/admin/users/count"       // GET -> {ok,count}
-    const val usersBalances     = "/api/admin/users/balances"    // GET -> {ok,list:[{uid,balance,...}]}
-
-    // مزوّد
-    const val providerBalance   = "/api/admin/provider/balance"  // GET -> {"ok":true,"balance":...}
+    const val usersCount        = "/api/admin/users/count"          // GET
+    const val usersBalances     = "/api/admin/users/balances"       // GET (قائمة، سنجمعها مجموع)
+    const val providerBalance   = "/api/admin/provider/balance"     // GET
 }
 
 /* =========================
@@ -88,7 +77,7 @@ private object AdminEndpoints {
    ========================= */
 private val Bg       = Color(0xFF0F1113)
 private val Surface1 = Color(0xFF161B20)
-private val OnBg     = Color(0xFFF2F4F7) // أوضح
+private val OnBg     = Color(0xFFF2F4F7)
 private val Accent   = Color(0xFFB388FF)
 private val Good     = Color(0xFF4CAF50)
 private val Bad      = Color(0xFFE53935)
@@ -141,7 +130,7 @@ data class OrderItem(
     val createdAt: Long
 )
 
-/* كتالوج الخدمات المربوطة بـ serviceId */
+/* كتالوج الخدمات */
 private val servicesCatalog = listOf(
     // المتابعين
     ServiceDef("متابعين تيكتوك",   16256,   100, 1_000_000, 3.5, "المتابعين"),
@@ -199,7 +188,7 @@ fun AppRoot() {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var uid by remember { mutableStateOf(loadOrCreateUid(ctx)) }     // من OwnerApiFixes.kt
+    val uid by remember { mutableStateOf(loadOrCreateUid(ctx)) }
     var ownerMode by remember { mutableStateOf(loadOwnerMode(ctx)) }
     var ownerToken by remember { mutableStateOf(loadOwnerToken(ctx)) }
 
@@ -750,10 +739,7 @@ private fun WalletScreen(
 
         // 1) أسيا سيل (كارت)
         ElevatedCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-                .clickable { askAsiacell = true },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { askAsiacell = true },
             colors = CardDefaults.elevatedCardColors(
                 containerColor = Surface1,
                 contentColor = OnBg
@@ -812,7 +798,7 @@ private fun WalletScreen(
                             askAsiacell = false
                         } else {
                             // خطة بديلة: افتح واتساب برسالة جاهزة إذا فشل الخادم
-                            val msg = "أرغب بشحن الرصيد داخل التطبيق.\nUID=$uid\nكارت أسيا سيل: $digits"
+                            val msg = "أرغب بشحن الرصيد لرقمي داخل التطبيق.\nUID=$uid\nكارت أسيا سيل: $digits"
                             uri.openUri(
                                 "https://wa.me/9647763410970?text=" + java.net.URLEncoder.encode(msg, "UTF-8")
                             )
@@ -937,7 +923,7 @@ private fun OwnerPanel(
             val buttons = listOf(
                 "الطلبات المعلقة (الخدمات)" to "pending_services",
                 "طلبات شحن الايتونز"      to "pending_itunes",
-                "الكارتات المعلقة"         to "pending_cards",
+                "الكارتات المعلقة"         to "pending_topups",
                 "طلبات شدات ببجي"         to "pending_pubg",
                 "طلبات لودو المعلقة"       to "pending_ludo",
                 "إضافة الرصيد"             to "topup",
@@ -972,40 +958,40 @@ private fun OwnerPanel(
                     title = "الطلبات المعلقة (الخدمات)",
                     fetch = { apiAdminGetPending(token!!, AdminEndpoints.pendingServices) },
                     actApprove = { id -> apiAdminApproveService(token!!, id) },
-                    actReject  = { id -> apiAdminRejectService(token!!, id) },
-                    actRefund  = { _  -> true }, // لا يوجد Refund مستقل في الراوتر الحالي
+                    actReject = { id -> apiAdminRejectService(token!!, id) },
+                    actRefund = { _ -> true }, // غير متاح افتراضيًا
                     onBack = { current = null }
                 )
                 "pending_itunes" -> PendingListScreen(
                     title = "طلبات شحن الايتونز",
                     fetch = { apiAdminGetPending(token!!, AdminEndpoints.pendingItunes) },
-                    actApprove = { _ -> true }, // التسليم يتم بمسار آخر يتطلب كود؛ هذه شاشة عرض فقط هنا
-                    actReject  = { _ -> true },
-                    actRefund  = { _ -> true },
+                    actApprove = { _ -> true }, // التسليم له endpoints مختلفة
+                    actReject = { _ -> true },
+                    actRefund = { _ -> true },
                     onBack = { current = null }
                 )
-                "pending_cards" -> PendingListScreen(
+                "pending_topups" -> PendingListScreen(
                     title = "الكارتات المعلقة",
-                    fetch = { apiAdminGetPending(token!!, AdminEndpoints.pendingCards) },
-                    actApprove = { _ -> true }, // القبول يحتاج إدخال amount_usd؛ نفّذه من أداة منفصلة لاحقًا
-                    actReject  = { _ -> true },
-                    actRefund  = { _ -> true },
+                    fetch = { apiAdminGetPending(token!!, AdminEndpoints.pendingTopups) },
+                    actApprove = { _ -> true }, // القبول له endpoint خاص بالكارت
+                    actReject = { _ -> true },
+                    actRefund = { _ -> true },
                     onBack = { current = null }
                 )
                 "pending_pubg" -> PendingListScreen(
                     title = "طلبات شدات ببجي",
                     fetch = { apiAdminGetPending(token!!, AdminEndpoints.pendingPubg) },
                     actApprove = { _ -> true },
-                    actReject  = { _ -> true },
-                    actRefund  = { _ -> true },
+                    actReject = { _ -> true },
+                    actRefund = { _ -> true },
                     onBack = { current = null }
                 )
                 "pending_ludo" -> PendingListScreen(
                     title = "طلبات لودو المعلقة",
                     fetch = { apiAdminGetPending(token!!, AdminEndpoints.pendingLudo) },
                     actApprove = { _ -> true },
-                    actReject  = { _ -> true },
-                    actRefund  = { _ -> true },
+                    actReject = { _ -> true },
+                    actRefund = { _ -> true },
                     onBack = { current = null }
                 )
                 "topup" -> TopupDeductScreen(
@@ -1356,21 +1342,39 @@ private fun RowScope.NavItem(
 }
 
 /* =========================
-   تخزين خفيف محلي (UID/مالك/الإشعارات) + شبكة
+   تخزين محلي + شبكة
    ========================= */
-private fun prefs(ctx: Context) = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-// تمت إزالة الدالة المكررة loadOrCreateUid من هذا الملف — استخدم النسخة الموجودة في OwnerApiFixes.kt
+private object PrefKeys {
+    const val FILE = "app_prefs"
+    const val UID  = "uid"
+    const val OWNER_MODE  = "owner_mode"
+    const val OWNER_TOKEN = "owner_token"
+    const val NOTICES     = "notices_json"
+}
 
-private fun loadOwnerMode(ctx: Context): Boolean = prefs(ctx).getBoolean("owner_mode", false)
-private fun saveOwnerMode(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("owner_mode", on).apply() }
+private fun prefs(ctx: Context) = ctx.getSharedPreferences(PrefKeys.FILE, Context.MODE_PRIVATE)
 
-private fun loadOwnerToken(ctx: Context): String? = prefs(ctx).getString("owner_token", null)
+/** دمجنا الدالة هنا — احذف OwnerApiFixes.kt لتجنّب التعارض */
+fun loadOrCreateUid(ctx: Context): String {
+    val sp = prefs(ctx)
+    val existing = sp.getString(PrefKeys.UID, null)
+    if (!existing.isNullOrBlank()) return existing
+
+    val fresh = "U" + (100000..999999).random(Random(System.currentTimeMillis()))
+    sp.edit().putString(PrefKeys.UID, fresh).apply()
+    return fresh
+}
+
+private fun loadOwnerMode(ctx: Context): Boolean = prefs(ctx).getBoolean(PrefKeys.OWNER_MODE, false)
+private fun saveOwnerMode(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean(PrefKeys.OWNER_MODE, on).apply() }
+
+private fun loadOwnerToken(ctx: Context): String? = prefs(ctx).getString(PrefKeys.OWNER_TOKEN, null)
 private fun saveOwnerToken(ctx: Context, token: String?) {
-    prefs(ctx).edit().putString("owner_token", token).apply()
+    prefs(ctx).edit().putString(PrefKeys.OWNER_TOKEN, token).apply()
 }
 
 private fun loadNotices(ctx: Context): List<AppNotice> {
-    val raw = prefs(ctx).getString("notices_json", "[]") ?: "[]"
+    val raw = prefs(ctx).getString(PrefKeys.NOTICES, "[]") ?: "[]"
     return try {
         val arr = JSONArray(raw)
         (0 until arr.length()).map { i ->
@@ -1394,7 +1398,7 @@ private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
         o.put("forOwner", it.forOwner)
         arr.put(o)
     }
-    prefs(ctx).edit().putString("notices_json", arr.toString()).apply()
+    prefs(ctx).edit().putString(PrefKeys.NOTICES, arr.toString()).apply()
 }
 
 /* ===== شبكة عامة صغيرة ===== */
@@ -1478,18 +1482,16 @@ private suspend fun apiCreateProviderOrder(
 
 /* طلب يدوي */
 private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
-    val body = JSONObject()
-        .put("uid", uid)
-        .put("title", name)
+    val body = JSONObject().put("uid", uid).put("title", name)
     val (code, txt) = httpPost("/api/orders/create/manual", body)
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
-/* إرسال كارت أسيا سيل — مفتاح JSON مُصحح: card_number */
+/* إرسال كارت أسيا سيل */
 private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
     val (code, txt) = httpPost(
         "/api/wallet/asiacell/submit",
-        JSONObject().put("uid", uid).put("card_number", card)
+        JSONObject().put("uid", uid).put("card", card)
     )
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
@@ -1499,7 +1501,11 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
     val (code, txt) = httpGet("/api/orders/my?uid=$uid")
     if (code !in 200..299 || txt == null) return null
     return try {
-        val arr = JSONArray(txt)
+        // نقبل إمّا Array مباشرة أو Object فيه list
+        val arr = try { JSONArray(txt) } catch (_: Exception) {
+            val root = JSONObject(txt)
+            root.optJSONArray("list") ?: JSONArray()
+        }
         (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             OrderItem(
@@ -1523,9 +1529,10 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
 
 /* دخول المالك */
 private suspend fun apiAdminLogin(password: String): String? {
-    // قبول الرمز 2000 محلياً
+    // نقبل الرمز 2000 محلياً ونستخدمه كـ x-admin-pass لجميع نداءات لوحة المالك
     if (password == "2000") return password
-    // فحص سريع ضد الخادم:
+
+    // محاولة تحقق سريعة من الخادم إن كان الرمز مختلفاً:
     return try {
         val headers = mapOf("x-admin-pass" to password)
         val (code, _) = httpGet(AdminEndpoints.pendingServices, headers = headers)
@@ -1535,24 +1542,22 @@ private suspend fun apiAdminLogin(password: String): String? {
     }
 }
 
-/* جلب المعلّقات — يدعم ردّ {ok,list:[]} أو [] مباشرة */
+/* جلب المعلّقات (عام) */
 private suspend fun apiAdminGetPending(token: String, endpoint: String): List<OrderItem>? {
     val (code, txt) = httpGet(endpoint, headers = mapOf("x-admin-pass" to token))
     if (code !in 200..299 || txt == null) return null
     return try {
-        val root = JSONObject(txt)
-        val arr: JSONArray = when {
-            root.has("list") -> root.getJSONArray("list")
-            else -> JSONArray(txt)
+        val arr = try { JSONArray(txt) } catch (_: Exception) {
+            JSONObject(txt).optJSONArray("list") ?: JSONArray()
         }
         (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             OrderItem(
-                id = o.optString("id", o.optString("order_id", o.optString("oid", ""))),
-                title = o.optString("title", o.optString("service_key", "طلب")),
+                id = o.optString("id", o.optString("order_id", "")),
+                title = o.optString("title"),
                 quantity = o.optInt("quantity", o.optInt("qty", 0)),
                 price = o.optDouble("price", 0.0),
-                linkOrPayload = o.optString("link", o.optString("payload", "")),
+                linkOrPayload = o.optString("payload", o.optString("link", "")),
                 status = OrderStatus.Pending,
                 createdAt = o.optLong("created_at", System.currentTimeMillis())
             )
@@ -1560,20 +1565,20 @@ private suspend fun apiAdminGetPending(token: String, endpoint: String): List<Or
     } catch (_: Exception) { null }
 }
 
-/* إجراءات الخدمات (تنفيذ/رفض) */
+/* إجراءات على طلبات الخدمات (service_orders) */
 private suspend fun apiAdminApproveService(token: String, id: String): Boolean {
-    val (code, _) = httpPost(AdminEndpoints.actApproveService(id), JSONObject(), mapOf("x-admin-pass" to token))
+    val (code, _) = httpPost(AdminEndpoints.serviceApprove(id), JSONObject(), mapOf("x-admin-pass" to token))
     return code in 200..299
 }
 private suspend fun apiAdminRejectService(token: String, id: String): Boolean {
-    val (code, _) = httpPost(AdminEndpoints.actRejectService(id), JSONObject(), mapOf("x-admin-pass" to token))
+    val (code, _) = httpPost(AdminEndpoints.serviceReject(id), JSONObject(), mapOf("x-admin-pass" to token))
     return code in 200..299
 }
 
-/* شحن/خصم رصيد — مسارات مُصححة */
+/* شحن/خصم رصيد */
 private suspend fun apiAdminTopup(token: String, uid: String, amount: Double): Boolean {
     val (code, _) = httpPost(
-        AdminEndpoints.topupBalance(uid),
+        AdminEndpoints.topup(uid),
         JSONObject().put("amount", amount),
         mapOf("x-admin-pass" to token)
     )
@@ -1581,14 +1586,14 @@ private suspend fun apiAdminTopup(token: String, uid: String, amount: Double): B
 }
 private suspend fun apiAdminDeduct(token: String, uid: String, amount: Double): Boolean {
     val (code, _) = httpPost(
-        AdminEndpoints.deductBalance(uid),
+        AdminEndpoints.deduct(uid),
         JSONObject().put("amount", amount),
         mapOf("x-admin-pass" to token)
     )
     return code in 200..299
 }
 
-/* إحصائيات (توافق الرد) */
+/* إحصائيات */
 private suspend fun apiAdminUsersCount(token: String): Int? {
     val (code, txt) = httpGet(AdminEndpoints.usersCount, mapOf("x-admin-pass" to token))
     if (code !in 200..299 || txt == null) return null
@@ -1598,16 +1603,19 @@ private suspend fun apiAdminUsersBalances(token: String): Double? {
     val (code, txt) = httpGet(AdminEndpoints.usersBalances, mapOf("x-admin-pass" to token))
     if (code !in 200..299 || txt == null) return null
     return try {
+        // الخادم يعيد list من {uid,balance} — سنجمعها
         val root = JSONObject(txt)
-        if (root.has("total")) root.optDouble("total")
-        else {
-            val arr = root.optJSONArray("list") ?: JSONArray()
-            (0 until arr.length()).sumOf { i -> arr.getJSONObject(i).optDouble("balance", 0.0) }
-        }
+        val arr = root.optJSONArray("list") ?: JSONArray()
+        var sum = 0.0
+        for (i in 0 until arr.length()) sum += arr.getJSONObject(i).optDouble("balance", 0.0)
+        sum
     } catch (_: Exception) { null }
 }
 private suspend fun apiAdminProviderBalance(token: String): Double? {
     val (code, txt) = httpGet(AdminEndpoints.providerBalance, mapOf("x-admin-pass" to token))
     if (code !in 200..299 || txt == null) return null
-    return try { JSONObject(txt).optDouble("balance") } catch (_: Exception) { null }
+    return try {
+        val root = JSONObject(txt)
+        root.optDouble("balance", root.optDouble("data", 0.0))
+    } catch (_: Exception) { null }
 }

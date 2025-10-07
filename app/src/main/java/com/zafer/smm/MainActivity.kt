@@ -181,7 +181,7 @@ fun AppRoot() {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var uid by remember { mutableStateOf(loadOrCreateUid(ctx)) } // من OwnerApiFixes.kt
+    var uid by remember { mutableStateOf(loadOrCreateUid(ctx)) } // الدالة مضمّنة أسفل الملف
     var ownerMode by remember { mutableStateOf(loadOwnerMode(ctx)) }
     var ownerToken by remember { mutableStateOf(loadOwnerToken(ctx)) }
 
@@ -206,7 +206,7 @@ fun AppRoot() {
         }
     }
 
-    // >>> التعديل لضمان لون نص أبيض بشكل افتراضي عبر كل الشاشات <<<
+    // نجعل اللون الافتراضي للنصوص أبيض عبر كل الشاشات
     CompositionLocalProvider(LocalContentColor provides OnBg) {
         Box(
             modifier = Modifier
@@ -308,7 +308,7 @@ fun AppRoot() {
                 onDismiss = { showNoticeCenter = false }
             )
         }
-    } // <<< نهاية التعديل >>>
+    }
 }
 
 /* =========================
@@ -1338,6 +1338,16 @@ private fun RowScope.NavItem(
    تخزين محلي + شبكة
    ========================= */
 private fun prefs(ctx: Context) = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+
+/** تم تضمين الدالة هنا حتى لا تحتاج أي ملف آخر */
+private fun loadOrCreateUid(ctx: Context): String {
+    val sp = prefs(ctx)
+    val existing = sp.getString("uid", null)
+    if (existing != null) return existing
+    val fresh = "U" + (100000..999999).random(Random(System.currentTimeMillis()))
+    sp.edit().putString("uid", fresh).apply()
+    return fresh
+}
 
 private fun loadOwnerMode(ctx: Context): Boolean = prefs(ctx).getBoolean("owner_mode", false)
 private fun saveOwnerMode(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("owner_mode", on).apply() }

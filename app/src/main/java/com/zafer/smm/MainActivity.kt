@@ -5,7 +5,6 @@ package com.zafer.smm
 
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,7 +42,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
@@ -60,7 +58,7 @@ private const val API_BASE = "https://ratluzen-smm-backend-e12a704bf3c1.herokuap
 
 /** مسارات الأدمن — تطابق باكندك الحالي */
 private object AdminEndpoints {
-    // PENDING
+    // Pending lists
     const val pendingServices = "/api/admin/pending/services"
     const val pendingCards    = "/api/admin/pending/cards"
     const val pendingItunes   = "/api/admin/pending/itunes"
@@ -68,23 +66,21 @@ private object AdminEndpoints {
     const val pendingPubg     = "/api/admin/pending/pubg"
     const val pendingLudo     = "/api/admin/pending/ludo"
 
-    // خدمات (approve/reject)
+    // Services approve/reject
     fun approveService(id: String) = "/api/admin/pending/services/$id/approve"
     fun rejectService(id: String)  = "/api/admin/pending/services/$id/reject"
 
-    // كروت أسيا سيل (accept/reject)
+    // Asiacell cards accept/reject
     fun acceptCard(id: String)     = "/api/admin/pending/cards/$id/accept"
     fun rejectCard(id: String)     = "/api/admin/pending/cards/$id/reject"
 
-    // رصيد المستخدم
+    // User balance
     fun topup(uid: String)  = "/api/admin/users/$uid/topup"
     fun deduct(uid: String) = "/api/admin/users/$uid/deduct"
 
-    // إحصائيات
-    const val usersCount     = "/api/admin/users/count"
-    const val usersBalances  = "/api/admin/users/balances"
-
-    // مزود
+    // Stats & provider
+    const val usersCount      = "/api/admin/users/count"
+    const val usersBalances   = "/api/admin/users/balances"
     const val providerBalance = "/api/admin/provider/balance"
 }
 
@@ -1059,7 +1055,7 @@ private fun PendingListScreen(
     }
 }
 
-/* شاشة الكارتات المعلّقة (تُظهر رقم الكارت + نسخ + تنفيذ مع إدخال مبلغ) */
+/* شاشة الكارتات المعلّقة */
 @Composable
 private fun PendingCardsScreen(token: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -1129,7 +1125,6 @@ private fun PendingCardsScreen(token: String, onBack: () -> Unit) {
         }
     }
 
-    // حوار إدخال مبلغ الشحن عند التنفيذ
     askAmountForId?.let { id ->
         AlertDialog(
             onDismissRequest = { if (!sending) askAmountForId = null },
@@ -1140,10 +1135,7 @@ private fun PendingCardsScreen(token: String, onBack: () -> Unit) {
                     scope.launch {
                         val ok = apiAdminCardAccept(token, id, amt)
                         sending = false
-                        if (ok) {
-                            askAmountForId = null
-                            reloadKey++
-                        }
+                        if (ok) { askAmountForId = null; reloadKey++ }
                     }
                 }) { Text(if (sending) "يرسل..." else "تأكيد") }
             },
@@ -1180,7 +1172,7 @@ private fun SimpleInfoScreen(title: String, onBack: () -> Unit) {
     }
 }
 
-/* شاشات إحصائية */
+/* شاشات إحصائية وأوامر رصيد */
 @Composable
 private fun TopupDeductScreen(
     title: String,
@@ -1225,10 +1217,7 @@ private fun TopupDeductScreen(
         Button(
             onClick = {
                 val a = amount.toDoubleOrNull() ?: return@Button
-                scope.launch {
-                    val ok = onSubmit(uid, a)
-                    toast = if (ok) "تم بنجاح" else "فشل التنفيذ"
-                }
+                scope.launch { toast = if (onSubmit(uid, a)) "تم بنجاح" else "فشل التنفيذ" }
             },
             colors = ButtonDefaults.buttonColors(
                 containerColor = Accent,
@@ -1289,95 +1278,6 @@ private fun ProviderBalanceScreen(fetch: suspend () -> Double?, onBack: () -> Un
 }
 
 /* =========================
-   الإعدادات + دخول المالك
-   ========================= */
-@Composable
-private fun SettingsDialog(
-    uid: String,
-    ownerMode: Boolean,
-    onOwnerLogin: (token: String) -> Unit,
-    onOwnerLogout: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val clip: ClipboardManager = LocalClipboardManager.current
-    var showAdminLogin by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
-        title = { Text("الإعدادات") },
-        text = {
-            Column {
-                Text("المعرّف الخاص بك (UID):", fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(uid, color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedButton(onClick = { clip.setText(AnnotatedString(uid)) }) { Text("نسخ") }
-                }
-                Spacer(Modifier.height(12.dp))
-                Divider(color = Surface1)
-                Spacer(Modifier.height(12.dp))
-
-                if (ownerMode) {
-                    Text("وضع المالك: مفعل", color = Good, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedButton(onClick = onOwnerLogout) { Text("تسجيل خروج المالك") }
-                } else {
-                    Text("تسجيل المالك (JWT):", fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedButton(onClick = { showAdminLogin = true }) { Text("تسجيل المالك") }
-                }
-            }
-        }
-    )
-
-    if (showAdminLogin) {
-        var pass by remember { mutableStateOf("") }
-        var err by remember { mutableStateOf<String?>(null) }
-        val scope = rememberCoroutineScope()
-
-        AlertDialog(
-            onDismissRequest = { showAdminLogin = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        err = null
-                        val token = apiAdminLogin(pass)
-                        if (token != null) {
-                            onOwnerLogin(token)
-                            showAdminLogin = false
-                        } else {
-                            err = "بيانات غير صحيحة"
-                        }
-                    }
-                }) { Text("تأكيد") }
-            },
-            dismissButton = { TextButton(onClick = { showAdminLogin = false }) { Text("إلغاء") } },
-            title = { Text("كلمة مرور/رمز المالك") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = pass,
-                        onValueChange = { pass = it },
-                        singleLine = true,
-                        label = { Text("أدخل كلمة المرور أو الرمز") },
-                        colors = TextFieldDefaults.outlinedTextFieldColors(
-                            cursorColor = Accent,
-                            focusedBorderColor = Accent, unfocusedBorderColor = Dim,
-                            focusedLabelColor = OnBg, unfocusedLabelColor = Dim
-                        )
-                    )
-                    if (err != null) {
-                        Spacer(Modifier.height(6.dp)); Text(err!!, color = Bad, fontSize = 12.sp)
-                    }
-                }
-            }
-        )
-    }
-}
-
-/* =========================
    شريط سفلي
    ========================= */
 @Composable
@@ -1416,6 +1316,16 @@ private fun RowScope.NavItem(
    تخزين محلي + شبكة
    ========================= */
 private fun prefs(ctx: Context) = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+
+/** مدموج هنا لتجنّب أي تعارضات ملفات خارجية */
+private fun loadOrCreateUid(ctx: Context): String {
+    val sp = prefs(ctx)
+    val existing = sp.getString("uid", null)
+    if (existing != null) return existing
+    val fresh = "U" + (100000..999999).random(Random(System.currentTimeMillis()))
+    sp.edit().putString("uid", fresh).apply()
+    return fresh
+}
 
 private fun loadOwnerMode(ctx: Context): Boolean = prefs(ctx).getBoolean("owner_mode", false)
 private fun saveOwnerMode(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("owner_mode", on).apply() }
@@ -1578,9 +1488,7 @@ private suspend fun apiAdminLogin(password: String): String? {
         val headers = mapOf("x-admin-pass" to password)
         val (code, _) = httpGet(AdminEndpoints.pendingServices, headers = headers)
         if (code in 200..299) password else null
-    } catch (_: Exception) {
-        null
-    }
+    } catch (_: Exception) { null }
 }
 
 /* معلّقات الخدمات — يقرأ {ok,list} */
@@ -1627,7 +1535,7 @@ private suspend fun apiAdminCardsPending(token: String): List<PendingCardItem>? 
             PendingCardItem(
                 id = o.optString("id"),
                 uid = o.optString("uid"),
-                cardNumber = o.optString("card_number"),
+                cardNumber = o.optString("card_number", o.optString("card")), // دعم كلا الاسمين
                 createdAt = o.optLong("created_at")
             )
         }
@@ -1642,7 +1550,7 @@ private suspend fun apiAdminCardReject(token: String, id: String): Boolean {
     return code in 200..299
 }
 
-/* شحن/خصم رصيد (تصحيح المسارات) */
+/* شحن/خصم رصيد */
 private suspend fun apiAdminTopup(token: String, uid: String, amount: Double): Boolean {
     val (code, _) = httpPost(AdminEndpoints.topup(uid), JSONObject().put("amount", amount), mapOf("x-admin-pass" to token))
     return code in 200..299

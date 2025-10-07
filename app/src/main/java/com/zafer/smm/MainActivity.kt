@@ -1,4 +1,5 @@
 @file:Suppress("UnusedImport", "SpellCheckingInspection")
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
 

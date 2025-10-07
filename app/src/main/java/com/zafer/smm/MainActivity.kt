@@ -72,22 +72,25 @@ private object AdminEndpoints {
 }
 
 /* =========================
-   Theme
+   Theme (تحسين التباين)
    ========================= */
-private val Bg       = Color(0xFF111315)
-private val Surface1 = Color(0xFF1A1F24)
-private val OnBg     = Color(0xFFEDEFF2)
+private val Bg       = Color(0xFF0F1113)
+private val Surface1 = Color(0xFF161B20)
+private val OnBg     = Color(0xFFF2F4F7) // أوضح
 private val Accent   = Color(0xFFB388FF)
 private val Good     = Color(0xFF4CAF50)
 private val Bad      = Color(0xFFE53935)
-private val Dim      = Color(0xFF9AA3AB)
+private val Dim      = Color(0xFFAAB3BB)
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            background = Bg, surface = Surface1, primary = Accent,
-            onBackground = OnBg, onSurface = OnBg
+            background = Bg,
+            surface = Surface1,
+            primary = Accent,
+            onBackground = OnBg,
+            onSurface = OnBg
         ),
         content = content
     )
@@ -318,9 +321,13 @@ fun AppRoot() {
 @Composable
 private fun HomeScreen() {
     Box(
-        Modifier.fillMaxSize().background(Bg),
+        Modifier
+            .fillMaxSize()
+            .background(Bg),
         contentAlignment = Alignment.Center
-    ) { Text("مرحبًا بك 👋", color = OnBg, fontSize = 18.sp) }
+    ) {
+        Text("مرحبًا بك 👋", color = OnBg, fontSize = 18.sp)
+    }
 }
 
 @Composable
@@ -353,7 +360,10 @@ private fun ContactCard(
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
-        colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = Surface1,
+            contentColor = OnBg
+        )
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = Accent, modifier = Modifier.size(28.dp))
@@ -466,7 +476,10 @@ private fun ServicesScreen(
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
                         .clickable { selectedCategory = cat },
-                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+                    colors = CardDefaults.elevatedCardColors(
+                        containerColor = Surface1,
+                        contentColor = OnBg
+                    )
                 ) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.ChevronLeft, null, tint = Accent)
@@ -506,7 +519,10 @@ private fun ServicesScreen(
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
                         .clickable { selectedService = svc },
-                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+                    colors = CardDefaults.elevatedCardColors(
+                        containerColor = Surface1,
+                        contentColor = OnBg
+                    )
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text(svc.uiKey, fontWeight = FontWeight.SemiBold)
@@ -601,13 +617,23 @@ private fun ServiceOrderDialog(
                     value = qtyText,
                     onValueChange = { s -> if (s.all { it.isDigit() }) qtyText = s },
                     label = { Text("الكمية") },
-                    singleLine = true
+                    singleLine = true,
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        textColor = OnBg, cursorColor = Accent,
+                        focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                        focusedLabelColor = OnBg, unfocusedLabelColor = Dim
+                    )
                 )
                 Spacer(Modifier.height(6.dp))
                 OutlinedTextField(
                     value = link, onValueChange = { link = it },
                     label = { Text("الرابط (أرسل الرابط وليس اليوزر)") },
-                    singleLine = true
+                    singleLine = true,
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        textColor = OnBg, cursorColor = Accent,
+                        focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                        focusedLabelColor = OnBg, unfocusedLabelColor = Dim
+                    )
                 )
                 Spacer(Modifier.height(8.dp))
                 Text("السعر التقريبي: $price\$", fontWeight = FontWeight.SemiBold)
@@ -663,7 +689,10 @@ private fun ManualSectionsScreen(
                             }
                         }
                     },
-                colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = Surface1,
+                    contentColor = OnBg
+                )
             ) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.ChevronLeft, null, tint = Accent)
@@ -685,6 +714,7 @@ private fun WalletScreen(
     onToast: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    val uri = LocalUriHandler.current
     var balance by remember { mutableStateOf<Double?>(null) }
     var askAsiacell by remember { mutableStateOf(false) }
     var cardNumber by remember { mutableStateOf("") }
@@ -697,7 +727,11 @@ private fun WalletScreen(
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("رصيدي", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        Text("الرصيد الحالي: ${balance?.let { "%.2f".format(it) } ?: "..."}$", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Text(
+            "الرصيد الحالي: ${balance?.let { "%.2f".format(it) } ?: "..."}$",
+            fontSize = 18.sp,
+            fontWeight = FontWeight.SemiBold
+        )
         Spacer(Modifier.height(16.dp))
         Text("طرق الشحن:", fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
@@ -705,7 +739,10 @@ private fun WalletScreen(
         // 1) أسيا سيل (كارت)
         ElevatedCard(
             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { askAsiacell = true },
-            colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = Surface1,
+                contentColor = OnBg
+            )
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.SimCard, null, tint = Accent)
@@ -727,7 +764,10 @@ private fun WalletScreen(
                     onToast("لإتمام الشحن تواصل مع الدعم (واتساب/تيليجرام).")
                     onAddNotice(AppNotice("شحن رصيد", "يرجى التواصل مع الدعم لإكمال شحن: $it", forOwner = false))
                 },
-                colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = Surface1,
+                    contentColor = OnBg
+                )
             ) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.AttachMoney, null, tint = Accent)
@@ -756,7 +796,14 @@ private fun WalletScreen(
                             cardNumber = ""
                             askAsiacell = false
                         } else {
-                            onToast("تعذر إرسال الكارت. حاول مجددًا.")
+                            // خطة بديلة: افتح واتساب برسالة جاهزة إذا فشل الخادم
+                            val msg = "أرغب بشحن الرصيد لرقمي داخل التطبيق.\nUID=$uid\nكارت أسيا سيل: $digits"
+                            uri.openUri(
+                                "https://wa.me/9647763410970?text=" + java.net.URLEncoder.encode(msg, "UTF-8")
+                            )
+                            onToast("تعذر الاتصال بالخادم — تم فتح واتساب لإرسال الكارت للدعم.")
+                            cardNumber = ""
+                            askAsiacell = false
                         }
                     }
                 }) { Text(if (sending) "يرسل..." else "إرسال") }
@@ -771,7 +818,12 @@ private fun WalletScreen(
                         value = cardNumber,
                         onValueChange = { s -> if (s.all { it.isDigit() }) cardNumber = s },
                         singleLine = true,
-                        label = { Text("رقم الكارت") }
+                        label = { Text("رقم الكارت") },
+                        colors = TextFieldDefaults.outlinedTextFieldColors(
+                            textColor = OnBg, cursorColor = Accent,
+                            focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                            focusedLabelColor = OnBg, unfocusedLabelColor = Dim
+                        )
                     )
                 }
             }
@@ -811,7 +863,10 @@ private fun OrdersScreen(uid: String) {
                     items(orders!!) { o ->
                         ElevatedCard(
                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                            colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+                            colors = CardDefaults.elevatedCardColors(
+                                containerColor = Surface1,
+                                contentColor = OnBg
+                            )
                         ) {
                             Column(Modifier.padding(16.dp)) {
                                 Text(o.title, fontWeight = FontWeight.SemiBold)
@@ -887,7 +942,8 @@ private fun OwnerPanel(
                             },
                             modifier = Modifier.weight(1f).padding(4.dp),
                             colors = ButtonDefaults.elevatedButtonColors(
-                                containerColor = Surface1, contentColor = OnBg
+                                containerColor = Accent.copy(alpha = 0.18f),
+                                contentColor = OnBg
                             )
                         ) { Text(title, fontSize = 12.sp) }
                     }
@@ -1006,7 +1062,10 @@ private fun PendingListScreen(
                 items(list!!) { o ->
                     ElevatedCard(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = Surface1,
+                            contentColor = OnBg
+                        )
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Text(o.title, fontWeight = FontWeight.SemiBold)
@@ -1069,17 +1128,41 @@ private fun TopupDeductScreen(
         }
         Spacer(Modifier.height(10.dp))
 
-        OutlinedTextField(value = uid, onValueChange = { uid = it }, label = { Text("UID المستخدم") })
+        OutlinedTextField(
+            value = uid,
+            onValueChange = { uid = it },
+            label = { Text("UID المستخدم") },
+            colors = TextFieldDefaults.outlinedTextFieldColors(
+                textColor = OnBg, cursorColor = Accent,
+                focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                focusedLabelColor = OnBg, unfocusedLabelColor = Dim
+            )
+        )
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = amount, onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) amount = s }, label = { Text("المبلغ") })
+        OutlinedTextField(
+            value = amount,
+            onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) amount = s },
+            label = { Text("المبلغ") },
+            colors = TextFieldDefaults.outlinedTextFieldColors(
+                textColor = OnBg, cursorColor = Accent,
+                focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                focusedLabelColor = OnBg, unfocusedLabelColor = Dim
+            )
+        )
         Spacer(Modifier.height(8.dp))
-        Button(onClick = {
-            val a = amount.toDoubleOrNull() ?: return@Button
-            scope.launch {
-                val ok = onSubmit(uid, a)
-                toast = if (ok) "تم بنجاح" else "فشل التنفيذ"
-            }
-        }) { Text("تنفيذ") }
+        Button(
+            onClick = {
+                val a = amount.toDoubleOrNull() ?: return@Button
+                scope.launch {
+                    val ok = onSubmit(uid, a)
+                    toast = if (ok) "تم بنجاح" else "فشل التنفيذ"
+                }
+            },
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Accent,
+                contentColor = Color.Black
+            )
+        ) { Text("تنفيذ") }
 
         toast?.let {
             Spacer(Modifier.height(10.dp))
@@ -1206,7 +1289,12 @@ private fun SettingsDialog(
                         value = pass,
                         onValueChange = { pass = it },
                         singleLine = true,
-                        label = { Text("أدخل كلمة المرور أو الرمز") }
+                        label = { Text("أدخل كلمة المرور أو الرمز") },
+                        colors = TextFieldDefaults.outlinedTextFieldColors(
+                            textColor = OnBg, cursorColor = Accent,
+                            focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                            focusedLabelColor = OnBg, unfocusedLabelColor = Dim
+                        )
                     )
                     if (err != null) {
                         Spacer(Modifier.height(6.dp)); Text(err!!, color = Bad, fontSize = 12.sp)
@@ -1478,24 +1566,30 @@ private suspend fun apiAdminRefund(token: String, id: String): Boolean {
 
 /* شحن/خصم رصيد */
 private suspend fun apiAdminTopup(token: String, uid: String, amount: Double): Boolean {
-    val (code, _) = httpPost(AdminEndpoints.topupBalance, JSONObject().put("uid", uid).put("amount", amount),
-        mapOf("x-admin-pass" to token))
+    val (code, _) = httpPost(
+        AdminEndpoints.topupBalance,
+        JSONObject().put("uid", uid).put("amount", amount),
+        mapOf("x-admin-pass" to token)
+    )
     return code in 200..299
 }
 private suspend fun apiAdminDeduct(token: String, uid: String, amount: Double): Boolean {
-    val (code, _) = httpPost(AdminEndpoints.deductBalance, JSONObject().put("uid", uid).put("amount", amount),
-        mapOf("x-admin-pass" to token))
+    val (code, _) = httpPost(
+        AdminEndpoints.deductBalance,
+        JSONObject().put("uid", uid).put("amount", amount),
+        mapOf("x-admin-pass" to token)
+    )
     return code in 200..299
 }
 
-/* إحصائيات */
+/* إحصائيات (ثبّت الترويسة الصحيحة) */
 private suspend fun apiAdminUsersCount(token: String): Int? {
-    val (code, txt) = httpGet(AdminEndpoints.usersCount, mapOf("Authorization" to "Bearer $token"))
+    val (code, txt) = httpGet(AdminEndpoints.usersCount, mapOf("x-admin-pass" to token))
     if (code !in 200..299 || txt == null) return null
     return try { JSONObject(txt).optInt("count") } catch (_: Exception) { null }
 }
 private suspend fun apiAdminUsersBalances(token: String): Double? {
-    val (code, txt) = httpGet(AdminEndpoints.usersBalances, mapOf("Authorization" to "Bearer $token"))
+    val (code, txt) = httpGet(AdminEndpoints.usersBalances, mapOf("x-admin-pass" to token))
     if (code !in 200..299 || txt == null) return null
     return try { JSONObject(txt).optDouble("total") } catch (_: Exception) { null }
 }

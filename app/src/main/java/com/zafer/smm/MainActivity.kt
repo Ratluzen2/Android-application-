@@ -48,7 +48,7 @@ import kotlin.random.Random
    ========================= */
 private const val API_BASE = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
 
-/** مسارات الأدمن المتوافقة مع السيرفر الذي أعطيتني إياه */
+/** مسارات الأدمن */
 private object AdminEndpoints {
     // قوائم المعلّق
     const val pendingServices = "/api/admin/pending/services"
@@ -65,11 +65,11 @@ private object AdminEndpoints {
     fun cardsAccept(id: String)     = "/api/admin/pending/cards/$id/accept"
     fun cardsReject(id: String)     = "/api/admin/pending/cards/$id/reject"
 
+    fun itunesDeliver(id: String)   = "/api/admin/pending/itunes/$id/deliver"   // NEW
+    fun itunesReject(id: String)    = "/api/admin/pending/itunes/$id/reject"    // NEW
+
     fun pubgDeliver(id: String)     = "/api/admin/pending/pubg/$id/deliver"
     fun pubgReject(id: String)      = "/api/admin/pending/pubg/$id/reject"
-
-    fun ludoDeliver(id: String)     = "/api/admin/pending/ludo/$id/deliver"
-    fun ludoReject(id: String)      = "/api/admin/pending/ludo/$id/reject"
 
     // رصيد المستخدم
     fun topup(uid: String)          = "/api/admin/users/$uid/topup"
@@ -82,7 +82,7 @@ private object AdminEndpoints {
 }
 
 /* =========================
-   Theme (تحسين التباين)
+   Theme
    ========================= */
 private val Bg       = Color(0xFF0F1113)
 private val Surface1 = Color(0xFF161B20)
@@ -914,7 +914,7 @@ private fun OwnerPanel(
         if (current == null) {
             val buttons = listOf(
                 "الطلبات المعلقة (الخدمات)" to "pending_services",
-                "طلبات شحن الايتونز"      to "pending_itunes",   // ← أُعيد زر الايتونز
+                "طلبات شحن الايتونز"      to "pending_itunes",   // موجود
                 "الكارتات المعلقة"         to "pending_cards",
                 "طلبات شدات ببجي"         to "pending_pubg",
                 "طلبات لودو المعلقة"       to "pending_ludo",
@@ -952,27 +952,30 @@ private fun OwnerPanel(
                     actReject  = { id -> apiAdminRejectService(token!!, id) },
                     actRefund  = { id -> apiAdminRejectService(token!!, id) },
                     approveWithAmount = null,
+                    approveWithText = null,
                     onBack = { current = null }
                 )
 
-                // شاشة الايتونز (عرض فقط وإجراءات عامة افتراضية)
+                // NEW: شاشة الايتونز — تنفيذ يطلب gift_code
                 "pending_itunes" -> PendingListScreen(
                     title = "طلبات شحن الايتونز",
                     fetch = { apiAdminGetList(token!!, AdminEndpoints.pendingItunes) },
-                    actApprove = { _ -> false },  // تنفيذ يتطلب كود هدية — أبقيناه كما هو (لا تغيير آخر)
-                    actReject  = { _ -> false },
-                    actRefund  = { _ -> false },
+                    actApprove = { _ -> false },  // لن تُستخدم هنا
+                    actReject  = { id -> apiAdminRejectItunes(token!!, id) },
+                    actRefund  = { id -> apiAdminRejectItunes(token!!, id) },
                     approveWithAmount = null,
+                    approveWithText = { id, code -> apiAdminDeliverItunes(token!!, id, code) },
                     onBack = { current = null }
                 )
 
                 "pending_cards" -> PendingListScreen(
                     title = "الكارتات المعلقة",
                     fetch = { apiAdminGetList(token!!, AdminEndpoints.pendingCards) },
-                    actApprove = { _ -> true }, // سيتم طلب المبلغ محليًا في Dialog (موجود مسبقًا)
+                    actApprove = { _ -> true }, // سيظهر مربع مبلغ
                     actReject  = { id -> apiAdminRejectCard(token!!, id) },
                     actRefund  = { id -> apiAdminRejectCard(token!!, id) },
                     approveWithAmount = { id, amount -> apiAdminApproveCard(token!!, id, amount) },
+                    approveWithText = null,
                     onBack = { current = null }
                 )
                 "pending_pubg" -> PendingListScreen(
@@ -982,6 +985,7 @@ private fun OwnerPanel(
                     actReject  = { id -> apiAdminRejectPubg(token!!, id) },
                     actRefund  = { id -> apiAdminRejectPubg(token!!, id) },
                     approveWithAmount = null,
+                    approveWithText = null,
                     onBack = { current = null }
                 )
                 "pending_ludo" -> PendingListScreen(
@@ -991,6 +995,7 @@ private fun OwnerPanel(
                     actReject  = { id -> apiAdminRejectLudo(token!!, id) },
                     actRefund  = { id -> apiAdminRejectLudo(token!!, id) },
                     approveWithAmount = null,
+                    approveWithText = null,
                     onBack = { current = null }
                 )
                 "topup" -> TopupDeductScreen(
@@ -1020,7 +1025,7 @@ private fun OwnerPanel(
     }
 }
 
-/* قائمة معلّقة عامة + دعم المبلغ للكارت */
+/* قائمة معلّقة عامة + دعم إدخال مبلغ للكارت + إدخال نص (gift_code) للآيتونز */
 @Composable
 private fun PendingListScreen(
     title: String,
@@ -1029,6 +1034,7 @@ private fun PendingListScreen(
     actReject: suspend (String) -> Boolean,
     actRefund: suspend (String) -> Boolean,
     approveWithAmount: (suspend (String, Double) -> Boolean)?,
+    approveWithText: (suspend (String, String) -> Boolean)?,
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -1042,6 +1048,10 @@ private fun PendingListScreen(
 
     var askAmountForId by remember { mutableStateOf<String?>(null) }
     var amountText by remember { mutableStateOf("") }
+
+    var askTextForId by remember { mutableStateOf<String?>(null) }  // NEW for gift_code
+    var textValue by remember { mutableStateOf("") }                 // NEW
+
     var toast by remember { mutableStateOf<String?>(null) }
 
     fun looksLikeCard(o: OrderItem): Boolean {
@@ -1097,7 +1107,13 @@ private fun PendingListScreen(
                             Spacer(Modifier.height(8.dp))
                             Row {
                                 TextButton(onClick = {
-                                    if (looksLikeCard(o) && approveWithAmount != null) {
+                                    // إن كانت شاشة آيتونز سنطلب gift_code
+                                    if (approveWithText != null) {
+                                        askTextForId = o.id
+                                        textValue = ""
+                                    }
+                                    // إن كانت كارت أسيا سيل سنطلب المبلغ
+                                    else if (looksLikeCard(o) && approveWithAmount != null) {
                                         askAmountForId = o.id
                                         amountText = ""
                                     } else {
@@ -1166,6 +1182,42 @@ private fun PendingListScreen(
                     onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) amountText = s },
                     singleLine = true,
                     label = { Text("المبلغ بالدولار", color = OnBg) },
+                    textStyle = LocalTextStyle.current.copy(color = OnBg),
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        cursorColor = Accent,
+                        focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                        focusedLabelColor = OnBg, unfocusedLabelColor = Dim
+                    )
+                )
+            }
+        )
+    }
+
+    // NEW: مربع إدخال gift_code لطلبات الآيتونز
+    askTextForId?.let { oid ->
+        AlertDialog(
+            onDismissRequest = { askTextForId = null },
+            confirmButton = {
+                TextButton(onClick = {
+                    val code = textValue.trim()
+                    if (code.isEmpty() || approveWithText == null) return@TextButton
+                    val scopeLocal = scope
+                    scopeLocal.launch {
+                        val ok = approveWithText.invoke(oid, code)
+                        if (ok) { toast = "نجاح: تم تسليم كود آيتونز"; reloadKey++ }
+                        else toast = "فشل تنفيذ آيتونز"
+                        askTextForId = null
+                    }
+                }) { Text("تنفيذ", color = OnBg) }
+            },
+            dismissButton = { TextButton(onClick = { askTextForId = null }) { Text("إلغاء", color = OnBg) } },
+            title = { Text("أدخل كود الهدية (iTunes)", color = OnBg) },
+            text = {
+                OutlinedTextField(
+                    value = textValue,
+                    onValueChange = { textValue = it },
+                    singleLine = true,
+                    label = { Text("Gift Code", color = OnBg) },
                     textStyle = LocalTextStyle.current.copy(color = OnBg),
                     colors = TextFieldDefaults.outlinedTextFieldColors(
                         cursorColor = Accent,
@@ -1268,7 +1320,7 @@ private fun UsersCountScreen(fetch: suspend () -> JSONObject?, onBack: () -> Uni
 private fun UsersBalancesScreen(fetch: suspend () -> JSONObject?, onBack: () -> Unit) {
     var data by remember { mutableStateOf<JSONObject?>(null) }
     LaunchedEffect(Unit) { data = fetch() }
-    Column(Modifier.fillMaxSize().padding(16	dp)) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
             Spacer(Modifier.width(6.dp))
@@ -1341,7 +1393,7 @@ private fun SettingsDialog(
                     Spacer(Modifier.width(8.dp))
                     OutlinedButton(onClick = { clip.setText(AnnotatedString(uid)) }) { Text("نسخ") }
                 }
-                Spacer(Modifier.height(12	dp))
+                Spacer(Modifier.height(12.dp))
                 Divider(color = Surface1)
                 Spacer(Modifier.height(12.dp))
 
@@ -1641,6 +1693,7 @@ private suspend fun apiAdminGetList(token: String, path: String): List<OrderItem
                 o.has("link") -> "link: ${o.optString("link")}"
                 o.has("card") -> "card: ${o.optString("card")}"
                 o.has("card_number") -> "card: ${o.optString("card_number")}"
+                o.has("gift_code") -> "gift_code: ${o.optString("gift_code")}"
                 o.has("uid") -> "uid: ${o.optString("uid")}"
                 else -> ""
             }
@@ -1680,6 +1733,21 @@ private suspend fun apiAdminRejectCard(token: String, id: String): Boolean {
     return code in 200..299
 }
 
+/* NEW: آيتونز */
+private suspend fun apiAdminDeliverItunes(token: String, id: String, giftCode: String): Boolean {
+    val (code, _) = httpPost(
+        AdminEndpoints.itunesDeliver(id),
+        JSONObject().put("gift_code", giftCode),
+        mapOf("x-admin-pass" to token)
+    )
+    return code in 200..299
+}
+private suspend fun apiAdminRejectItunes(token: String, id: String): Boolean {
+    val (code, _) = httpPost(AdminEndpoints.itunesReject(id), JSONObject(), mapOf("x-admin-pass" to token))
+    return code in 200..299
+}
+
+/* ببجي/لودو */
 private suspend fun apiAdminDeliverPubg(token: String, id: String): Boolean {
     val (code, _) = httpPost(AdminEndpoints.pubgDeliver(id), JSONObject(), mapOf("x-admin-pass" to token))
     return code in 200..299

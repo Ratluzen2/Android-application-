@@ -741,8 +741,7 @@ fun AppRoot() {
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
                     sending = true
-                    // إرسال للباكند
-                    val scope = rememberCoroutineScope()
+                    // استخدام scope الموجود مسبقًا (لا نستخدم rememberComposable داخل onClick)
                     scope.launch {
                         val ok = apiSubmitAsiacellCard(uid, digits)
                         sending = false
@@ -754,7 +753,8 @@ fun AppRoot() {
                             askAsiacell = false
                         } else {
                             val msg = "أرغب بشحن الرصيد داخل التطبيق.\nUID=$uid\nكارت أسيا سيل: $digits"
-                            LocalUriHandler.current.openUri("https://wa.me/9647763410970?text=" + java.net.URLEncoder.encode(msg, "UTF-8"))
+                            // استخدام uri المأخوذ من LocalUriHandler أعلى الشاشة (لا نستدعي @Composable هنا)
+                            uri.openUri("https://wa.me/9647763410970?text=" + java.net.URLEncoder.encode(msg, "UTF-8"))
                             onToast("تعذر الاتصال بالخادم — تم فتح واتساب لإرسال الكارت للدعم.")
                             cardNumber = ""
                             askAsiacell = false

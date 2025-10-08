@@ -883,6 +883,7 @@ private fun OwnerPanel(
     onToast: (String) -> Unit,
     onRequireLogin: () -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     var current by remember { mutableStateOf<String?>(null) } // اسم الشاشة الفرعية
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -1052,11 +1053,11 @@ private fun PendingListScreen(
     }
 
     confirmFor?.let { (act, id) ->
-        val scope = rememberCoroutineScope()
         AlertDialog(
             onDismissRequest = { confirmFor = null },
             confirmButton = {
                 TextButton(onClick = {
+                    // استخدم scope المعَرَّف أعلى الشاشة (لا تستدعِ rememberCoroutineScope داخل onClick)
                     scope.launch {
                         val ok = when (act) {
                             "approve" -> actApprove?.invoke(id) ?: false
@@ -1157,13 +1158,13 @@ private fun PendingCardsScreen(token: String, onBack: () -> Unit) {
                     val url = AdminEndpoints.cardAccept.replace("{id}", theId)
                     val body = JSONObject().put("amount_usd", amount).put("reviewed_by", "owner")
                     val hdrs = mapOf("x-admin-pass" to token)
-                    // ← إصلاح: لا نستخدم LaunchedEffect هنا
-                    val scopeDlg = rememberCoroutineScope()
-                    scopeDlg.launch {
+                    // إصلاح: استخدم scope الموجود بالأعلى
+                    scope.launch {
                         val (code, _) = httpPost(url, body, hdrs)
                         askAmountForId = null
                         amountText = ""
                         if (code in 200..299) { /* تم */ }
+                        else { /* فشل */ }
                     }
                 }) { Text("تأكيد") }
             },
@@ -1267,13 +1268,13 @@ private fun PendingItunesScreen(token: String, onBack: () -> Unit) {
                     val url = AdminEndpoints.itunesDeliver.replace("{id}", theId)
                     val body = JSONObject().put("gift_code", code)
                     val hdrs = mapOf("x-admin-pass" to token)
-                    // ← إصلاح: استخدم كوروتين بدل LaunchedEffect داخل onClick
-                    val scopeDlg = rememberCoroutineScope()
-                    scopeDlg.launch {
+                    // إصلاح: استخدم scope المعرّف في أعلى الشاشة
+                    scope.launch {
                         val (c, _) = httpPost(url, body, hdrs)
                         askCodeForId = null
                         codeText = ""
                         if (c in 200..299) { /* تم */ }
+                        else { /* فشل */ }
                     }
                 }) { Text("تأكيد") }
             },

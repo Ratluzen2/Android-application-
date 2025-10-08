@@ -742,8 +742,7 @@ fun AppRoot() {
                     if (digits.length != 14 && digits.length != 16) return@TextButton
                     sending = true
                     // إرسال للباكند
-                    val scopeLocal = rememberCoroutineScope() // داخل Dialog
-                    scopeLocal.launch {
+                    scope.launch {
                         val ok = apiSubmitAsiacellCard(uid, digits)
                         sending = false
                         if (ok) {

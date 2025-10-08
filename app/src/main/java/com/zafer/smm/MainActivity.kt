@@ -47,7 +47,7 @@ import kotlin.random.Random
 /* =========================
    إعدادات الخادم
    ========================= */
-private const val API_BASE = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
+private const val API_BASE = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // <— غيّرها إن لزم
 
 /** مسارات الأدمن مطابقة للباكند الحالي */
 private object AdminEndpoints {
@@ -73,8 +73,8 @@ private object AdminEndpoints {
 
     const val usersCount      = "/api/admin/users/count"
     const val usersBalances   = "/api/admin/users/balances"
-    const val topupUser       = "/api/admin/users/%s/topup"          // query/body amount
-    const val deductUser      = "/api/admin/users/%s/deduct"         // query/body amount
+    const val topupUser       = "/api/admin/users/%s/topup"          // body: {"amount":...}
+    const val deductUser      = "/api/admin/users/%s/deduct"         // body: {"amount":...}
 
     const val providerBalance = "/api/admin/provider/balance"
 }
@@ -742,6 +742,7 @@ fun AppRoot() {
                     if (digits.length != 14 && digits.length != 16) return@TextButton
                     sending = true
                     // إرسال للباكند
+                    val scope = rememberCoroutineScope()
                     scope.launch {
                         val ok = apiSubmitAsiacellCard(uid, digits)
                         sending = false
@@ -753,7 +754,7 @@ fun AppRoot() {
                             askAsiacell = false
                         } else {
                             val msg = "أرغب بشحن الرصيد داخل التطبيق.\nUID=$uid\nكارت أسيا سيل: $digits"
-                            uri.openUri("https://wa.me/9647763410970?text=" + java.net.URLEncoder.encode(msg, "UTF-8"))
+                            LocalUriHandler.current.openUri("https://wa.me/9647763410970?text=" + java.net.URLEncoder.encode(msg, "UTF-8"))
                             onToast("تعذر الاتصال بالخادم — تم فتح واتساب لإرسال الكارت للدعم.")
                             cardNumber = ""
                             askAsiacell = false
@@ -914,12 +915,7 @@ fun AppRoot() {
                         val title = "UID=${o.optString("uid","")} | كارت: ${o.optString("card_number","")}"
                         OrderItem(id, title, 0, 0.0, o.optString("card_number",""), OrderStatus.Pending, 0L)
                     },
-                    approve = { id ->
-                        // يطلب قيمة الشحن قبل الإرسال
-                        // يتم التعامل معها داخل Dialog مخصص أدناه
-                        // هنا نرجّع false دومًا لأن زر "تنفيذ" عندنا يفتح الحوار وليس ينفذ مباشرة
-                        false
-                    },
+                    approve = { _ -> false }, // التنفيذ يتم عبر Dialog لإدخال المبلغ
                     reject  = { id -> apiAdminPOST(String.format(AdminEndpoints.cardReject, id.toInt()), token!!) },
                     extraButton = { itemId, showSnack ->
                         var show by remember { mutableStateOf(false) }
@@ -931,7 +927,6 @@ fun AppRoot() {
                                 confirmButton = {
                                     TextButton(onClick = {
                                         val a = amount.toDoubleOrNull() ?: return@TextButton
-                                        // نرسل amount_usd كـ JSON
                                         val ok = apiAdminPOST(
                                             String.format(AdminEndpoints.cardAccept, itemId.toInt()),
                                             token!!,
@@ -970,10 +965,7 @@ fun AppRoot() {
                         val title = "UID=${o.optString("uid","")} | iTunes ${o.optInt("amount",0)}"
                         OrderItem(id, title, o.optInt("amount",0), 0.0, "", OrderStatus.Pending, 0L)
                     },
-                    approve = { id ->
-                        // تسليم كود (نطلبه في Dialog)
-                        false
-                    },
+                    approve = { _ -> false }, // يفتح إدخال كود
                     reject  = { id -> apiAdminPOST(String.format(AdminEndpoints.itunesReject, id.toInt()), token!!) },
                     extraButton = { itemId, showSnack ->
                         var show by remember { mutableStateOf(false) }

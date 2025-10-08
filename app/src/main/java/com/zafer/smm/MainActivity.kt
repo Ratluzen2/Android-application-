@@ -561,7 +561,8 @@ fun AppRoot() {
                 if (bal < price) { onOrdered(false, "رصيدك غير كافٍ. السعر: $price\$ | رصيدك: ${"%.2f".format(bal)}\$"); return@TextButton }
 
                 loading = true
-                scope.launch {
+                val scopeLocal = rememberCoroutineScope() // safe here because inside @Composable
+                scopeLocal.launch {
                     val ok = apiCreateProviderOrder(
                         uid = uid,
                         serviceId = service.serviceId,
@@ -645,7 +646,8 @@ fun AppRoot() {
                     .fillMaxWidth()
                     .padding(bottom = 8.dp)
                     .clickable {
-                        scope.launch {
+                        val sc = rememberCoroutineScope()
+                        sc.launch {
                             val ok = apiCreateManualOrder(uid, name)
                             if (ok) {
                                 onToast("تم استلام طلبك ($name)، سيتم مراجعته من المالك.")
@@ -741,7 +743,7 @@ fun AppRoot() {
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
                     sending = true
-                    // استخدام scope الموجود مسبقًا (لا نستخدم rememberComposable داخل onClick)
+                    // استخدام scope الموجود مسبقًا
                     scope.launch {
                         val ok = apiSubmitAsiacellCard(uid, digits)
                         sending = false
@@ -753,7 +755,6 @@ fun AppRoot() {
                             askAsiacell = false
                         } else {
                             val msg = "أرغب بشحن الرصيد داخل التطبيق.\nUID=$uid\nكارت أسيا سيل: $digits"
-                            // استخدام uri المأخوذ من LocalUriHandler أعلى الشاشة (لا نستدعي @Composable هنا)
                             uri.openUri("https://wa.me/9647763410970?text=" + java.net.URLEncoder.encode(msg, "UTF-8"))
                             onToast("تعذر الاتصال بالخادم — تم فتح واتساب لإرسال الكارت للدعم.")
                             cardNumber = ""
@@ -1071,7 +1072,6 @@ fun AppRoot() {
     extraButton: (@Composable (itemId: String, showSnack: (String) -> Unit) -> Unit)?,
     onBack: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
     var list by remember { mutableStateOf<List<OrderItem>?>(null) }
     var loading by remember { mutableStateOf(true) }
     var err by remember { mutableStateOf<String?>(null) }
@@ -1084,10 +1084,16 @@ fun AppRoot() {
         if (code in 200..299 && txt != null) {
             try {
                 val parsed = mutableListOf<OrderItem>()
-                val root = JSONObject(txt)
-                val arr: JSONArray = when {
-                    root.has("list") -> root.getJSONArray("list")
-                    else -> JSONArray(txt) // احتياط لو رجع Array مباشرة
+                val trimmed = txt.trim()
+                val arr: JSONArray = if (trimmed.startsWith("[")) {
+                    JSONArray(trimmed)
+                } else {
+                    val obj = JSONObject(trimmed)
+                    when {
+                        obj.has("list") -> obj.optJSONArray("list") ?: JSONArray()
+                        obj.has("data") -> obj.optJSONArray("data") ?: JSONArray()
+                        else -> JSONArray()
+                    }
                 }
                 for (i in 0 until arr.length()) parsed += mapItem(arr.getJSONObject(i))
                 list = parsed
@@ -1405,7 +1411,7 @@ private suspend fun tryUpsertUid(uid: String) {
 private suspend fun apiGetBalance(uid: String): Double? {
     val (code, txt) = httpGet("/api/wallet/balance?uid=$uid")
     return if (code in 200..299 && txt != null) {
-        try { JSONObject(txt).optDouble("balance") } catch (_: Exception) { null }
+        try { JSONObject(txt.trim()).optDouble("balance") } catch (_: Exception) { null }
     } else null
 }
 private suspend fun apiCreateProviderOrder(
@@ -1437,7 +1443,17 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
     val (code, txt) = httpGet("/api/orders/my?uid=$uid")
     if (code !in 200..299 || txt == null) return null
     return try {
-        val arr = JSONArray(txt)
+        val trimmed = txt.trim()
+        val arr: JSONArray = if (trimmed.startsWith("[")) {
+            JSONArray(trimmed)
+        } else {
+            val obj = JSONObject(trimmed)
+            when {
+                obj.has("orders") -> obj.optJSONArray("orders") ?: JSONArray()
+                obj.has("list")   -> obj.optJSONArray("list") ?: JSONArray()
+                else -> JSONArray()
+            }
+        }
         (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
             OrderItem(
@@ -1475,16 +1491,22 @@ private fun apiAdminPOST(path: String, token: String, body: JSONObject? = null):
 }
 private fun apiAdminUsersCount(token: String): Int? {
     val (c, t) = httpGetBlocking(AdminEndpoints.usersCount, mapOf("x-admin-pass" to token))
-    return if (c in 200..299 && t != null) try { JSONObject(t).optInt("count") } catch (_: Exception) { null } else null
+    return if (c in 200..299 && t != null) try { JSONObject(t.trim()).optInt("count") } catch (_: Exception) { null } else null
 }
 private fun apiAdminUsersBalances(token: String): List<Triple<String,String,Double>>? {
     val (c, t) = httpGetBlocking(AdminEndpoints.usersBalances, mapOf("x-admin-pass" to token))
     if (c !in 200..299 || t == null) return null
     return try {
-        val root = JSONObject(t)
-        val arr = when {
-            root.has("list") -> root.getJSONArray("list")
-            else -> JSONArray(t)
+        val trimmed = t.trim()
+        val arr: JSONArray = if (trimmed.startsWith("[")) {
+            JSONArray(trimmed)
+        } else {
+            val root = JSONObject(trimmed)
+            when {
+                root.has("list") -> root.optJSONArray("list") ?: JSONArray()
+                root.has("data") -> root.optJSONArray("data") ?: JSONArray()
+                else -> JSONArray()
+            }
         }
         val out = mutableListOf<Triple<String,String,Double>>()
         for (i in 0 until arr.length()) {
@@ -1499,7 +1521,17 @@ private fun apiAdminUsersBalances(token: String): List<Triple<String,String,Doub
 }
 private fun apiAdminProviderBalance(token: String): Double? {
     val (c, t) = httpGetBlocking(AdminEndpoints.providerBalance, mapOf("x-admin-pass" to token))
-    return if (c in 200..299 && t != null) try { JSONObject(t).optDouble("balance") } catch (_: Exception) { null } else null
+    if (c in 200..299 && t != null) {
+        val trimmed = t.trim()
+        return try {
+            when {
+                trimmed.startsWith("{") -> JSONObject(trimmed).optDouble("balance")
+                trimmed.matches(Regex("""\d+(\.\d+)?""")) -> trimmed.toDoubleOrNull()
+                else -> null
+            }
+        } catch (_: Exception) { null }
+    }
+    return null
 }
 
 /* =========================

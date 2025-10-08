@@ -47,7 +47,7 @@ import kotlin.random.Random
 /* =========================
    إعدادات الخادم
    ========================= */
-private const val API_BASE = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // <— غيّرها إن لزم
+private const val API_BASE = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // غيّرها إذا لزم
 
 /** مسارات الأدمن مطابقة للباكند الحالي */
 private object AdminEndpoints {
@@ -80,7 +80,7 @@ private object AdminEndpoints {
 }
 
 /* =========================
-   Theme (تحسين التباين)
+   Theme
    ========================= */
 private val Bg       = Color(0xFF0F1113)
 private val Surface1 = Color(0xFF161B20)
@@ -561,8 +561,8 @@ fun AppRoot() {
                 if (bal < price) { onOrdered(false, "رصيدك غير كافٍ. السعر: $price\$ | رصيدك: ${"%.2f".format(bal)}\$"); return@TextButton }
 
                 loading = true
-                val scopeLocal = rememberCoroutineScope() // safe here because inside @Composable
-                scopeLocal.launch {
+                // استخدم scope المُعرّف أعلى الـComposable (لا نستدعي remember... داخل onClick)
+                scope.launch {
                     val ok = apiCreateProviderOrder(
                         uid = uid,
                         serviceId = service.serviceId,
@@ -646,8 +646,8 @@ fun AppRoot() {
                     .fillMaxWidth()
                     .padding(bottom = 8.dp)
                     .clickable {
-                        val sc = rememberCoroutineScope()
-                        sc.launch {
+                        // استخدم scope المُعرّف أعلى الـComposable
+                        scope.launch {
                             val ok = apiCreateManualOrder(uid, name)
                             if (ok) {
                                 onToast("تم استلام طلبك ($name)، سيتم مراجعته من المالك.")
@@ -743,7 +743,7 @@ fun AppRoot() {
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
                     sending = true
-                    // استخدام scope الموجود مسبقًا
+                    // استخدام scope الموجود مسبقًا (لا نستدعي @Composable داخل onClick)
                     scope.launch {
                         val ok = apiSubmitAsiacellCard(uid, digits)
                         sending = false
@@ -1432,13 +1432,32 @@ private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     val (code, txt) = httpPost("/api/orders/create/manual", body)
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
+
+/* >>>>>>>>> دالة أسيا سيل المُحدّثة <<<<<<<<< */
 private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
     val (code, txt) = httpPost(
         "/api/wallet/asiacell/submit",
         JSONObject().put("uid", uid).put("card", card)
     )
-    return code in 200..299 && (txt?.contains("ok", true) == true)
+    // نعتبر أي رد 2xx نجاحًا حتى لو ما فيه "ok"
+    if (code !in 200..299) return false
+    return try {
+        if (txt == null) return true
+        val trimmed = txt.trim()
+        when {
+            trimmed.isEmpty() -> true
+            trimmed.startsWith("{") -> {
+                val o = JSONObject(trimmed)
+                // نقبل عدة صيغ نجاح شائعة
+                o.optBoolean("ok", true) ||
+                o.optString("status").equals("received", true) ||
+                o.optString("message").contains("تم", ignoreCase = true)
+            }
+            else -> true
+        }
+    } catch (_: Exception) { true }
 }
+
 private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
     val (code, txt) = httpGet("/api/orders/my?uid=$uid")
     if (code !in 200..299 || txt == null) return null

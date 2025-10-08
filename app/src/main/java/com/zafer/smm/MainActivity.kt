@@ -1052,6 +1052,7 @@ private fun PendingListScreen(
     }
 
     confirmFor?.let { (act, id) ->
+        val scope = rememberCoroutineScope()
         AlertDialog(
             onDismissRequest = { confirmFor = null },
             confirmButton = {
@@ -1156,7 +1157,9 @@ private fun PendingCardsScreen(token: String, onBack: () -> Unit) {
                     val url = AdminEndpoints.cardAccept.replace("{id}", theId)
                     val body = JSONObject().put("amount_usd", amount).put("reviewed_by", "owner")
                     val hdrs = mapOf("x-admin-pass" to token)
-                    LaunchedEffect(Unit) {
+                    // ← إصلاح: لا نستخدم LaunchedEffect هنا
+                    val scopeDlg = rememberCoroutineScope()
+                    scopeDlg.launch {
                         val (code, _) = httpPost(url, body, hdrs)
                         askAmountForId = null
                         amountText = ""
@@ -1264,7 +1267,9 @@ private fun PendingItunesScreen(token: String, onBack: () -> Unit) {
                     val url = AdminEndpoints.itunesDeliver.replace("{id}", theId)
                     val body = JSONObject().put("gift_code", code)
                     val hdrs = mapOf("x-admin-pass" to token)
-                    LaunchedEffect(Unit) {
+                    // ← إصلاح: استخدم كوروتين بدل LaunchedEffect داخل onClick
+                    val scopeDlg = rememberCoroutineScope()
+                    scopeDlg.launch {
                         val (c, _) = httpPost(url, body, hdrs)
                         askCodeForId = null
                         codeText = ""
@@ -1642,6 +1647,7 @@ private suspend fun apiCreateProviderOrder(
         .put("link", link)
         .put("quantity", quantity)
         .put("price", price)
+        .put("status", "pending")
     val (code, txt) = httpPost("/api/orders/create/provider", body)
     return code in 200..299 && (txt?.contains("ok", ignoreCase = true) == true)
 }

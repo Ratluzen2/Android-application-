@@ -61,6 +61,12 @@ private object AdminEndpoints {
     const val pendingItunes   = "/api/admin/pending/itunes"
     const val pendingPubg     = "/api/admin/pending/pubg"
     const val pendingLudo     = "/api/admin/pending/ludo"
+
+    // ✅ تمت الإضافة: قوائم/تنفيذ/رفض كروت أسيا سيل
+    const val pendingCards    = "/api/admin/pending/cards"
+    fun topupCardReject(id: Int) = "/api/admin/topup_cards/$id/reject"
+    fun topupCardExecute(id: Int) = "/api/admin/topup_cards/$id/execute"
+
     const val orderApprove    = "/api/admin/orders/%d/approve"
     const val orderDeliver    = "/api/admin/orders/%d/deliver"
     const val usersCount      = "/api/admin/users/count"
@@ -122,6 +128,14 @@ data class OrderItem(
     val price: Double,
     val payload: String,
     val status: OrderStatus,
+    val createdAt: Long
+)
+
+/* ✅ نموذج خاص بكروت أسيا سيل (لواجهة المالك) */
+data class PendingCard(
+    val id: Int,
+    val uid: String,
+    val card: String,
     val createdAt: Long
 )
 
@@ -240,6 +254,7 @@ fun AppRoot() {
             Tab.SUPPORT -> SupportScreen()
         }
 
+        // ✅ تم تعديل الترتيب: حالة السيرفر (أعلى) تحتها الجرس ثم الضبط — عموديًا ونفس المكان
         TopRightBar(
             online = online,
             unread = if (ownerMode) unreadOwner else unreadUser,
@@ -353,44 +368,45 @@ fun AppRoot() {
 }
 
 /* =========================
-   الشريط العلوي يمين
+   الشريط العلوي يمين — (عمودي)
    ========================= */
 @Composable private fun TopRightBar(
     online: Boolean?, unread: Int,
     onOpenNotices: () -> Unit, onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    Column(
         modifier = modifier
             .background(Surface1, shape = MaterialTheme.shapes.medium)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
-            IconButton(onClick = onOpenNotices, modifier = Modifier.size(24.dp)) {
-                Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
-            }
-        }
-        Spacer(Modifier.width(6.dp))
-
+        // حالة السيرفر
         val (txt, clr) = when (online) {
             true -> "الخادم: متصل" to Good
             false -> "الخادم: غير متصل" to Bad
             else -> "الخادم: ..." to Dim
         }
-        Box(
-            Modifier.background(Surface1, shape = MaterialTheme.shapes.small)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.background(Surface1, shape = MaterialTheme.shapes.small)
                 .padding(horizontal = 8.dp, vertical = 4.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(8.dp).background(clr, shape = MaterialTheme.shapes.small))
-                Spacer(Modifier.width(6.dp))
-                Text(txt, fontSize = 12.sp, color = OnBg)
+            Box(Modifier.size(8.dp).background(clr, shape = MaterialTheme.shapes.small))
+            Spacer(Modifier.width(6.dp))
+            Text(txt, fontSize = 12.sp, color = OnBg)
+        }
+
+        // الجرس
+        BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
+            IconButton(onClick = onOpenNotices, modifier = Modifier.size(24.dp)) {
+                Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
             }
         }
-        Spacer(Modifier.width(6.dp))
 
-        IconButton(onClick = onOpenSettings, modifier = Modifier.size(22.dp)) {
+        // الضبط
+        IconButton(onClick = onOpenSettings, modifier = Modifier.size(24.dp)) {
             Icon(Icons.Filled.Settings, contentDescription = null, tint = OnBg)
         }
     }
@@ -739,10 +755,12 @@ fun AppRoot() {
                         if (ok) {
                             onAddNotice(AppNotice("تم استلام كارتك", "تم إرسال كارت أسيا سيل إلى المالك للمراجعة.", forOwner = false))
                             onAddNotice(AppNotice("كارت أسيا سيل جديد", "UID=$uid | كارت: $digits", forOwner = true))
+                            onToast("تم إرسال الكارت بنجاح") // ✅ توست 2 ثواني
                             cardNumber = ""
                             askAsiacell = false
                         } else {
                             onAddNotice(AppNotice("فشل إرسال الكارت", "تحقق من الاتصال وحاول مجددًا.", forOwner = false))
+                            onToast("فشل إرسال الكارت") // ✅ توست 2 ثواني
                         }
                     }
                 }) { Text(if (sending) "يرسل..." else "إرسال") }
@@ -851,7 +869,7 @@ fun AppRoot() {
                 "طلبات شحن الايتونز"      to "pending_itunes",
                 "طلبات شدات ببجي"         to "pending_pubg",
                 "طلبات لودو المعلقة"       to "pending_ludo",
-                "الكروت المعلقة"           to "pending_cards",
+                "الكروت المعلقة"           to "pending_cards", // ✅ زر جديد للكروت
                 "إضافة الرصيد"             to "topup",
                 "خصم الرصيد"               to "deduct",
                 "عدد المستخدمين"           to "users_count",
@@ -863,7 +881,9 @@ fun AppRoot() {
                     row.forEach { (title, key) ->
                         ElevatedButton(
                             onClick = { if (!needToken()) current = key },
-                            modifier = Modifier.weight(1f).padding(4.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(4.dp),
                             colors = ButtonDefaults.elevatedButtonColors(
                                 containerColor = Accent.copy(alpha = 0.18f),
                                 contentColor = OnBg
@@ -903,16 +923,13 @@ fun AppRoot() {
                     filter = null,
                     onBack = { current = null }
                 )
-                "pending_cards" -> AdminPendingGenericList(
-                    title = "الكروت المعلقة",
+
+                // ✅ شاشة الكروت المعلقة الخاصة — UID + كارت + تنفيذ/رفض
+                "pending_cards" -> AdminPendingCardsScreen(
                     token = token!!,
-                    fetchUrl = AdminEndpoints.pendingServices,
-                    filter = { title ->
-                        val t = title.lowercase(Locale.getDefault())
-                        listOf("asiacell","اسياسيل","كارت","اثير","كورك","زين","line","card").any { t.contains(it) }
-                    },
                     onBack = { current = null }
                 )
+
                 "topup" -> TopupDeductScreen(
                     title = "إضافة الرصيد",
                     onSubmit = { u: String, amt: Double -> apiAdminWalletChange(AdminEndpoints.walletTopup, token!!, u, amt) },
@@ -940,7 +957,7 @@ fun AppRoot() {
     }
 }
 
-/** قائمة عامة للمعلّقَات */
+/** قائمة عامة للمعلّقات (الخدمات/أقسام أخرى) */
 @Composable private fun AdminPendingGenericList(
     title: String,
     token: String,
@@ -1060,126 +1077,131 @@ fun AppRoot() {
 }
 
 /* =========================
-   شاشات الأدمن الإضافية
+   شاشة الكروت المعلّقة (المالك) — جديدة
    ========================= */
-@Composable private fun TopupDeductScreen(
-    title: String,
-    onSubmit: suspend (String, Double) -> Boolean,
+@Composable private fun AdminPendingCardsScreen(
+    token: String,
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    var uid by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var msg by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableStateOf(false) }
-
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-        }
-        Spacer(Modifier.height(10.dp))
-        OutlinedTextField(value = uid, onValueChange = { uid = it.trim() }, singleLine = true, label = { Text("UID المستخدم") })
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = amount, onValueChange = { s -> if (s.isEmpty() || s.toDoubleOrNull() != null) amount = s },
-            singleLine = true, label = { Text("المبلغ") })
-        Spacer(Modifier.height(10.dp))
-        Button(enabled = !loading, onClick = {
-            val a = amount.toDoubleOrNull()
-            if (uid.isBlank() || a == null) { msg = "أدخل UID ومبلغًا صالحًا"; return@Button }
-            loading = true
-            scope.launch {
-                val ok = onSubmit(uid, a)
-                msg = if (ok) "تمت العملية بنجاح" else "فشل التنفيذ"
-                loading = false
-            }
-        }) { Text(if (loading) "جارٍ التنفيذ..." else "تنفيذ") }
-        Spacer(Modifier.height(8.dp))
-        msg?.let { Text(it, color = OnBg) }
-    }
-}
-
-@Composable private fun UsersCountScreen(fetch: suspend () -> Int?, onBack: () -> Unit) {
-    var count by remember { mutableStateOf<Int?>(null) }
+    var list by remember { mutableStateOf<List<PendingCard>?>(null) }
+    var loading by remember { mutableStateOf(true) }
     var err by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        val v = fetch()
-        if (v == null) err = "تعذر الجلب" else count = v
-    }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text("عدد المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-        }
-        Spacer(Modifier.height(10.dp))
-        when {
-            err != null -> Text(err!!, color = Bad)
-            count == null -> Text("يتم التحميل...", color = Dim)
-            else -> Text("المجموع: $count", color = OnBg, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
+    var reloadKey by remember { mutableStateOf(0) }
 
-@Composable private fun UsersBalancesScreen(fetch: suspend () -> List<Triple<String,String,Double>>?, onBack: () -> Unit) {
-    var list by remember { mutableStateOf<List<Triple<String,String,Double>>?>(null) }
-    var err by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        val v = fetch()
-        if (v == null) err = "تعذر الجلب" else list = v
+    // للحوار
+    var execFor by remember { mutableStateOf<PendingCard?>(null) }
+    var amountText by remember { mutableStateOf("") }
+    var snack by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(reloadKey) {
+        loading = true; err = null
+        list = apiAdminFetchPendingCards(token)
+        if (list == null) err = "تعذر جلب البيانات"
+        loading = false
     }
+
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
             Spacer(Modifier.width(6.dp))
-            Text("أرصدة المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+            Text("الكروت المعلقة", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
         }
         Spacer(Modifier.height(10.dp))
+
         when {
+            loading -> Text("يتم التحميل...", color = Dim)
             err != null -> Text(err!!, color = Bad)
-            list == null -> Text("يتم التحميل...", color = Dim)
-            list!!.isEmpty() -> Text("لا يوجد مستخدمون.", color = Dim)
+            list.isNullOrEmpty() -> Text("لا توجد كروت معلّقة.", color = Dim)
             else -> LazyColumn {
-                items(list!!) { (uid, state, bal) ->
+                items(list!!) { c ->
                     ElevatedCard(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
-                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("UID: $uid", fontWeight = FontWeight.SemiBold, color = OnBg)
-                                Text("الحالة: $state", color = Dim, fontSize = 12.sp)
+                        Column(Modifier.padding(16.dp)) {
+                            Text("طلب #${c.id}", fontWeight = FontWeight.SemiBold, color = OnBg)
+                            Spacer(Modifier.height(4.dp))
+                            Text("UID: ${c.uid}", color = Dim, fontSize = 12.sp)
+                            Spacer(Modifier.height(4.dp))
+                            // رقم الكارت قابل للنسخ
+                            val clip = LocalClipboardManager.current
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("الكارت: ", color = OnBg)
+                                Text(
+                                    c.card,
+                                    color = Accent,
+                                    modifier = Modifier
+                                        .clickable {
+                                            clip.setText(AnnotatedString(c.card))
+                                            snack = "تم نسخ رقم الكارت"
+                                        }
+                                        .padding(4.dp)
+                                )
                             }
-                            Text("${"%.2f".format(bal)}$", color = OnBg, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(8.dp))
+                            Row {
+                                TextButton(onClick = { execFor = c }) { Text("تنفيذ") }
+                                TextButton(onClick = {
+                                    scope.launch {
+                                        val ok = apiAdminRejectTopupCard(c.id, token)
+                                        snack = if (ok) "تم الرفض" else "فشل الرفض"
+                                        if (ok) reloadKey++
+                                    }
+                                }) { Text("رفض") }
+                            }
                         }
                     }
                 }
             }
         }
-    }
-}
 
-@Composable private fun ProviderBalanceScreen(fetch: suspend () -> Double?, onBack: () -> Unit) {
-    var value by remember { mutableStateOf<Double?>(null) }
-    var err by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        val v = fetch()
-        if (v == null) err = "تعذر الجلب" else value = v
+        snack?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(it, color = OnBg)
+            LaunchedEffect(it) { delay(2000); snack = null }
+        }
     }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text("رصيد المزود (API)", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-        }
-        Spacer(Modifier.height(10.dp))
-        when {
-            err != null -> Text(err!!, color = Bad)
-            value == null -> Text("يتم التحميل...", color = Dim)
-            else -> Text("الرصيد: ${"%.4f".format(value!!)}", color = OnBg, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-        }
+
+    if (execFor != null) {
+        AlertDialog(
+            onDismissRequest = { execFor = null },
+            confirmButton = {
+                val scope2 = rememberCoroutineScope()
+                TextButton(onClick = {
+                    val amt = amountText.toDoubleOrNull()
+                    if (amt == null || amt <= 0.0) return@TextButton
+                    scope2.launch {
+                        val ok = apiAdminExecuteTopupCard(execFor!!.id, amt, token)
+                        if (ok) {
+                            snack = "تم التنفيذ وشحن الرصيد"
+                            execFor = null
+                            amountText = ""
+                            // إعادة التحميل
+                            // (نؤخر قليلًا لظهور الإشعار)
+                            delay(300)
+                            reloadKey++
+                        } else {
+                            snack = "فشل التنفيذ"
+                        }
+                    }
+                }) { Text("إرسال") }
+            },
+            dismissButton = { TextButton(onClick = { execFor = null }) { Text("إلغاء") } },
+            title = { Text("تنفيذ الشحن", color = OnBg) },
+            text = {
+                Column {
+                    Text("أدخل مبلغ الشحن ليُضاف لرصيد المستخدم", color = Dim, fontSize = 12.sp)
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = amountText,
+                        onValueChange = { s -> if (s.isEmpty() || s.toDoubleOrNull() != null) amountText = s },
+                        singleLine = true,
+                        label = { Text("المبلغ") }
+                    )
+                }
+            }
+        )
     }
 }
 
@@ -1484,6 +1506,38 @@ private fun parseBalancePayload(t: String?): Double? {
             else -> null
         }
     } catch (_: Exception) { null }
+}
+
+/* ============== واجهات إدارة الكروت ============== */
+private suspend fun apiAdminFetchPendingCards(token: String): List<PendingCard>? {
+    val (c, t) = httpGet(AdminEndpoints.pendingCards, mapOf("x-admin-password" to token))
+    if (c !in 200..299 || t == null) return null
+    return try {
+        val arr = JSONArray(t.trim())
+        val out = mutableListOf<PendingCard>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            out += PendingCard(
+                id = o.optInt("id"),
+                uid = o.optString("uid"),
+                card = o.optString("card"),
+                createdAt = o.optLong("created_at", 0L)
+            )
+        }
+        out
+    } catch (_: Exception) { null }
+}
+private suspend fun apiAdminRejectTopupCard(id: Int, token: String): Boolean {
+    val (c, _) = httpPost(AdminEndpoints.topupCardReject(id), JSONObject(), mapOf("x-admin-password" to token))
+    return c in 200..299
+}
+private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: String): Boolean {
+    val (c, _) = httpPost(
+        AdminEndpoints.topupCardExecute(id),
+        JSONObject().put("amount", amount),
+        mapOf("x-admin-password" to token)
+    )
+    return c in 200..299
 }
 
 /* =========================

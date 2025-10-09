@@ -49,14 +49,13 @@ import kotlin.random.Random
    إعدادات الخادم
    ========================= */
 private const val API_BASE =
-    "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // حدّثها إن تغيّر الديبLOY
+    "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // عدّلها إذا تغيّر الباكند
 
-/** اتصال مباشر مع مزوّد SMM (تم تفعيله حسب طلبك) */
+/** اتصال مباشر مع مزوّد SMM (اختياري) */
 private const val PROVIDER_DIRECT_URL = "https://kd1s.com/api/v2"
-private const val PROVIDER_DIRECT_KEY_HEADER = ""               // لا نستخدم هيدر هنا (POST form)
 private const val PROVIDER_DIRECT_KEY_VALUE = "25a9ceb07be0d8b2ba88e70dcbe92e06"
 
-/** مسارات الأدمن (مطابقة للباكند) */
+/** مسارات الأدمن (مطابقة للباكند الموحد) */
 private object AdminEndpoints {
     // قوائم المعلّقات
     const val pendingServices = "/api/admin/pending/services"
@@ -69,7 +68,7 @@ private object AdminEndpoints {
     // مستخدمون
     const val usersCount      = "/api/admin/users/count"
     const val usersBalances   = "/api/admin/users/balances"
-    // محفظة (شحن/خصم)
+    // محفظة
     const val walletTopup     = "/api/admin/wallet/topup"
     const val walletDeduct    = "/api/admin/wallet/deduct"
     // رصيد المزوّد
@@ -359,7 +358,7 @@ fun AppRoot() {
 }
 
 /* =========================
-   الشريط العلوي يمين: جرس + حالة الخادم + إعدادات
+   الشريط العلوي يمين
    ========================= */
 @Composable private fun TopRightBar(
     online: Boolean?, unread: Int,
@@ -669,7 +668,7 @@ fun AppRoot() {
 }
 
 /* =========================
-   تبويب رصيدي (مع أسيا سيل)
+   تبويب رصيدي (أسيا سيل)
    ========================= */
 @Composable private fun WalletScreen(
     uid: String,
@@ -677,7 +676,6 @@ fun AppRoot() {
     onToast: (String) -> Unit
 ) {
     val scope = rememberCoroutineScope()
-    val uri = LocalUriHandler.current
     var balance by remember { mutableStateOf<Double?>(null) }
     var askAsiacell by remember { mutableStateOf(false) }
     var cardNumber by remember { mutableStateOf("") }
@@ -738,21 +736,20 @@ fun AppRoot() {
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
                     sending = true
+                    // إرسال فعلي
                     val finish: (Boolean) -> Unit = { ok ->
                         sending = false
                         if (ok) {
                             onAddNotice(AppNotice("تم استلام كارتك", "تم إرسال كارت أسيا سيل إلى المالك للمراجعة.", forOwner = false))
                             onAddNotice(AppNotice("كارت أسيا سيل جديد", "UID=$uid | كارت: $digits", forOwner = true))
-                            onToast("تم إرسال الكارت للمراجعة.")
                             cardNumber = ""
                             askAsiacell = false
                         } else {
-                            onToast("تعذر إرسال الكارت. تأكد من الاتصال أو حاول لاحقًا.")
+                            onAddNotice(AppNotice("فشل إرسال الكارت", "تحقق من الاتصال وحاول مجددًا.", forOwner = false))
                         }
                     }
-                    // إرسال فعلي
-                    val scope2 = this
-                    scope.launch {
+                    val scope2 = scope
+                    scope2.launch {
                         val ok = apiSubmitAsiacellCard(uid, digits)
                         if (ok) { balance = apiGetBalance(uid) }
                         finish(ok)
@@ -927,12 +924,12 @@ fun AppRoot() {
                 )
                 "topup" -> TopupDeductScreen(
                     title = "إضافة الرصيد",
-                    onSubmit = { u, amt -> apiAdminWalletChange(AdminEndpoints.walletTopup, token!!, u, amt) },
+                    onSubmit = { u: String, amt: Double -> apiAdminWalletChange(AdminEndpoints.walletTopup, token!!, u, amt) },
                     onBack = { current = null }
                 )
                 "deduct" -> TopupDeductScreen(
                     title = "خصم الرصيد",
-                    onSubmit = { u, amt -> apiAdminWalletChange(AdminEndpoints.walletDeduct, token!!, u, amt) },
+                    onSubmit = { u: String, amt: Double -> apiAdminWalletChange(AdminEndpoints.walletDeduct, token!!, u, amt) },
                     onBack = { current = null }
                 )
                 "users_count" -> UsersCountScreen(
@@ -1067,6 +1064,123 @@ fun AppRoot() {
 }
 
 /* =========================
+   شاشات الأدمن الإضافية
+   ========================= */
+@Composable private fun TopupDeductScreen(
+    title: String,
+    onSubmit: (String, Double) -> Boolean,
+    onBack: () -> Unit
+) {
+    var uid by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var msg by remember { mutableStateOf<String?>(null) }
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+        }
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(value = uid, onValueChange = { uid = it.trim() }, singleLine = true, label = { Text("UID المستخدم") })
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = amount, onValueChange = { s -> if (s.isEmpty() || s.toDoubleOrNull() != null) amount = s },
+            singleLine = true, label = { Text("المبلغ") })
+        Spacer(Modifier.height(10.dp))
+        Button(onClick = {
+            val a = amount.toDoubleOrNull()
+            msg = if (uid.isBlank() || a == null) "أدخل UID ومبلغًا صالحًا"
+            else if (onSubmit(uid, a)) "تمت العملية بنجاح" else "فشل التنفيذ"
+        }) { Text("تنفيذ") }
+        Spacer(Modifier.height(8.dp))
+        msg?.let { Text(it, color = OnBg) }
+    }
+}
+
+@Composable private fun UsersCountScreen(fetch: () -> Int?, onBack: () -> Unit) {
+    var count by remember { mutableStateOf<Int?>(null) }
+    var err by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        val v = fetch()
+        if (v == null) err = "تعذر الجلب" else count = v
+    }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Text("عدد المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+        }
+        Spacer(Modifier.height(10.dp))
+        when {
+            err != null -> Text(err!!, color = Bad)
+            count == null -> Text("يتم التحميل...", color = Dim)
+            else -> Text("المجموع: $count", color = OnBg, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable private fun UsersBalancesScreen(fetch: () -> List<Triple<String,String,Double>>?, onBack: () -> Unit) {
+    var list by remember { mutableStateOf<List<Triple<String,String,Double>>?>(null) }
+    var err by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        val v = fetch()
+        if (v == null) err = "تعذر الجلب" else list = v
+    }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Text("أرصدة المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+        }
+        Spacer(Modifier.height(10.dp))
+        when {
+            err != null -> Text(err!!, color = Bad)
+            list == null -> Text("يتم التحميل...", color = Dim)
+            list!!.isEmpty() -> Text("لا يوجد مستخدمون.", color = Dim)
+            else -> LazyColumn {
+                items(list!!) { (uid, state, bal) ->
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                    ) {
+                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text("UID: $uid", fontWeight = FontWeight.SemiBold, color = OnBg)
+                                Text("الحالة: $state", color = Dim, fontSize = 12.sp)
+                            }
+                            Text("${"%.2f".format(bal)}$", color = OnBg, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable private fun ProviderBalanceScreen(fetch: () -> Double?, onBack: () -> Unit) {
+    var value by remember { mutableStateOf<Double?>(null) }
+    var err by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        val v = fetch()
+        if (v == null) err = "تعذر الجلب" else value = v
+    }
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Text("رصيد المزود (API)", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+        }
+        Spacer(Modifier.height(10.dp))
+        when {
+            err != null -> Text(err!!, color = Bad)
+            value == null -> Text("يتم التحميل...", color = Dim)
+            else -> Text("الرصيد: ${"%.4f".format(value!!)}", color = OnBg, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+/* =========================
    شريط سفلي
    ========================= */
 @Composable private fun BottomNavBar(current: Tab, onChange: (Tab) -> Unit, modifier: Modifier = Modifier) {
@@ -1173,23 +1287,6 @@ private fun httpGetBlocking(path: String, headers: Map<String, String> = emptyMa
     } catch (_: Exception) { -1 to null }
 }
 
-/** اتصال GET مطلق (لو احتجناه) */
-private fun httpGetAbsolute(fullUrl: String, headers: Map<String, String> = emptyMap()): Pair<Int, String?> {
-    return try {
-        val url = URL(fullUrl)
-        val con = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 8000
-            readTimeout = 8000
-            headers.forEach { (k, v) -> setRequestProperty(k, v) }
-        }
-        val code = con.responseCode
-        val txt = (if (code in 200..299) con.inputStream else con.errorStream)
-            ?.bufferedReader()?.use { it.readText() }
-        code to txt
-    } catch (_: Exception) { -1 to null }
-}
-
 /** POST JSON إلى خادمنا */
 private fun httpPostBlocking(path: String, json: JSONObject, headers: Map<String, String> = emptyMap()): Pair<Int, String?> {
     return try {
@@ -1210,7 +1307,7 @@ private fun httpPostBlocking(path: String, json: JSONObject, headers: Map<String
     } catch (_: Exception) { -1 to null }
 }
 
-/** POST form مطلق (لاستدعاء kd1s: action=balance) */
+/** POST form مطلق (مثلاً KD1S: action=balance) */
 private fun httpPostFormAbsolute(fullUrl: String, fields: Map<String, String>, headers: Map<String, String> = emptyMap()): Pair<Int, String?> {
     return try {
         val url = URL(fullUrl)
@@ -1259,7 +1356,7 @@ private suspend fun apiCreateProviderOrder(
     return code in 200..299 && (txt?.contains("ok", ignoreCase = true) == true)
 }
 
-/* أسيا سيل: يرسل الطلب للباكند ويعرض رسائل واضحة */
+/* أسيا سيل */
 private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
     val (code, txt) = httpPostBlocking(
         "/api/wallet/asiacell/submit",
@@ -1365,14 +1462,10 @@ private fun apiAdminUsersBalances(token: String): List<Triple<String,String,Doub
     } catch (_: Exception) { null }
 }
 
-/** فحص رصيد API (أولوية الاتصال المباشر kd1s، ثم رجوع للباكند) */
+/** فحص رصيد API (تجربة kd1s مباشرة ثم رجوع للباكند) */
 private fun apiAdminProviderBalance(token: String): Double? {
     if (PROVIDER_DIRECT_URL.isNotBlank() && PROVIDER_DIRECT_KEY_VALUE.isNotBlank()) {
-        // kd1s: POST form (key, action=balance)
-        val fields = mapOf(
-            "key" to PROVIDER_DIRECT_KEY_VALUE,
-            "action" to "balance"
-        )
+        val fields = mapOf("key" to PROVIDER_DIRECT_KEY_VALUE, "action" to "balance")
         val (c, t) = httpPostFormAbsolute(PROVIDER_DIRECT_URL, fields)
         parseBalancePayload(t)?.let { if (c in 200..299) return it }
     }

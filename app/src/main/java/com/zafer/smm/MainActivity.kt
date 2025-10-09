@@ -908,7 +908,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
 
         if (current == null) {
             val buttons = listOf(
-                "الطلبات المعلقة (الخدمات)" to "pending_services",
+                "طلبات خدمات API المعلقة" to "pending_services",
                 "طلبات الايتونز المعلقة"   to "pending_itunes",
                 "طلبات ببجي المعلقة"          to "pending_pubg",
                 "طلبات لودو المعلقة"       to "pending_ludo",
@@ -940,7 +940,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
         } else {
             when (current) {
                 "pending_services" -> AdminPendingGenericList(
-                    title = "الطلبات المعلقة (الخدمات)",
+                    title = "طلبات خدمات API المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingServices,
                     itemFilter = { item -> isIraqTelcoCardPurchase(item.title) },                  // ✅ فقط طلبات API

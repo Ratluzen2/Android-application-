@@ -63,6 +63,7 @@ private object AdminEndpoints {
     const val pendingItunes   = "/api/admin/pending/itunes"
     const val pendingPubg     = "/api/admin/pending/pubg"
     const val pendingLudo     = "/api/admin/pending/ludo"
+    const val pendingBalances = "/api/admin/pending/balances"
 
     // ✅ الكروت المعلّقة لأسيا سيل
     const val pendingCards    = "/api/admin/pending/cards"
@@ -844,6 +845,16 @@ fun AppRoot() {
 /* =========================
    فلاتر لتصنيف الطلبات
    ========================= */
+
+private fun isIraqTelcoCardPurchase(title: String): Boolean {
+    val t = title.lowercase()
+    val telco = t.contains("اثير") || t.contains("asiacell") || t.contains("أسيا") || t.contains("اسياسيل") || t.contains("korek") || t.contains("كورك")
+    val isCardWord = t.contains("شراء") || t.contains("كارت") || t.contains("بطاقة") || t.contains("رصيد")
+    val notItunes = !t.contains("itunes") && !t.contains("ايتونز")
+    val notTopupSubmit = !t.contains("شحن عبر")
+    return telco && isCardWord && notItunes && notTopupSubmit
+}
+
 private fun isPhoneTopupTitle(title: String): Boolean {
     val t = title.lowercase()
     return t.contains("شراء رصيد") || t.contains("رصيد هاتف")
@@ -896,8 +907,8 @@ private fun isApiOrder(o: OrderItem): Boolean {
                 "طلبات الايتونز المعلقة"   to "pending_itunes",
                 "طلبات شدات ببجي"          to "pending_pubg",
                 "طلبات لودو المعلقة"       to "pending_ludo",
-                "طلبات الأرصدة المعلقة"    to "pending_phone",   // ✅ جديد
-                "الكروت المعلقة"           to "pending_cards",
+                "طلبات شراء الكارتات"    to "pending_phone",   // ✅ جديد
+                "طلبات شحن أسيا سيل"     to "pending_cards",
                 "إضافة الرصيد"             to "topup",
                 "خصم الرصيد"               to "deduct",
                 "عدد المستخدمين"           to "users_count",
@@ -957,13 +968,14 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     onBack = { current = null }
                 )
                 "pending_phone" -> AdminPendingGenericList(
-                    title = "طلبات الأرصدة المعلقة",
+
+                    title = "طلبات شراء الكارتات",
                     token = token!!,
                     // يمكن أن يعود من مسار مخصص للأرصدة؛ إن لم يوجد نستعمل services مع فلترة العنوان:
-                    fetchUrl = AdminEndpoints.pendingServices,
-                    itemFilter = { item -> isPhoneTopupTitle(item.title) && item.quantity == 0 },
+                    fetchUrl = AdminEndpoints.pendingBalances,
+                    itemFilter = { item -> isIraqTelcoCardPurchase(item.title) },
                     approveWithCode = true,                                      // ✅ يطلب رقم الكارت
-                    codeFieldLabel = "رقم الكارت",
+                    codeFieldLabel = "كود الكارت",
                     onBack = { current = null }
                 )
                 // ✅ شاشة الكروت المعلّقة الخاصة — UID + كارت + تنفيذ/رفض + وقت
@@ -1209,7 +1221,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
             Spacer(Modifier.width(6.dp))
-            Text("الكروت المعلقة", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+            Text("طلبات شحن أسيا سيل", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
         }
         Spacer(Modifier.height(10.dp))
 

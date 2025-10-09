@@ -17,6 +17,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -838,6 +840,25 @@ fun AppRoot() {
 }
 
 /* =========================
+   فلاتر لتصنيف الطلبات
+   ========================= */
+private fun isPhoneTopupTitle(title: String): Boolean {
+    val t = title.lowercase()
+    return t.contains("شراء رصيد") || t.contains("رصيد هاتف")
+            || t.contains("اثير") || t.contains("اسياسيل") || t.contains("كورك")
+}
+private fun isApiOrder(o: OrderItem): Boolean {
+    val tl = o.title.lowercase()
+    val notManualPhone = !isPhoneTopupTitle(o.title)
+    val notItunes = !tl.contains("ايتونز")
+    val notPubg = !tl.contains("ببجي")
+    val notLudo = !tl.contains("لودو")
+    // نعتبر طلب API إذا له كمية > 0 أو عنده تفاصيل (رابط/بايلود)،
+    // وبشرط ألا يكون من الأقسام اليدوية المذكورة:
+    return (o.quantity > 0 || o.payload.isNotBlank()) && notManualPhone && notItunes && notPubg && notLudo
+}
+
+/* =========================
    لوحة تحكم المالك
    ========================= */
 @Composable private fun OwnerPanel(
@@ -868,10 +889,11 @@ fun AppRoot() {
         if (current == null) {
             val buttons = listOf(
                 "الطلبات المعلقة (الخدمات)" to "pending_services",
-                "طلبات شحن الايتونز"      to "pending_itunes",
-                "طلبات شدات ببجي"         to "pending_pubg",
+                "طلبات الايتونز المعلقة"   to "pending_itunes",
+                "طلبات شدات ببجي"          to "pending_pubg",
                 "طلبات لودو المعلقة"       to "pending_ludo",
-                "الكروت المعلقة"           to "pending_cards", // ✅ زر الكروت
+                "طلبات الأرصدة المعلقة"    to "pending_phone",   // ✅ جديد
+                "الكروت المعلقة"           to "pending_cards",
                 "إضافة الرصيد"             to "topup",
                 "خصم الرصيد"               to "deduct",
                 "عدد المستخدمين"           to "users_count",
@@ -901,38 +923,44 @@ fun AppRoot() {
                     title = "الطلبات المعلقة (الخدمات)",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingServices,
-                    filter = null,
+                    itemFilter = { item -> isApiOrder(item) },   // ✅ فقط طلبات API
                     onBack = { current = null }
                 )
                 "pending_itunes" -> AdminPendingGenericList(
-                    title = "طلبات شحن الايتونز",
+                    title = "طلبات الايتونز المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingItunes,
-                    filter = null,
+                    itemFilter = null,
                     onBack = { current = null }
                 )
                 "pending_pubg" -> AdminPendingGenericList(
                     title = "طلبات شدات ببجي",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingPubg,
-                    filter = null,
+                    itemFilter = null,
                     onBack = { current = null }
                 )
                 "pending_ludo" -> AdminPendingGenericList(
                     title = "طلبات لودو المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingLudo,
-                    filter = null,
+                    itemFilter = null,
                     onBack = { current = null }
                 )
-
+                "pending_phone" -> AdminPendingGenericList(
+                    title = "طلبات الأرصدة المعلقة",
+                    token = token!!,
+                    // استعمل مسار يعيد كل الطلبات اليدوية إن توفر، وإلا نستخدم خدمات مع فلترة العنوان:
+                    fetchUrl = AdminEndpoints.pendingServices,
+                    itemFilter = { item -> isPhoneTopupTitle(item.title) && item.quantity == 0 },
+                    onBack = { current = null }
+                )
                 // ✅ شاشة الكروت المعلّقة الخاصة — UID + كارت + تنفيذ/رفض
                 "pending_cards" -> AdminPendingCardsScreen(
                     token = token!!,
                     onBack = { current = null }
                 )
-
-                // ✅ شاشات مضافة لحل Unresolved reference + منع استدعاء suspend خارج Coroutine
+                // إجراءات رصيد
                 "topup" -> TopupDeductScreen(
                     title = "إضافة الرصيد",
                     token = token!!,
@@ -962,12 +990,12 @@ fun AppRoot() {
     }
 }
 
-/** قائمة عامة للمعلّقات (الخدمات/أقسام أخرى) */
+/** قائمة عامة للمعلّقات مع مُرشِّح OrderItem */
 @Composable private fun AdminPendingGenericList(
     title: String,
     token: String,
     fetchUrl: String,
-    filter: ((String) -> Boolean)?,
+    itemFilter: ((OrderItem) -> Boolean)?,
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -996,17 +1024,18 @@ fun AppRoot() {
                 }
                 for (i in 0 until arr.length()) {
                     val o = arr.getJSONObject(i)
-                    val titleS = o.optString("title","")
-                    if (filter != null && !filter(titleS)) continue
-                    parsed += OrderItem(
-                        id = o.optInt("id").toString(),
-                        title = titleS,
+                    val item = OrderItem(
+                        id = o.optString("id", o.optInt("id", 0).toString()),
+                        title = o.optString("title",""),
                         quantity = o.optInt("quantity", 0),
                         price = o.optDouble("price", 0.0),
                         payload = o.optString("link",""),
                         status = OrderStatus.Pending,
                         createdAt = o.optLong("created_at", 0L)
                     )
+                    if (itemFilter == null || itemFilter.invoke(item)) {
+                        parsed += item
+                    }
                 }
                 list = parsed
             } catch (_: Exception) {
@@ -1179,8 +1208,7 @@ fun AppRoot() {
                         if (ok) {
                             execFor = null
                             amountText = ""
-                            delay(300)
-                            // إظهار Snack عبر الحالة العليا
+                            // بعد التنفيذ سيتم تحديث القائمة عبر reloadKey في الأعلى عند الحاجة
                         }
                     }
                 }) { Text("إرسال") }

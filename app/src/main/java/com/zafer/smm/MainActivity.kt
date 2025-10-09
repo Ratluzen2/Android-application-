@@ -738,7 +738,6 @@ fun AppRoot() {
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
                     sending = true
-                    // نرسل للباكند؛ عند النجاح نحدّث الإشعارات + الرصيد
                     val finish: (Boolean) -> Unit = { ok ->
                         sending = false
                         if (ok) {
@@ -752,6 +751,7 @@ fun AppRoot() {
                         }
                     }
                     // إرسال فعلي
+                    val scope2 = this
                     scope.launch {
                         val ok = apiSubmitAsiacellCard(uid, digits)
                         if (ok) { balance = apiGetBalance(uid) }
@@ -952,116 +952,116 @@ fun AppRoot() {
     }
 }
 
-@Composable private fun TopupDeductScreen(
+/** قائمة عامة للمعلّقَات */
+@Composable private fun AdminPendingGenericList(
     title: String,
-    onSubmit: (String, Double) -> Boolean,
+    token: String,
+    fetchUrl: String,
+    filter: ((String) -> Boolean)?,
     onBack: () -> Unit
 ) {
-    var uid by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var msg by remember { mutableStateOf<String?>(null) }
+    var list by remember { mutableStateOf<List<OrderItem>?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var err by remember { mutableStateOf<String?>(null) }
+    var reloadKey by remember { mutableStateOf(0) }
+    var snack by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(reloadKey) {
+        loading = true; err = null
+        val (code, txt) = httpGet(fetchUrl, headers = mapOf("x-admin-password" to token))
+        if (code in 200..299 && txt != null) {
+            try {
+                val parsed = mutableListOf<OrderItem>()
+                val trimmed = txt.trim()
+                val arr: JSONArray = if (trimmed.startsWith("[")) {
+                    JSONArray(trimmed)
+                } else {
+                    val obj = JSONObject(trimmed)
+                    when {
+                        obj.has("list") -> obj.optJSONArray("list") ?: JSONArray()
+                        obj.has("data") -> obj.optJSONArray("data") ?: JSONArray()
+                        else -> JSONArray()
+                    }
+                }
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    val titleS = o.optString("title","")
+                    if (filter != null && !filter(titleS)) continue
+                    parsed += OrderItem(
+                        id = o.optInt("id").toString(),
+                        title = titleS,
+                        quantity = o.optInt("quantity", 0),
+                        price = o.optDouble("price", 0.0),
+                        payload = o.optString("link",""),
+                        status = OrderStatus.Pending,
+                        createdAt = o.optLong("created_at", 0L)
+                    )
+                }
+                list = parsed
+            } catch (_: Exception) {
+                list = null
+                err = "تعذر جلب البيانات"
+            }
+        } else {
+            list = null
+            err = "تعذر جلب البيانات"
+        }
+        loading = false
+    }
+
+    fun doApprove(id: String): Boolean =
+        apiAdminPOST(String.format(AdminEndpoints.orderApprove, id.toInt()), token)
+
+    fun doDeliver(id: String): Boolean =
+        apiAdminPOST(String.format(AdminEndpoints.orderDeliver, id.toInt()), token)
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
             Spacer(Modifier.width(6.dp))
             Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
         }
         Spacer(Modifier.height(10.dp))
-        OutlinedTextField(value = uid, onValueChange = { uid = it.trim() }, singleLine = true, label = { Text("UID المستخدم") })
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = amount, onValueChange = { s -> if (s.isEmpty() || s.toDoubleOrNull() != null) amount = s },
-            singleLine = true, label = { Text("المبلغ") })
-        Spacer(Modifier.height(10.dp))
-        Button(onClick = {
-            val a = amount.toDoubleOrNull()
-            msg = if (uid.isBlank() || a == null) "أدخل UID ومبلغًا صالحًا"
-            else if (onSubmit(uid, a)) "تمت العملية بنجاح" else "فشل التنفيذ"
-        }) { Text("تنفيذ") }
-        Spacer(Modifier.height(8.dp))
-        msg?.let { Text(it, color = OnBg) }
-    }
-}
 
-@Composable private fun UsersCountScreen(fetch: () -> Int?, onBack: () -> Unit) {
-    var count by remember { mutableStateOf<Int?>(null) }
-    var err by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        val v = fetch()
-        if (v == null) err = "تعذر الجلب" else count = v
-    }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text("عدد المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-        }
-        Spacer(Modifier.height(10.dp))
         when {
+            loading -> Text("يتم التحميل...", color = Dim)
             err != null -> Text(err!!, color = Bad)
-            count == null -> Text("يتم التحميل...", color = Dim)
-            else -> Text("المجموع: $count", color = OnBg, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
-
-@Composable private fun UsersBalancesScreen(fetch: () -> List<Triple<String,String,Double>>?, onBack: () -> Unit) {
-    var list by remember { mutableStateOf<List<Triple<String,String,Double>>?>(null) }
-    var err by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        val v = fetch()
-        if (v == null) err = "تعذر الجلب" else list = v
-    }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text("أرصدة المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-        }
-        Spacer(Modifier.height(10.dp))
-        when {
-            err != null -> Text(err!!, color = Bad)
-            list == null -> Text("يتم التحميل...", color = Dim)
-            list!!.isEmpty() -> Text("لا يوجد مستخدمون.", color = Dim)
+            list.isNullOrEmpty() -> Text("لا يوجد شيء معلق.", color = Dim)
             else -> LazyColumn {
-                items(list!!) { (uid, state, bal) ->
+                items(list!!) { o ->
                     ElevatedCard(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
-                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("UID: $uid", fontWeight = FontWeight.SemiBold, color = OnBg)
-                                Text("الحالة: $state", color = Dim, fontSize = 12.sp)
+                        Column(Modifier.padding(16.dp)) {
+                            Text(o.title, fontWeight = FontWeight.SemiBold, color = OnBg)
+                            if (o.payload.isNotBlank()) {
+                                Spacer(Modifier.height(4.dp))
+                                Text("تفاصيل: ${o.payload}", color = Dim, fontSize = 12.sp)
                             }
-                            Text("${"%.2f".format(bal)}$", color = OnBg, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(8.dp))
+                            Row {
+                                TextButton(onClick = {
+                                    val ok = doApprove(o.id)
+                                    snack = if (ok) "تم التنفيذ" else "فشل التنفيذ"
+                                    if (ok) reloadKey++
+                                }) { Text("تنفيذ") }
+                                TextButton(onClick = {
+                                    val ok = doDeliver(o.id)
+                                    snack = if (ok) "تم الرفض" else "فشل التنفيذ"
+                                    if (ok) reloadKey++
+                                }) { Text("رفض") }
+                            }
                         }
                     }
                 }
             }
         }
-    }
-}
 
-@Composable private fun ProviderBalanceScreen(fetch: () -> Double?, onBack: () -> Unit) {
-    var value by remember { mutableStateOf<Double?>(null) }
-    var err by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(Unit) {
-        val v = fetch()
-        if (v == null) err = "تعذر الجلب" else value = v
-    }
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text("رصيد المزود (API)", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-        }
-        Spacer(Modifier.height(10.dp))
-        when {
-            err != null -> Text(err!!, color = Bad)
-            value == null -> Text("يتم التحميل...", color = Dim)
-            else -> Text("الرصيد: ${"%.4f".format(value!!)}", color = OnBg, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        snack?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(it, color = OnBg)
+            LaunchedEffect(it) { delay(2000); snack = null }
         }
     }
 }

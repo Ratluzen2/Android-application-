@@ -47,35 +47,29 @@ import kotlin.random.Random
 /* =========================
    إعدادات الخادم
    ========================= */
-private const val API_BASE = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // غيّرها إذا لزم
+private const val API_BASE = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // حدّثها عند الحاجة
 
-/** مسارات الأدمن مطابقة للباكند الحالي */
+/** مسارات الأدمن (مطابقة للباكند) */
 private object AdminEndpoints {
+    // قوائم المعلّقات
     const val pendingServices = "/api/admin/pending/services"
-    const val serviceApprove  = "/api/admin/pending/services/%d/approve"
-    const val serviceReject   = "/api/admin/pending/services/%d/reject"
-
-    const val pendingCards    = "/api/admin/pending/cards"
-    const val cardAccept      = "/api/admin/pending/cards/%d/accept" // + amount_usd
-    const val cardReject      = "/api/admin/pending/cards/%d/reject"
-
     const val pendingItunes   = "/api/admin/pending/itunes"
-    const val itunesDeliver   = "/api/admin/pending/itunes/%d/deliver"
-    const val itunesReject    = "/api/admin/pending/itunes/%d/reject"
-
     const val pendingPubg     = "/api/admin/pending/pubg"
-    const val pubgDeliver     = "/api/admin/pending/pubg/%d/deliver"
-    const val pubgReject      = "/api/admin/pending/pubg/%d/reject"
-
     const val pendingLudo     = "/api/admin/pending/ludo"
-    const val ludoDeliver     = "/api/admin/pending/ludo/%d/deliver"
-    const val ludoReject      = "/api/admin/pending/ludo/%d/reject"
 
+    // عمليات على الطلب
+    const val orderApprove    = "/api/admin/orders/%d/approve"
+    const val orderDeliver    = "/api/admin/orders/%d/deliver"
+
+    // مستخدمون
     const val usersCount      = "/api/admin/users/count"
     const val usersBalances   = "/api/admin/users/balances"
-    const val topupUser       = "/api/admin/users/%s/topup"          // body: {"amount":...}
-    const val deductUser      = "/api/admin/users/%s/deduct"         // body: {"amount":...}
 
+    // محفظة (شحن/خصم)
+    const val walletTopup     = "/api/admin/wallet/topup"
+    const val walletDeduct    = "/api/admin/wallet/deduct"
+
+    // رصيد المزوّد
     const val providerBalance = "/api/admin/provider/balance"
 }
 
@@ -561,7 +555,6 @@ fun AppRoot() {
                 if (bal < price) { onOrdered(false, "رصيدك غير كافٍ. السعر: $price\$ | رصيدك: ${"%.2f".format(bal)}\$"); return@TextButton }
 
                 loading = true
-                // استخدم scope المُعرّف أعلى الـComposable (لا نستدعي remember... داخل onClick)
                 scope.launch {
                     val ok = apiCreateProviderOrder(
                         uid = uid,
@@ -646,7 +639,6 @@ fun AppRoot() {
                     .fillMaxWidth()
                     .padding(bottom = 8.dp)
                     .clickable {
-                        // استخدم scope المُعرّف أعلى الـComposable
                         scope.launch {
                             val ok = apiCreateManualOrder(uid, name)
                             if (ok) {
@@ -743,7 +735,6 @@ fun AppRoot() {
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
                     sending = true
-                    // استخدام scope الموجود مسبقًا (لا نستدعي @Composable داخل onClick)
                     scope.launch {
                         val ok = apiSubmitAsiacellCard(uid, digits)
                         sending = false
@@ -865,7 +856,6 @@ fun AppRoot() {
             val buttons = listOf(
                 "الطلبات المعلقة (الخدمات)" to "pending_services",
                 "طلبات شحن الايتونز"      to "pending_itunes",
-                "الكارتات المعلقة"         to "pending_cards",
                 "طلبات شدات ببجي"         to "pending_pubg",
                 "طلبات لودو المعلقة"       to "pending_ludo",
                 "إضافة الرصيد"             to "topup",
@@ -896,65 +886,19 @@ fun AppRoot() {
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingServices,
                     mapItem = { o ->
-                        val id = o.optInt("id").toString()
-                        val title = "(${o.optString("service_key","")}) UID=${o.optString("uid","")}"
-                        val qty = o.optInt("quantity")
-                        val price = o.optDouble("price", 0.0)
-                        OrderItem(id, title, qty, price, o.optString("link",""), OrderStatus.Pending, 0L)
+                        OrderItem(
+                            id = o.optInt("id").toString(),
+                            title = o.optString("title",""),
+                            quantity = o.optInt("quantity", 0),
+                            price = o.optDouble("price", 0.0),
+                            payload = o.optString("link",""),
+                            status = OrderStatus.Pending,
+                            createdAt = o.optLong("created_at", 0L)
+                        )
                     },
-                    approve = { id -> apiAdminPOST(String.format(AdminEndpoints.serviceApprove, id.toInt()), token!!) },
-                    reject  = { id -> apiAdminPOST(String.format(AdminEndpoints.serviceReject,  id.toInt()), token!!) },
+                    approve = { id -> apiAdminPOST(String.format(AdminEndpoints.orderApprove, id.toInt()), token!!) },
+                    reject  = { id -> apiAdminPOST(String.format(AdminEndpoints.orderDeliver, id.toInt()), token!!) },
                     extraButton = null,
-                    onBack = { current = null }
-                )
-                "pending_cards" -> AdminPendingGenericList(
-                    title = "الكارتات المعلقة",
-                    token = token!!,
-                    fetchUrl = AdminEndpoints.pendingCards,
-                    mapItem = { o ->
-                        val id = o.optInt("id").toString()
-                        val title = "UID=${o.optString("uid","")} | كارت: ${o.optString("card_number","")}"
-                        OrderItem(id, title, 0, 0.0, o.optString("card_number",""), OrderStatus.Pending, 0L)
-                    },
-                    approve = { _ -> false }, // التنفيذ يتم عبر Dialog لإدخال المبلغ
-                    reject  = { id -> apiAdminPOST(String.format(AdminEndpoints.cardReject, id.toInt()), token!!) },
-                    extraButton = { itemId, showSnack ->
-                        var show by remember { mutableStateOf(false) }
-                        var amount by remember { mutableStateOf("") }
-                        Button(onClick = { show = true }) { Text("تنفيذ") }
-                        if (show) {
-                            AlertDialog(
-                                onDismissRequest = { show = false },
-                                confirmButton = {
-                                    TextButton(onClick = {
-                                        val a = amount.toDoubleOrNull() ?: return@TextButton
-                                        val ok = apiAdminPOST(
-                                            String.format(AdminEndpoints.cardAccept, itemId.toInt()),
-                                            token!!,
-                                            JSONObject().put("amount_usd", a)
-                                        )
-                                        show = false
-                                        showSnack(if (ok) "تم شحن الرصيد" else "فشل التنفيذ")
-                                    }) { Text("تأكيد") }
-                                },
-                                dismissButton = { TextButton(onClick = { show = false }) { Text("إلغاء") } },
-                                title = { Text("قيمة شحن الرصيد بالدولار", color = OnBg) },
-                                text = {
-                                    OutlinedTextField(
-                                        value = amount,
-                                        onValueChange = { s -> if (s.all { it.isDigit() || it == '.' }) amount = s },
-                                        singleLine = true,
-                                        label = { Text("Amount (USD)") },
-                                        colors = TextFieldDefaults.outlinedTextFieldColors(
-                                            cursorColor = Accent,
-                                            focusedBorderColor = Accent, unfocusedBorderColor = Dim,
-                                            focusedLabelColor = OnBg, unfocusedLabelColor = Dim
-                                        )
-                                    )
-                                }
-                            )
-                        }
-                    },
                     onBack = { current = null }
                 )
                 "pending_itunes" -> AdminPendingGenericList(
@@ -962,48 +906,19 @@ fun AppRoot() {
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingItunes,
                     mapItem = { o ->
-                        val id = o.optInt("id").toString()
-                        val title = "UID=${o.optString("uid","")} | iTunes ${o.optInt("amount",0)}"
-                        OrderItem(id, title, o.optInt("amount",0), 0.0, "", OrderStatus.Pending, 0L)
+                        OrderItem(
+                            id = o.optInt("id").toString(),
+                            title = o.optString("title",""),
+                            quantity = o.optInt("quantity", 0),
+                            price = o.optDouble("price", 0.0),
+                            payload = "",
+                            status = OrderStatus.Pending,
+                            createdAt = o.optLong("created_at", 0L)
+                        )
                     },
-                    approve = { _ -> false }, // يفتح إدخال كود
-                    reject  = { id -> apiAdminPOST(String.format(AdminEndpoints.itunesReject, id.toInt()), token!!) },
-                    extraButton = { itemId, showSnack ->
-                        var show by remember { mutableStateOf(false) }
-                        var code by remember { mutableStateOf("") }
-                        Button(onClick = { show = true }) { Text("تنفيذ") }
-                        if (show) {
-                            AlertDialog(
-                                onDismissRequest = { show = false },
-                                confirmButton = {
-                                    TextButton(onClick = {
-                                        val ok = apiAdminPOST(
-                                            String.format(AdminEndpoints.itunesDeliver, itemId.toInt()),
-                                            token!!,
-                                            JSONObject().put("gift_code", code)
-                                        )
-                                        show = false
-                                        showSnack(if (ok) "تم التسليم" else "فشل التنفيذ")
-                                    }) { Text("تأكيد") }
-                                },
-                                dismissButton = { TextButton(onClick = { show = false }) { Text("إلغاء") } },
-                                title = { Text("إرسال كود iTunes", color = OnBg) },
-                                text = {
-                                    OutlinedTextField(
-                                        value = code,
-                                        onValueChange = { code = it },
-                                        singleLine = true,
-                                        label = { Text("Gift Code") },
-                                        colors = TextFieldDefaults.outlinedTextFieldColors(
-                                            cursorColor = Accent,
-                                            focusedBorderColor = Accent, unfocusedBorderColor = Dim,
-                                            focusedLabelColor = OnBg, unfocusedLabelColor = Dim
-                                        )
-                                    )
-                                }
-                            )
-                        }
-                    },
+                    approve = { id -> apiAdminPOST(String.format(AdminEndpoints.orderApprove, id.toInt()), token!!) },
+                    reject  = { id -> apiAdminPOST(String.format(AdminEndpoints.orderDeliver, id.toInt()), token!!) },
+                    extraButton = null,
                     onBack = { current = null }
                 )
                 "pending_pubg" -> AdminPendingGenericList(
@@ -1011,12 +926,18 @@ fun AppRoot() {
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingPubg,
                     mapItem = { o ->
-                        val id = o.optInt("id").toString()
-                        val title = "UID=${o.optString("uid","")} | UC ${o.optInt("pkg",0)}"
-                        OrderItem(id, title, o.optInt("pkg",0), 0.0, o.optString("pubg_id",""), OrderStatus.Pending, 0L)
+                        OrderItem(
+                            id = o.optInt("id").toString(),
+                            title = o.optString("title",""),
+                            quantity = o.optInt("quantity", 0),
+                            price = o.optDouble("price", 0.0),
+                            payload = "",
+                            status = OrderStatus.Pending,
+                            createdAt = o.optLong("created_at", 0L)
+                        )
                     },
-                    approve = { id -> apiAdminPOST(String.format(AdminEndpoints.pubgDeliver, id.toInt()), token!!) },
-                    reject  = { id -> apiAdminPOST(String.format(AdminEndpoints.pubgReject,  id.toInt()), token!!) },
+                    approve = { id -> apiAdminPOST(String.format(AdminEndpoints.orderApprove, id.toInt()), token!!) },
+                    reject  = { id -> apiAdminPOST(String.format(AdminEndpoints.orderDeliver, id.toInt()), token!!) },
                     extraButton = null,
                     onBack = { current = null }
                 )
@@ -1025,23 +946,29 @@ fun AppRoot() {
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingLudo,
                     mapItem = { o ->
-                        val id = o.optInt("id").toString()
-                        val title = "UID=${o.optString("uid","")} | ${o.optString("kind","")} ${o.optInt("pack",0)}"
-                        OrderItem(id, title, o.optInt("pack",0), 0.0, o.optString("ludo_id",""), OrderStatus.Pending, 0L)
+                        OrderItem(
+                            id = o.optInt("id").toString(),
+                            title = o.optString("title",""),
+                            quantity = o.optInt("quantity", 0),
+                            price = o.optDouble("price", 0.0),
+                            payload = "",
+                            status = OrderStatus.Pending,
+                            createdAt = o.optLong("created_at", 0L)
+                        )
                     },
-                    approve = { id -> apiAdminPOST(String.format(AdminEndpoints.ludoDeliver, id.toInt()), token!!) },
-                    reject  = { id -> apiAdminPOST(String.format(AdminEndpoints.ludoReject,  id.toInt()), token!!) },
+                    approve = { id -> apiAdminPOST(String.format(AdminEndpoints.orderApprove, id.toInt()), token!!) },
+                    reject  = { id -> apiAdminPOST(String.format(AdminEndpoints.orderDeliver, id.toInt()), token!!) },
                     extraButton = null,
                     onBack = { current = null }
                 )
                 "topup" -> TopupDeductScreen(
                     title = "إضافة الرصيد",
-                    onSubmit = { u, amt -> apiAdminPOST(String.format(AdminEndpoints.topupUser, u), token!!, JSONObject().put("amount", amt)) },
+                    onSubmit = { u, amt -> apiAdminWalletChange(AdminEndpoints.walletTopup, token!!, u, amt) },
                     onBack = { current = null }
                 )
                 "deduct" -> TopupDeductScreen(
                     title = "خصم الرصيد",
-                    onSubmit = { u, amt -> apiAdminPOST(String.format(AdminEndpoints.deductUser, u), token!!, JSONObject().put("amount", amt)) },
+                    onSubmit = { u, amt -> apiAdminWalletChange(AdminEndpoints.walletDeduct, token!!, u, amt) },
                     onBack = { current = null }
                 )
                 "users_count" -> UsersCountScreen(
@@ -1061,7 +988,7 @@ fun AppRoot() {
     }
 }
 
-/** قائمة عامة للمعلّقَات مع أزرار تنفيذ/رفض و زر إضافي اختياري (للبطاقات/الايتونز) */
+/** قائمة عامة للمعلّقَات مع أزرار تنفيذ/رفض (تستخدم approve/deliver المتوفرين في الباكند) */
 @Composable private fun AdminPendingGenericList(
     title: String,
     token: String,
@@ -1080,7 +1007,7 @@ fun AppRoot() {
 
     LaunchedEffect(reloadKey) {
         loading = true; err = null
-        val (code, txt) = httpGet(fetchUrl, headers = mapOf("x-admin-pass" to token))
+        val (code, txt) = httpGet(fetchUrl, headers = mapOf("x-admin-password" to token))
         if (code in 200..299 && txt != null) {
             try {
                 val parsed = mutableListOf<OrderItem>()
@@ -1433,13 +1360,12 @@ private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
-/* >>>>>>>>> دالة أسيا سيل المُحدّثة <<<<<<<<< */
+/* أسيا سيل: يرسل الطلب، وإن فشل الخادم يفتح واتساب */
 private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
     val (code, txt) = httpPost(
         "/api/wallet/asiacell/submit",
         JSONObject().put("uid", uid).put("card", card)
     )
-    // نعتبر أي رد 2xx نجاحًا حتى لو ما فيه "ok"
     if (code !in 200..299) return false
     return try {
         if (txt == null) return true
@@ -1448,7 +1374,6 @@ private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
             trimmed.isEmpty() -> true
             trimmed.startsWith("{") -> {
                 val o = JSONObject(trimmed)
-                // نقبل عدة صيغ نجاح شائعة
                 o.optBoolean("ok", true) ||
                 o.optString("status").equals("received", true) ||
                 o.optString("message").contains("تم", ignoreCase = true)
@@ -1494,26 +1419,31 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
     } catch (_: Exception) { null }
 }
 
-/* دخول المالك: نقبل 2000 محليًا، أو نفحص عبر استدعاء */
+/* دخول المالك: نقبل 2000 محليًا، أو نتحقق عبر أي مسار يتطلب هيدر الأدمن */
 private suspend fun apiAdminLogin(password: String): String? {
     if (password == "2000") return password
-    val (code, _) = httpGet(AdminEndpoints.pendingServices, headers = mapOf("x-admin-pass" to password))
+    val (code, _) = httpGet(AdminEndpoints.pendingServices, headers = mapOf("x-admin-password" to password))
     return if (code in 200..299) password else null
 }
 private fun apiAdminPOST(path: String, token: String, body: JSONObject? = null): Boolean {
     val (code, _) = if (body == null) {
-        httpPostBlocking(path, JSONObject(), headers = mapOf("x-admin-pass" to token))
+        httpPostBlocking(path, JSONObject(), headers = mapOf("x-admin-password" to token))
     } else {
-        httpPostBlocking(path, body, headers = mapOf("x-admin-pass" to token))
+        httpPostBlocking(path, body, headers = mapOf("x-admin-password" to token))
     }
     return code in 200..299
 }
+private fun apiAdminWalletChange(endpoint: String, token: String, uid: String, amount: Double): Boolean {
+    val body = JSONObject().put("uid", uid).put("amount", amount)
+    val (code, _) = httpPostBlocking(endpoint, body, headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
 private fun apiAdminUsersCount(token: String): Int? {
-    val (c, t) = httpGetBlocking(AdminEndpoints.usersCount, mapOf("x-admin-pass" to token))
+    val (c, t) = httpGetBlocking(AdminEndpoints.usersCount, mapOf("x-admin-password" to token))
     return if (c in 200..299 && t != null) try { JSONObject(t.trim()).optInt("count") } catch (_: Exception) { null } else null
 }
 private fun apiAdminUsersBalances(token: String): List<Triple<String,String,Double>>? {
-    val (c, t) = httpGetBlocking(AdminEndpoints.usersBalances, mapOf("x-admin-pass" to token))
+    val (c, t) = httpGetBlocking(AdminEndpoints.usersBalances, mapOf("x-admin-password" to token))
     if (c !in 200..299 || t == null) return null
     return try {
         val trimmed = t.trim()
@@ -1539,7 +1469,7 @@ private fun apiAdminUsersBalances(token: String): List<Triple<String,String,Doub
     } catch (_: Exception) { null }
 }
 private fun apiAdminProviderBalance(token: String): Double? {
-    val (c, t) = httpGetBlocking(AdminEndpoints.providerBalance, mapOf("x-admin-pass" to token))
+    val (c, t) = httpGetBlocking(AdminEndpoints.providerBalance, mapOf("x-admin-password" to token))
     if (c in 200..299 && t != null) {
         val trimmed = t.trim()
         return try {
@@ -1588,7 +1518,7 @@ private fun apiAdminProviderBalance(token: String): Double? {
                     Spacer(Modifier.height(6.dp))
                     OutlinedButton(onClick = onOwnerLogout) { Text("تسجيل خروج المالك") }
                 } else {
-                    Text("تسجيل المالك (JWT):", fontWeight = FontWeight.SemiBold, color = OnBg)
+                    Text("تسجيل المالك (كلمة المرور):", fontWeight = FontWeight.SemiBold, color = OnBg)
                     Spacer(Modifier.height(6.dp))
                     OutlinedButton(onClick = { showAdminLogin = true }) { Text("تسجيل المالك") }
                 }
@@ -1614,14 +1544,14 @@ private fun apiAdminProviderBalance(token: String): Double? {
                 }) { Text("تأكيد") }
             },
             dismissButton = { TextButton(onClick = { showAdminLogin = false }) { Text("إلغاء") } },
-            title = { Text("كلمة مرور/رمز المالك", color = OnBg) },
+            title = { Text("كلمة مرور المالك", color = OnBg) },
             text = {
                 Column {
                     OutlinedTextField(
                         value = pass,
                         onValueChange = { pass = it },
                         singleLine = true,
-                        label = { Text("أدخل كلمة المرور أو الرمز") },
+                        label = { Text("أدخل كلمة المرور") },
                         colors = TextFieldDefaults.outlinedTextFieldColors(
                             cursorColor = Accent,
                             focusedBorderColor = Accent, unfocusedBorderColor = Dim,

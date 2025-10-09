@@ -132,7 +132,8 @@ data class OrderItem(
     val price: Double,
     val payload: String,
     val status: OrderStatus,
-    val createdAt: Long
+    val createdAt: Long,
+    val uid: String = ""            // ✅ إن توفّر من الباكند
 )
 
 /* ✅ نموذج خاص بكروت أسيا سيل (لواجهة المالك) */
@@ -572,11 +573,12 @@ fun AppRoot() {
                 if (bal < price) { onOrdered(false, "رصيدك غير كافٍ. السعر: $price\$ | رصيدك: ${"%.2f".format(bal)}\$"); return@TextButton }
 
                 loading = true
+                val svcName = service.uiKey
                 scope.launch {
                     val ok = apiCreateProviderOrder(
                         uid = uid,
                         serviceId = service.serviceId,
-                        serviceName = service.uiKey,
+                        serviceName = svcName,
                         link = link,
                         quantity = qty,
                         price = price
@@ -845,17 +847,19 @@ fun AppRoot() {
 private fun isPhoneTopupTitle(title: String): Boolean {
     val t = title.lowercase()
     return t.contains("شراء رصيد") || t.contains("رصيد هاتف")
-            || t.contains("اثير") || t.contains("اسياسيل") || t.contains("كورك")
+            || t.contains("اثير") || t.contains("اسياسيل") || t.contains("أسيا") || t.contains("asiacell")
+            || t.contains("كورك")
 }
+/* ✅ تشديد تعريف “طلب API” حتى لا تظهر الطلبات اليدوية (ومنها أسيا سيل) داخل قسم الخدمات */
 private fun isApiOrder(o: OrderItem): Boolean {
     val tl = o.title.lowercase()
     val notManualPhone = !isPhoneTopupTitle(o.title)
-    val notItunes = !tl.contains("ايتونز")
-    val notPubg = !tl.contains("ببجي")
-    val notLudo = !tl.contains("لودو")
-    // نعتبر طلب API إذا له كمية > 0 أو عنده تفاصيل (رابط/بايلود)،
-    // وبشرط ألا يكون من الأقسام اليدوية المذكورة:
-    return (o.quantity > 0 || o.payload.isNotBlank()) && notManualPhone && notItunes && notPubg && notLudo
+    val notItunes = !tl.contains("ايتونز") && !tl.contains("itunes")
+    val notPubg = !tl.contains("ببجي") && !tl.contains("pubg")
+    val notLudo = !tl.contains("لودو") && !tl.contains("ludo")
+    val notCard = !tl.contains("كارت") && !tl.contains("card")
+    // طلب API يجب أن يكون له quantity > 0 (خدمات المزود) ولا ينتمي لأي قسم يدوي:
+    return (o.quantity > 0) && notManualPhone && notItunes && notPubg && notLudo && notCard
 }
 
 /* =========================
@@ -923,39 +927,46 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     title = "الطلبات المعلقة (الخدمات)",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingServices,
-                    itemFilter = { item -> isApiOrder(item) },   // ✅ فقط طلبات API
+                    itemFilter = { item -> isApiOrder(item) },                  // ✅ فقط طلبات API
+                    approveWithCode = false,
                     onBack = { current = null }
                 )
                 "pending_itunes" -> AdminPendingGenericList(
                     title = "طلبات الايتونز المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingItunes,
-                    itemFilter = null,
+                    itemFilter = { true },
+                    approveWithCode = true,                                      // ✅ يطلب كود آيتونز
+                    codeFieldLabel = "كود آيتونز",
                     onBack = { current = null }
                 )
                 "pending_pubg" -> AdminPendingGenericList(
                     title = "طلبات شدات ببجي",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingPubg,
-                    itemFilter = null,
+                    itemFilter = { true },
+                    approveWithCode = false,
                     onBack = { current = null }
                 )
                 "pending_ludo" -> AdminPendingGenericList(
                     title = "طلبات لودو المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingLudo,
-                    itemFilter = null,
+                    itemFilter = { true },
+                    approveWithCode = false,
                     onBack = { current = null }
                 )
                 "pending_phone" -> AdminPendingGenericList(
                     title = "طلبات الأرصدة المعلقة",
                     token = token!!,
-                    // استعمل مسار يعيد كل الطلبات اليدوية إن توفر، وإلا نستخدم خدمات مع فلترة العنوان:
+                    // يمكن أن يعود من مسار مخصص للأرصدة؛ إن لم يوجد نستعمل services مع فلترة العنوان:
                     fetchUrl = AdminEndpoints.pendingServices,
                     itemFilter = { item -> isPhoneTopupTitle(item.title) && item.quantity == 0 },
+                    approveWithCode = true,                                      // ✅ يطلب رقم الكارت
+                    codeFieldLabel = "رقم الكارت",
                     onBack = { current = null }
                 )
-                // ✅ شاشة الكروت المعلّقة الخاصة — UID + كارت + تنفيذ/رفض
+                // ✅ شاشة الكروت المعلّقة الخاصة — UID + كارت + تنفيذ/رفض + وقت
                 "pending_cards" -> AdminPendingCardsScreen(
                     token = token!!,
                     onBack = { current = null }
@@ -990,12 +1001,14 @@ private fun isApiOrder(o: OrderItem): Boolean {
     }
 }
 
-/** قائمة عامة للمعلّقات مع مُرشِّح OrderItem */
+/** قائمة عامة للمعلّقات مع مُرشِّح OrderItem + خيار “تنفيذ بكود” */
 @Composable private fun AdminPendingGenericList(
     title: String,
     token: String,
     fetchUrl: String,
     itemFilter: ((OrderItem) -> Boolean)?,
+    approveWithCode: Boolean,
+    codeFieldLabel: String = "الرمز/الكود",
     onBack: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -1004,6 +1017,9 @@ private fun isApiOrder(o: OrderItem): Boolean {
     var err by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
     var snack by remember { mutableStateOf<String?>(null) }
+
+    var approveFor by remember { mutableStateOf<OrderItem?>(null) }
+    var codeText by remember { mutableStateOf("") }
 
     LaunchedEffect(reloadKey) {
         loading = true; err = null
@@ -1031,7 +1047,8 @@ private fun isApiOrder(o: OrderItem): Boolean {
                         price = o.optDouble("price", 0.0),
                         payload = o.optString("link",""),
                         status = OrderStatus.Pending,
-                        createdAt = o.optLong("created_at", 0L)
+                        createdAt = o.optLong("created_at", 0L),
+                        uid = o.optString("uid","")
                     )
                     if (itemFilter == null || itemFilter.invoke(item)) {
                         parsed += item
@@ -1049,11 +1066,18 @@ private fun isApiOrder(o: OrderItem): Boolean {
         loading = false
     }
 
-    suspend fun doApprove(id: String): Boolean =
+    suspend fun doApprovePlain(id: String): Boolean =
         apiAdminPOST(String.format(AdminEndpoints.orderApprove, id.toInt()), token)
 
-    suspend fun doDeliver(id: String): Boolean =
+    suspend fun doDeliverPlain(id: String): Boolean =
         apiAdminPOST(String.format(AdminEndpoints.orderDeliver, id.toInt()), token)
+
+    suspend fun doDeliverWithCode(id: String, code: String): Boolean =
+        apiAdminPOST(
+            String.format(AdminEndpoints.orderDeliver, id.toInt()),
+            token,
+            JSONObject().put("code", code)            // ✅ يمرّر الكود للباكند
+        )
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1069,28 +1093,40 @@ private fun isApiOrder(o: OrderItem): Boolean {
             list.isNullOrEmpty() -> Text("لا يوجد شيء معلق.", color = Dim)
             else -> LazyColumn {
                 items(list!!) { o ->
+                    val dt = if (o.createdAt > 0) {
+                        SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(o.createdAt))
+                    } else ""
                     ElevatedCard(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Text(o.title, fontWeight = FontWeight.SemiBold, color = OnBg)
+                            if (o.uid.isNotBlank()) Text("UID: ${o.uid}", color = Dim, fontSize = 12.sp)
                             if (o.payload.isNotBlank()) {
                                 Spacer(Modifier.height(4.dp))
                                 Text("تفاصيل: ${o.payload}", color = Dim, fontSize = 12.sp)
                             }
+                            if (dt.isNotEmpty()) {
+                                Spacer(Modifier.height(4.dp))
+                                Text("الوقت: $dt", color = Dim, fontSize = 12.sp)
+                            }
                             Spacer(Modifier.height(8.dp))
                             Row {
                                 TextButton(onClick = {
-                                    scope.launch {
-                                        val ok = doApprove(o.id)
-                                        snack = if (ok) "تم التنفيذ" else "فشل التنفيذ"
-                                        if (ok) reloadKey++
+                                    if (approveWithCode) {
+                                        approveFor = o
+                                    } else {
+                                        scope.launch {
+                                            val ok = doApprovePlain(o.id)
+                                            snack = if (ok) "تم التنفيذ" else "فشل التنفيذ"
+                                            if (ok) reloadKey++
+                                        }
                                     }
                                 }) { Text("تنفيذ") }
                                 TextButton(onClick = {
                                     scope.launch {
-                                        val ok = doDeliver(o.id)
+                                        val ok = doDeliverPlain(o.id) // نستخدم deliver كـ "رفض/تسليم" حسب منطقك
                                         snack = if (ok) "تم الرفض" else "فشل التنفيذ"
                                         if (ok) reloadKey++
                                     }
@@ -1107,6 +1143,41 @@ private fun isApiOrder(o: OrderItem): Boolean {
             Text(it, color = OnBg)
             LaunchedEffect(it) { delay(2000); snack = null }
         }
+    }
+
+    if (approveFor != null && approveWithCode) {
+        AlertDialog(
+            onDismissRequest = { approveFor = null; codeText = "" },
+            confirmButton = {
+                val scope2 = rememberCoroutineScope()
+                TextButton(onClick = {
+                    val code = codeText.trim()
+                    if (code.isEmpty()) return@TextButton
+                    scope2.launch {
+                        val ok = doDeliverWithCode(approveFor!!.id, code)
+                        if (ok) {
+                            // نجاح — يفترض أن الباكند سيضيف إشعارًا للمستخدم
+                        }
+                        approveFor = null
+                        codeText = ""
+                        snack = if (ok) "تم الإرسال" else "فشل الإرسال"
+                        if (ok) reloadKey++
+                    }
+                }) { Text("إرسال") }
+            },
+            dismissButton = { TextButton(onClick = { approveFor = null; codeText = "" }) { Text("إلغاء") } },
+            title = { Text("إدخال $codeFieldLabel", color = OnBg) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = codeText,
+                        onValueChange = { codeText = it },
+                        singleLine = true,
+                        label = { Text(codeFieldLabel) }
+                    )
+                }
+            }
+        )
     }
 }
 
@@ -1148,6 +1219,9 @@ private fun isApiOrder(o: OrderItem): Boolean {
             list.isNullOrEmpty() -> Text("لا توجد كروت معلّقة.", color = Dim)
             else -> LazyColumn {
                 items(list!!) { c ->
+                    val dt = if (c.createdAt > 0) {
+                        SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(c.createdAt))
+                    } else ""
                     ElevatedCard(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
@@ -1170,6 +1244,10 @@ private fun isApiOrder(o: OrderItem): Boolean {
                                         }
                                         .padding(4.dp)
                                 )
+                            }
+                            if (dt.isNotEmpty()) {
+                                Spacer(Modifier.height(4.dp))
+                                Text("الوقت: $dt", color = Dim, fontSize = 12.sp)
                             }
                             Spacer(Modifier.height(8.dp))
                             Row {
@@ -1208,8 +1286,10 @@ private fun isApiOrder(o: OrderItem): Boolean {
                         if (ok) {
                             execFor = null
                             amountText = ""
-                            // بعد التنفيذ سيتم تحديث القائمة عبر reloadKey في الأعلى عند الحاجة
-                        }
+                            // بعد التنفيذ سيتم تحديث القائمة عبر reloadKey
+                            snack = "تم التنفيذ"
+                            reloadKey++
+                        } else snack = "فشل التنفيذ"
                     }
                 }) { Text("إرسال") }
             },
@@ -1626,7 +1706,8 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
                     "Processing" -> OrderStatus.Processing
                     else -> OrderStatus.Pending
                 },
-                createdAt = o.optLong("created_at")
+                createdAt = o.optLong("created_at"),
+                uid = o.optString("uid","")
             )
         }
     } catch (_: Exception) { null }

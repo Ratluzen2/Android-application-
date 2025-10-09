@@ -57,21 +57,16 @@ private const val PROVIDER_DIRECT_KEY_VALUE = "25a9ceb07be0d8b2ba88e70dcbe92e06"
 
 /** مسارات الأدمن (مطابقة للباكند الموحد) */
 private object AdminEndpoints {
-    // قوائم المعلّقات
     const val pendingServices = "/api/admin/pending/services"
     const val pendingItunes   = "/api/admin/pending/itunes"
     const val pendingPubg     = "/api/admin/pending/pubg"
     const val pendingLudo     = "/api/admin/pending/ludo"
-    // عمليات على الطلب
     const val orderApprove    = "/api/admin/orders/%d/approve"
     const val orderDeliver    = "/api/admin/orders/%d/deliver"
-    // مستخدمون
     const val usersCount      = "/api/admin/users/count"
     const val usersBalances   = "/api/admin/users/balances"
-    // محفظة
     const val walletTopup     = "/api/admin/wallet/topup"
     const val walletDeduct    = "/api/admin/wallet/deduct"
-    // رصيد المزوّد
     const val providerBalance = "/api/admin/provider/balance"
 }
 
@@ -732,12 +727,14 @@ fun AppRoot() {
         AlertDialog(
             onDismissRequest = { if (!sending) askAsiacell = false },
             confirmButton = {
+                val scope2 = rememberCoroutineScope()
                 TextButton(enabled = !sending, onClick = {
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
                     sending = true
-                    // إرسال فعلي
-                    val finish: (Boolean) -> Unit = { ok ->
+                    scope2.launch {
+                        val ok = apiSubmitAsiacellCard(uid, digits)
+                        if (ok) { balance = apiGetBalance(uid) }
                         sending = false
                         if (ok) {
                             onAddNotice(AppNotice("تم استلام كارتك", "تم إرسال كارت أسيا سيل إلى المالك للمراجعة.", forOwner = false))
@@ -747,12 +744,6 @@ fun AppRoot() {
                         } else {
                             onAddNotice(AppNotice("فشل إرسال الكارت", "تحقق من الاتصال وحاول مجددًا.", forOwner = false))
                         }
-                    }
-                    val scope2 = scope
-                    scope2.launch {
-                        val ok = apiSubmitAsiacellCard(uid, digits)
-                        if (ok) { balance = apiGetBalance(uid) }
-                        finish(ok)
                     }
                 }) { Text(if (sending) "يرسل..." else "إرسال") }
             },
@@ -864,7 +855,7 @@ fun AppRoot() {
                 "إضافة الرصيد"             to "topup",
                 "خصم الرصيد"               to "deduct",
                 "عدد المستخدمين"           to "users_count",
-                "رصيد المستخدمين"          to "users_balances",
+                "أرصدة المستخدمين"         to "users_balances",
                 "فحص رصيد API"             to "provider_balance"
             )
             buttons.chunked(2).forEach { row ->
@@ -957,6 +948,7 @@ fun AppRoot() {
     filter: ((String) -> Boolean)?,
     onBack: () -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     var list by remember { mutableStateOf<List<OrderItem>?>(null) }
     var loading by remember { mutableStateOf(true) }
     var err by remember { mutableStateOf<String?>(null) }
@@ -1006,10 +998,10 @@ fun AppRoot() {
         loading = false
     }
 
-    fun doApprove(id: String): Boolean =
+    suspend fun doApprove(id: String): Boolean =
         apiAdminPOST(String.format(AdminEndpoints.orderApprove, id.toInt()), token)
 
-    fun doDeliver(id: String): Boolean =
+    suspend fun doDeliver(id: String): Boolean =
         apiAdminPOST(String.format(AdminEndpoints.orderDeliver, id.toInt()), token)
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -1039,14 +1031,18 @@ fun AppRoot() {
                             Spacer(Modifier.height(8.dp))
                             Row {
                                 TextButton(onClick = {
-                                    val ok = doApprove(o.id)
-                                    snack = if (ok) "تم التنفيذ" else "فشل التنفيذ"
-                                    if (ok) reloadKey++
+                                    scope.launch {
+                                        val ok = doApprove(o.id)
+                                        snack = if (ok) "تم التنفيذ" else "فشل التنفيذ"
+                                        if (ok) reloadKey++
+                                    }
                                 }) { Text("تنفيذ") }
                                 TextButton(onClick = {
-                                    val ok = doDeliver(o.id)
-                                    snack = if (ok) "تم الرفض" else "فشل التنفيذ"
-                                    if (ok) reloadKey++
+                                    scope.launch {
+                                        val ok = doDeliver(o.id)
+                                        snack = if (ok) "تم الرفض" else "فشل التنفيذ"
+                                        if (ok) reloadKey++
+                                    }
                                 }) { Text("رفض") }
                             }
                         }
@@ -1068,12 +1064,14 @@ fun AppRoot() {
    ========================= */
 @Composable private fun TopupDeductScreen(
     title: String,
-    onSubmit: (String, Double) -> Boolean,
+    onSubmit: suspend (String, Double) -> Boolean,
     onBack: () -> Unit
 ) {
+    val scope = rememberCoroutineScope()
     var uid by remember { mutableStateOf("") }
     var amount by remember { mutableStateOf("") }
     var msg by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1088,17 +1086,22 @@ fun AppRoot() {
             value = amount, onValueChange = { s -> if (s.isEmpty() || s.toDoubleOrNull() != null) amount = s },
             singleLine = true, label = { Text("المبلغ") })
         Spacer(Modifier.height(10.dp))
-        Button(onClick = {
+        Button(enabled = !loading, onClick = {
             val a = amount.toDoubleOrNull()
-            msg = if (uid.isBlank() || a == null) "أدخل UID ومبلغًا صالحًا"
-            else if (onSubmit(uid, a)) "تمت العملية بنجاح" else "فشل التنفيذ"
-        }) { Text("تنفيذ") }
+            if (uid.isBlank() || a == null) { msg = "أدخل UID ومبلغًا صالحًا"; return@Button }
+            loading = true
+            scope.launch {
+                val ok = onSubmit(uid, a)
+                msg = if (ok) "تمت العملية بنجاح" else "فشل التنفيذ"
+                loading = false
+            }
+        }) { Text(if (loading) "جارٍ التنفيذ..." else "تنفيذ") }
         Spacer(Modifier.height(8.dp))
         msg?.let { Text(it, color = OnBg) }
     }
 }
 
-@Composable private fun UsersCountScreen(fetch: () -> Int?, onBack: () -> Unit) {
+@Composable private fun UsersCountScreen(fetch: suspend () -> Int?, onBack: () -> Unit) {
     var count by remember { mutableStateOf<Int?>(null) }
     var err by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
@@ -1120,7 +1123,7 @@ fun AppRoot() {
     }
 }
 
-@Composable private fun UsersBalancesScreen(fetch: () -> List<Triple<String,String,Double>>?, onBack: () -> Unit) {
+@Composable private fun UsersBalancesScreen(fetch: suspend () -> List<Triple<String,String,Double>>?, onBack: () -> Unit) {
     var list by remember { mutableStateOf<List<Triple<String,String,Double>>?>(null) }
     var err by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
@@ -1158,7 +1161,7 @@ fun AppRoot() {
     }
 }
 
-@Composable private fun ProviderBalanceScreen(fetch: () -> Double?, onBack: () -> Unit) {
+@Composable private fun ProviderBalanceScreen(fetch: suspend () -> Double?, onBack: () -> Unit) {
     var value by remember { mutableStateOf<Double?>(null) }
     var err by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
@@ -1253,7 +1256,7 @@ private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
     prefs(ctx).edit().putString("notices_json", arr.toString()).apply()
 }
 
-/* شبكة */
+/* شبكة - GET (suspend) */
 private suspend fun httpGet(path: String, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
     withContext(Dispatchers.IO) {
         try {
@@ -1271,23 +1274,7 @@ private suspend fun httpGet(path: String, headers: Map<String, String> = emptyMa
         } catch (_: Exception) { -1 to null }
     }
 
-private fun httpGetBlocking(path: String, headers: Map<String, String> = emptyMap()): Pair<Int, String?> {
-    return try {
-        val url = URL("$API_BASE$path")
-        val con = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 8000
-            readTimeout = 8000
-            headers.forEach { (k, v) -> setRequestProperty(k, v) }
-        }
-        val code = con.responseCode
-        val txt = (if (code in 200..299) con.inputStream else con.errorStream)
-            ?.bufferedReader()?.use { it.readText() }
-        code to txt
-    } catch (_: Exception) { -1 to null }
-}
-
-/** POST JSON إلى خادمنا */
+/* POST JSON (blocking) — نغلفها بدالة suspend أدناه */
 private fun httpPostBlocking(path: String, json: JSONObject, headers: Map<String, String> = emptyMap()): Pair<Int, String?> {
     return try {
         val url = URL("$API_BASE$path")
@@ -1307,7 +1294,7 @@ private fun httpPostBlocking(path: String, json: JSONObject, headers: Map<String
     } catch (_: Exception) { -1 to null }
 }
 
-/** POST form مطلق (مثلاً KD1S: action=balance) */
+/* POST form مطلق (KD1S) — نغلفها بدالة suspend */
 private fun httpPostFormAbsolute(fullUrl: String, fields: Map<String, String>, headers: Map<String, String> = emptyMap()): Pair<Int, String?> {
     return try {
         val url = URL(fullUrl)
@@ -1328,13 +1315,20 @@ private fun httpPostFormAbsolute(fullUrl: String, fields: Map<String, String>, h
     } catch (_: Exception) { -1 to null }
 }
 
+/* أغلفة suspend للـ POSTs */
+private suspend fun httpPost(path: String, json: JSONObject, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
+    withContext(Dispatchers.IO) { httpPostBlocking(path, json, headers) }
+
+private suspend fun httpPostFormAbs(fullUrl: String, fields: Map<String, String>, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
+    withContext(Dispatchers.IO) { httpPostFormAbsolute(fullUrl, fields, headers) }
+
 /* ===== وظائف مشتركة مع الخادم ===== */
 private suspend fun pingHealth(): Boolean? {
     val (code, _) = httpGet("/health")
     return code in 200..299
 }
 private suspend fun tryUpsertUid(uid: String) {
-    httpPostBlocking("/api/users/upsert", JSONObject().put("uid", uid))
+    httpPost("/api/users/upsert", JSONObject().put("uid", uid))
 }
 private suspend fun apiGetBalance(uid: String): Double? {
     val (code, txt) = httpGet("/api/wallet/balance?uid=$uid")
@@ -1352,13 +1346,13 @@ private suspend fun apiCreateProviderOrder(
         .put("link", link)
         .put("quantity", quantity)
         .put("price", price)
-    val (code, txt) = httpPostBlocking("/api/orders/create/provider", body)
+    val (code, txt) = httpPost("/api/orders/create/provider", body)
     return code in 200..299 && (txt?.contains("ok", ignoreCase = true) == true)
 }
 
 /* أسيا سيل */
 private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
-    val (code, txt) = httpPostBlocking(
+    val (code, txt) = httpPost(
         "/api/wallet/asiacell/submit",
         JSONObject().put("uid", uid).put("card", card)
     )
@@ -1372,7 +1366,7 @@ private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
 
 private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     val body = JSONObject().put("uid", uid).put("title", name)
-    val (code, txt) = httpPostBlocking("/api/orders/create/manual", body)
+    val (code, txt) = httpPost("/api/orders/create/manual", body)
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
@@ -1412,31 +1406,31 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
     } catch (_: Exception) { null }
 }
 
-/* دخول المالك: نقبل 2000 محليًا، أو نتحقق عبر مسار يتطلب هيدر الأدمن */
+/* دخول المالك */
 private suspend fun apiAdminLogin(password: String): String? {
     if (password == "2000") return password
     val (code, _) = httpGet(AdminEndpoints.pendingServices, headers = mapOf("x-admin-password" to password))
     return if (code in 200..299) password else null
 }
-private fun apiAdminPOST(path: String, token: String, body: JSONObject? = null): Boolean {
+private suspend fun apiAdminPOST(path: String, token: String, body: JSONObject? = null): Boolean {
     val (code, _) = if (body == null) {
-        httpPostBlocking(path, JSONObject(), headers = mapOf("x-admin-password" to token))
+        httpPost(path, JSONObject(), headers = mapOf("x-admin-password" to token))
     } else {
-        httpPostBlocking(path, body, headers = mapOf("x-admin-password" to token))
+        httpPost(path, body, headers = mapOf("x-admin-password" to token))
     }
     return code in 200..299
 }
-private fun apiAdminWalletChange(endpoint: String, token: String, uid: String, amount: Double): Boolean {
+private suspend fun apiAdminWalletChange(endpoint: String, token: String, uid: String, amount: Double): Boolean {
     val body = JSONObject().put("uid", uid).put("amount", amount)
-    val (code, _) = httpPostBlocking(endpoint, body, headers = mapOf("x-admin-password" to token))
+    val (code, _) = httpPost(endpoint, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
-private fun apiAdminUsersCount(token: String): Int? {
-    val (c, t) = httpGetBlocking(AdminEndpoints.usersCount, mapOf("x-admin-password" to token))
+private suspend fun apiAdminUsersCount(token: String): Int? {
+    val (c, t) = httpGet(AdminEndpoints.usersCount, mapOf("x-admin-password" to token))
     return if (c in 200..299 && t != null) try { JSONObject(t.trim()).optInt("count") } catch (_: Exception) { null } else null
 }
-private fun apiAdminUsersBalances(token: String): List<Triple<String,String,Double>>? {
-    val (c, t) = httpGetBlocking(AdminEndpoints.usersBalances, mapOf("x-admin-password" to token))
+private suspend fun apiAdminUsersBalances(token: String): List<Triple<String,String,Double>>? {
+    val (c, t) = httpGet(AdminEndpoints.usersBalances, mapOf("x-admin-password" to token))
     if (c !in 200..299 || t == null) return null
     return try {
         val trimmed = t.trim()
@@ -1462,14 +1456,14 @@ private fun apiAdminUsersBalances(token: String): List<Triple<String,String,Doub
     } catch (_: Exception) { null }
 }
 
-/** فحص رصيد API (تجربة kd1s مباشرة ثم رجوع للباكند) */
-private fun apiAdminProviderBalance(token: String): Double? {
+/** فحص رصيد API (KD1S أولًا ثم مسار الباكند) */
+private suspend fun apiAdminProviderBalance(token: String): Double? {
     if (PROVIDER_DIRECT_URL.isNotBlank() && PROVIDER_DIRECT_KEY_VALUE.isNotBlank()) {
         val fields = mapOf("key" to PROVIDER_DIRECT_KEY_VALUE, "action" to "balance")
-        val (c, t) = httpPostFormAbsolute(PROVIDER_DIRECT_URL, fields)
+        val (c, t) = httpPostFormAbs(PROVIDER_DIRECT_URL, fields)
         parseBalancePayload(t)?.let { if (c in 200..299) return it }
     }
-    val (c2, t2) = httpGetBlocking(AdminEndpoints.providerBalance, mapOf("x-admin-password" to token))
+    val (c2, t2) = httpGet(AdminEndpoints.providerBalance, mapOf("x-admin-password" to token))
     return if (c2 in 200..299) parseBalancePayload(t2) else null
 }
 

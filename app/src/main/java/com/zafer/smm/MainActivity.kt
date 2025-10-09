@@ -848,11 +848,16 @@ fun AppRoot() {
 
 private fun isIraqTelcoCardPurchase(title: String): Boolean {
     val t = title.lowercase()
+    // must be one of the 3 Iraqi telcos
     val telco = t.contains("اثير") || t.contains("asiacell") || t.contains("أسيا") || t.contains("اسياسيل") || t.contains("korek") || t.contains("كورك")
-    val isCardWord = t.contains("شراء") || t.contains("كارت") || t.contains("بطاقة") || t.contains("رصيد")
+    // words that indicate physical/virtual CARD purchase (not direct top-up)
+    val hasCardWord = t.contains("شراء") || t.contains("كارت") || t.contains("بطاقة") || t.contains("voucher") || t.contains("كود") || t.contains("رمز")
+    // negative list: anything that implies DIRECT TOP-UP / via Asiacell
+    val isTopup = t.contains("شحن") || t.contains("topup") || t.contains("top-up") || t.contains("recharge") || t.contains("شحن عبر") || t.contains("شحن اسيا") || t.contains("direct")
+    // explicitly exclude iTunes
     val notItunes = !t.contains("itunes") && !t.contains("ايتونز")
-    val notTopupSubmit = !t.contains("شحن عبر")
-    return telco && isCardWord && notItunes && notTopupSubmit
+    // accept only if telco + card purchase semantics, and strictly NOT a top-up wording
+    return telco && hasCardWord && !isTopup && notItunes
 }
 
 private fun isPhoneTopupTitle(title: String): Boolean {
@@ -905,7 +910,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
             val buttons = listOf(
                 "الطلبات المعلقة (الخدمات)" to "pending_services",
                 "طلبات الايتونز المعلقة"   to "pending_itunes",
-                "طلبات شدات ببجي"          to "pending_pubg",
+                "طلبات ببجي المعلقة"          to "pending_pubg",
                 "طلبات لودو المعلقة"       to "pending_ludo",
                 "طلبات شراء الكارتات"    to "pending_phone",   // ✅ جديد
                 "طلبات شحن أسيا سيل"     to "pending_cards",
@@ -938,7 +943,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     title = "الطلبات المعلقة (الخدمات)",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingServices,
-                    itemFilter = { item -> isApiOrder(item) },                  // ✅ فقط طلبات API
+                    itemFilter = { item -> isIraqTelcoCardPurchase(item.title) },                  // ✅ فقط طلبات API
                     approveWithCode = false,
                     onBack = { current = null }
                 )
@@ -946,16 +951,16 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     title = "طلبات الايتونز المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingItunes,
-                    itemFilter = { true },
+                    itemFilter = { item -> isIraqTelcoCardPurchase(item.title) },
                     approveWithCode = true,                                      // ✅ يطلب كود آيتونز
                     codeFieldLabel = "كود آيتونز",
                     onBack = { current = null }
                 )
                 "pending_pubg" -> AdminPendingGenericList(
-                    title = "طلبات شدات ببجي",
+                    title = "طلبات ببجي المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingPubg,
-                    itemFilter = { true },
+                    itemFilter = { item -> isIraqTelcoCardPurchase(item.title) },
                     approveWithCode = false,
                     onBack = { current = null }
                 )
@@ -963,7 +968,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     title = "طلبات لودو المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingLudo,
-                    itemFilter = { true },
+                    itemFilter = { item -> isIraqTelcoCardPurchase(item.title) },
                     approveWithCode = false,
                     onBack = { current = null }
                 )

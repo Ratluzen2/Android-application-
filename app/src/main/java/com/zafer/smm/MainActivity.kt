@@ -943,7 +943,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     title = "طلبات خدمات API المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingServices,
-                    itemFilter = { item -> isIraqTelcoCardPurchase(item.title) },                  // ✅ فقط طلبات API
+                    itemFilter = { true },                  // ✅ فقط طلبات API
                     approveWithCode = false,
                     onBack = { current = null }
                 )
@@ -951,7 +951,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     title = "طلبات الايتونز المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingItunes,
-                    itemFilter = { item -> isIraqTelcoCardPurchase(item.title) },
+                    itemFilter = { true },
                     approveWithCode = true,                                      // ✅ يطلب كود آيتونز
                     codeFieldLabel = "كود آيتونز",
                     onBack = { current = null }
@@ -960,7 +960,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     title = "طلبات ببجي المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingPubg,
-                    itemFilter = { item -> isIraqTelcoCardPurchase(item.title) },
+                    itemFilter = { true },
                     approveWithCode = false,
                     onBack = { current = null }
                 )
@@ -968,7 +968,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     title = "طلبات لودو المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingLudo,
-                    itemFilter = { item -> isIraqTelcoCardPurchase(item.title) },
+                    itemFilter = { true },
                     approveWithCode = false,
                     onBack = { current = null }
                 )

@@ -47,7 +47,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
-import kotlin.random.Random
+import kotlin.random.Randomimport androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.ContentCopy
+
 
 @Composable
 private fun NoticeBody(text: String) {
@@ -887,55 +890,8 @@ fun PackageGrid(
     }
 }
 
-@Composable
-@Composable
-fun ConfirmPackageIdDialog(
-    sectionTitle: String,
-    label: String,
-    priceUsd: Int,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var accountId by remember { mutableStateOf("") }
-    val idLabel = when {
-        sectionTitle.contains("ببجي") -> "أدخل ID حساب ببجي (PUBG ID)"
-        sectionTitle.contains("لودو") -> "أدخل ID حساب لودو"
-        else -> "أدخل ID الحساب داخل اللعبة"
-    }
-    val idHint = when {
-        sectionTitle.contains("ببجي") -> "مثال: رقم PUBG دون مسافات"
-        sectionTitle.contains("لودو") -> "مثال: ID لودو كما يظهر داخل اللعبة"
-        else -> "أدخل ID اللعبة بدقة"
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { 
-            TextButton(onClick = { if (accountId.isNotBlank()) onConfirm(accountId.trim()) }, enabled = accountId.isNotBlank()) { 
-                Text("تأكيد الشراء") 
-            } 
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
-        title = { Text(sectionTitle, color = OnBg) },
-        text = {
-            Column {
-                Text("الباقة المختارة: " + label, color = OnBg, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(6.dp))
-                Text("السعر المستحق: $" + priceUsd, color = Dim)
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = accountId,
-                    onValueChange = { accountId = it },
-                    label = { Text(idLabel) },
-                    placeholder = { Text(idHint) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(4.dp))
-                Text("رجاءً أدخل ID حسابك داخل اللعبة بدقّة ليتم الشحن بشكل صحيح.", color = Dim, fontSize = 12.sp)
-            }
-        }
-    )
-}
+
+
 @Composable
 fun ConfirmPackageIdDialog(
     sectionTitle: String,

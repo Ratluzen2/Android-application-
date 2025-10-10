@@ -52,17 +52,42 @@ import kotlin.random.Random
 @Composable
 private fun NoticeBody(text: String) {
     val clip = LocalClipboardManager.current
-    val codeRegex = "(?:الكود|code|card|voucher|redeem)\\s*[:：-]?\\s*([A-Za-z0-9][A-Za-z0-9-]{5,})".toRegex(RegexOption.IGNORE_CASE)
+    // يلتقط الأكواد بصيغ متعددة: "الكود: XXXX" أو "كود الايتونز - XXXX" أو "card code: XXXX"
+    val codeRegex = Regex(
+        pattern = "(?i)(?:\\b(?:كود|الكود|ايتونز|الكارت|itunes|card|voucher|redeem)\\b[^\\n:：-]*[:：-]\\s*)([A-Za-z0-9][A-Za-z0-9\\- ]{4,})"
+    )
     val match = codeRegex.find(text)
     if (match != null) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        val code = match.groupValues[1].trim()
+        Column(modifier = Modifier.fillMaxWidth()) {
             SelectionContainer {
-                Text(text, color = Dim, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text(text, color = Dim, fontSize = 12.sp)
             }
-            TextButton(onClick = {
-                val c = match.groupValues.getOrNull(1) ?: text
-                clip.setText(AnnotatedString(c))
-            }) { Text("نسخ") }
+            Spacer(Modifier.height(6.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Good.copy(alpha = 0.12f))
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .clickable {
+                        clip.setText(AnnotatedString(code))
+                    }
+            ) {
+                Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = Good)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = code,
+                    color = Good,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = { clip.setText(AnnotatedString(code)) }) {
+                    Text("نسخ", color = Good, fontWeight = FontWeight.Bold)
+                }
+            }
         }
     } else {
         SelectionContainer {
@@ -863,29 +888,92 @@ fun PackageGrid(
 }
 
 @Composable
-fun ConfirmPackageDialog(
+@Composable
+fun ConfirmPackageIdDialog(
     sectionTitle: String,
     label: String,
     priceUsd: Int,
-    onConfirm: () -> Unit,
+    onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    var accountId by remember { mutableStateOf("") }
+    val idLabel = when {
+        sectionTitle.contains("ببجي") -> "أدخل ID حساب ببجي (PUBG ID)"
+        sectionTitle.contains("لودو") -> "أدخل ID حساب لودو"
+        else -> "أدخل ID الحساب داخل اللعبة"
+    }
+    val idHint = when {
+        sectionTitle.contains("ببجي") -> "مثال: رقم PUBG دون مسافات"
+        sectionTitle.contains("لودو") -> "مثال: ID لودو كما يظهر داخل اللعبة"
+        else -> "أدخل ID اللعبة بدقة"
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onConfirm) { Text("تأكيد الشراء") } },
+        confirmButton = { 
+            TextButton(onClick = { if (accountId.isNotBlank()) onConfirm(accountId.trim()) }, enabled = accountId.isNotBlank()) { 
+                Text("تأكيد الشراء") 
+            } 
+        },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
         title = { Text(sectionTitle, color = OnBg) },
         text = {
             Column {
-                Text("الباقة المختارة: $label", color = OnBg, fontWeight = FontWeight.SemiBold)
+                Text("الباقة المختارة: " + label, color = OnBg, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
-                Text("السعر المستحق: ${'$'}$priceUsd", color = Dim)
-                Spacer(Modifier.height(8.dp))
-                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 12.sp)
+                Text("السعر المستحق: $" + priceUsd, color = Dim)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = accountId,
+                    onValueChange = { accountId = it },
+                    label = { Text(idLabel) },
+                    placeholder = { Text(idHint) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(4.dp))
+                Text("رجاءً أدخل ID حسابك داخل اللعبة بدقّة ليتم الشحن بشكل صحيح.", color = Dim, fontSize = 12.sp)
             }
         }
     )
 }
+@Composable
+fun ConfirmPackageIdDialog(
+    sectionTitle: String,
+    label: String,
+    priceUsd: Int,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var accountId by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { 
+            TextButton(onClick = { if (accountId.isNotBlank()) onConfirm(accountId.trim()) }, enabled = accountId.isNotBlank()) { 
+                Text("تأكيد الشراء") 
+            } 
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
+        title = { Text(sectionTitle, color = OnBg) },
+        text = {
+            Column {
+                Text("الباقة المختارة: " + label, color = OnBg, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Text("السعر المستحق: $" + priceUsd, color = Dim)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = accountId,
+                    onValueChange = { accountId = it },
+                    label = { Text("أدخل ID الحساب") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(4.dp))
+                Text("رجاءً أدخل ID الحساب بدقّة ليتم الشحن بشكل صحيح.", color = Dim, fontSize = 12.sp)
+            }
+        }
+    )
+}
+
 
 @Composable private fun ManualSectionsScreen(
     title: String,
@@ -1037,11 +1125,11 @@ fun ConfirmPackageDialog(
     
     if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماسات لودو","شراء ذهب لودو") &&
         pendingPkgLabel != null && pendingPkgPrice != null) {
-        ConfirmPackageDialog(
+        ConfirmPackageIdDialog(
             sectionTitle = selectedManualFlow!!,
             label = pendingPkgLabel!!,
             priceUsd = pendingPkgPrice!!,
-            onConfirm = {
+            onConfirm = { accountId ->
                 val flow = selectedManualFlow
                 val priceInt = pendingPkgPrice
                 scope.launch {
@@ -1052,11 +1140,11 @@ fun ConfirmPackageDialog(
                             "شراء ذهب لودو" -> "ludo_gold"
                             else -> "manual"
                         }
-                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt)
+                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, accountId)
                         if (ok) {
                             onToast("تم استلام طلبك (${pendingPkgLabel}).")
-                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
-                            onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} يحتاج مراجعة.", forOwner = true))
+                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة. ID اللعبة: " + accountId, forOwner = false))
+                            onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=" + uid + " يحتاج مراجعة. ID اللعبة: " + accountId, forOwner = true))
                         } else {
                             val msg = (txt ?: "").lowercase()
                             if (msg.contains("insufficient")) {
@@ -1082,7 +1170,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             sectionTitle = selectedManualFlow!!,
             usd = pendingUsd!!,
             price = pendingPrice!!,
-            onConfirm = {
+            onConfirm = { accountId ->
                 val flow = selectedManualFlow
                 val amount = pendingUsd
                 scope.launch {
@@ -2140,12 +2228,13 @@ private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
-suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int): Pair<Boolean, String?> {
+suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int, accountId: String? = null): Pair<Boolean, String?> {
     val body = JSONObject()
         .put("uid", uid)
         .put("product", product)
         .put("usd", usd)
-    val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
+        .apply { if (!accountId.isNullOrBlank()) put("account_id", accountId) }
+val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
     val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true)
     return Pair(ok, txt)
 }

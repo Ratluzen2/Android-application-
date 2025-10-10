@@ -2,6 +2,7 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
+import androidx.compose.ui.draw.clip
 
 import android.content.Context
 import android.os.Bundle
@@ -47,9 +48,11 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
-import kotlin.random.Randomimport androidx.compose.ui.draw.clip
+import kotlin.random.import kotlin.random.Random androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.ContentCopy
+
+
 
 
 @Composable

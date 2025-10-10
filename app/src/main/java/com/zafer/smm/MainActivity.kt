@@ -682,6 +682,103 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
     )
 }
 
+
+/* =========================
+   Amount Picker (iTunes & Phone Cards)
+   ========================= */
+data class AmountOption(val label: String, val usd: Int)
+
+private val commonAmounts = listOf(5,10,15,20,25,30,40,50,100)
+
+private fun priceForItunes(usd: Int): Double {
+    // كل 5$ = 9$
+    val steps = (usd / 5.0)
+    return steps * 9.0
+}
+private fun priceForAtheerOrAsiacell(usd: Int): Double {
+    // كل 5$ = 7$
+    val steps = (usd / 5.0)
+    return steps * 7.0
+}
+private fun priceForKorek(usd: Int): Double {
+    // كل 5$ = 7$
+    val steps = (usd / 5.0)
+    return steps * 7.0
+}
+
+@Composable
+private fun AmountGrid(
+    title: String,
+    subtitle: String,
+    amounts: List<Int>,
+    priceOf: (Int) -> Double,
+    onSelect: (usd: Int, price: Double) -> Unit,
+    onBack: () -> Unit
+) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Column {
+                Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
+        val rows = amounts.chunked(2)
+        rows.forEach { pair ->
+            Row(Modifier.fillMaxWidth()) {
+                pair.forEach { usd ->
+                    val price = String.format(java.util.Locale.getDefault(), "%.2f", priceOf(usd))
+                    ElevatedCard(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(4.dp)
+                            .clickable { onSelect(usd, priceOf(usd)) },
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = Surface1,
+                            contentColor = OnBg
+                        )
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text("$usd$", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
+                            Spacer(Modifier.height(4.dp))
+                            Text("السعر: $price$", color = Dim, fontSize = 12.sp)
+                        }
+                    }
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConfirmAmountDialog(
+    sectionTitle: String,
+    usd: Int,
+    price: Double,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onConfirm) { Text("تأكيد الشراء") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
+        title = { Text(sectionTitle, color = OnBg) },
+        text = {
+            Column {
+                Text("القيمة المختارة: ${usd}$", color = OnBg, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Text(String.format(java.util.Locale.getDefault(), "السعر المستحق: %.2f$", price), color = Dim)
+                Spacer(Modifier.height(8.dp))
+                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 12.sp)
+            }
+        }
+    )
+}
+
 /* الأقسام اليدوية (ايتونز/هاتف/ببجي/لودو) */
 @Composable private fun ManualSectionsScreen(
     title: String,
@@ -691,6 +788,10 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
     onAddNotice: (AppNotice) -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    var selectedManualFlow by remember { mutableStateOf<String?>(null) }
+    var pendingUsd by remember { mutableStateOf<Int?>(null) }
+    var pendingPrice by remember { mutableStateOf<Double?>(null) }
+
     val items = when (title) {
         "قسم شراء رصيد ايتونز" -> listOf("شراء رصيد ايتونز")
         "قسم شراء رصيد هاتف"  -> listOf("شراء رصيد اثير", "شراء رصيد اسياسيل", "شراء رصيد كورك")
@@ -713,16 +814,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
                     .fillMaxWidth()
                     .padding(bottom = 8.dp)
                     .clickable {
-                        scope.launch {
-                            val ok = apiCreateManualOrder(uid, name)
-                            if (ok) {
-                                onToast("تم استلام طلبك ($name)، سيتم مراجعته من المالك.")
-                                onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $name للمراجعة.", forOwner = false))
-                                onAddNotice(AppNotice("طلب يدوي جديد", "طلب $name من UID=$uid يحتاج مراجعة.", forOwner = true))
-                            } else {
-                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
-                            }
-                        }
+                        selectedManualFlow = name
                     },
                 colors = CardDefaults.elevatedCardColors(
                     containerColor = Surface1,
@@ -737,11 +829,95 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
             }
         }
     }
-}
 
-/* =========================
-   تبويب رصيدي (أسيا سيل)
-   ========================= */
+    // ----- Manual flows UI -----
+    if (selectedManualFlow != null) {
+        when (selectedManualFlow) {
+            "شراء رصيد ايتونز" -> {
+                AmountGrid(
+                    title = "شراء رصيد ايتونز",
+                    subtitle = "كل 5$ = 9$",
+                    amounts = commonAmounts,
+                    priceOf = { usd -> priceForItunes(usd) },
+                    onSelect = { usd, price ->
+                        pendingUsd = usd
+                        pendingPrice = price
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                )
+            }
+            "شراء رصيد اثير" -> {
+                AmountGrid(
+                    title = "شراء رصيد اثير",
+                    subtitle = "كل 5$ = 7$",
+                    amounts = commonAmounts,
+                    priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
+                    onSelect = { usd, price ->
+                        pendingUsd = usd
+                        pendingPrice = price
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                )
+            }
+            "شراء رصيد اسياسيل" -> {
+                AmountGrid(
+                    title = "شراء رصيد اسياسيل",
+                    subtitle = "كل 5$ = 7$",
+                    amounts = commonAmounts,
+                    priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
+                    onSelect = { usd, price ->
+                        pendingUsd = usd
+                        pendingPrice = price
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                )
+            }
+            "شراء رصيد كورك" -> {
+                AmountGrid(
+                    title = "شراء رصيد كورك",
+                    subtitle = "كل 5$ = 7$",
+                    amounts = commonAmounts,
+                    priceOf = { usd -> priceForKorek(usd) },
+                    onSelect = { usd, price ->
+                        pendingUsd = usd
+                        pendingPrice = price
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                )
+            }
+        }
+    }
+
+    if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
+        ConfirmAmountDialog(
+            sectionTitle = selectedManualFlow!!,
+            usd = pendingUsd!!,
+            price = pendingPrice!!,
+            onConfirm = {
+                val label = "${selectedManualFlow} ${pendingUsd}"
+                // أرسل كطلب يدوي مع تضمين القيمة في العنوان
+                scope.launch {
+                    val ok = apiCreateManualOrder(uid, label + "$")
+                    if (ok) {
+                        onToast("تم استلام طلبك ($label$).")
+                        onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $label$ للمراجعة.", forOwner = false))
+                        onAddNotice(AppNotice("طلب يدوي جديد", "طلب $label$ من UID=$uid يحتاج مراجعة.", forOwner = true))
+                    } else {
+                        onToast("تعذر إرسال الطلب. حاول لاحقًا.")
+                    }
+                }
+                pendingUsd = null
+                pendingPrice = null
+                selectedManualFlow = null
+            },
+            onDismiss = {
+                pendingUsd = null
+                pendingPrice = null
+            }
+        )
+    }
+
+}
 @Composable private fun WalletScreen(
     uid: String,
     noticeTick: Int = 0,

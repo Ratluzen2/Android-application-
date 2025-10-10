@@ -894,21 +894,36 @@ private fun ConfirmAmountDialog(
             usd = pendingUsd!!,
             price = pendingPrice!!,
             onConfirm = {
-                val label = "${selectedManualFlow} ${pendingUsd}"
-                // أرسل كطلب يدوي مع تضمين القيمة في العنوان
+                val flow = selectedManualFlow
+                val amount = pendingUsd
                 scope.launch {
-                    val ok = apiCreateManualOrder(uid, label + "$")
-                    if (ok) {
-                        onToast("تم استلام طلبك ($label$).")
-                        onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $label$ للمراجعة.", forOwner = false))
-                        onAddNotice(AppNotice("طلب يدوي جديد", "طلب $label$ من UID=$uid يحتاج مراجعة.", forOwner = true))
-                    } else {
-                        onToast("تعذر إرسال الطلب. حاول لاحقًا.")
+                    if (flow != null && amount != null) {
+                        val product = when (flow) {
+                            "شراء رصيد ايتونز" -> "itunes"
+                            "شراء رصيد اثير" -> "atheer"
+                            "شراء رصيد اسياسيل" -> "asiacell"
+                            "شراء رصيد كورك" -> "korek"
+                            else -> "manual"
+                        }
+                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, amount)
+                        if (ok) {
+                            val label = "$flow ${amount}$"
+                            onToast("تم استلام طلبك ($label).")
+                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $label للمراجعة.", forOwner = false))
+                            onAddNotice(AppNotice("طلب جديد", "طلب $label من UID=$uid يحتاج مراجعة.", forOwner = true))
+                        } else {
+                            val msg = (txt ?: "").lowercase()
+                            if (msg.contains("insufficient")) {
+                                onToast("رصيدك غير كافٍ لإتمام العملية.")
+                            } else {
+                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
+                            }
+                        }
                     }
+                    pendingUsd = null
+                    pendingPrice = null
+                    selectedManualFlow = null
                 }
-                pendingUsd = null
-                pendingPrice = null
-                selectedManualFlow = null
             },
             onDismiss = {
                 pendingUsd = null
@@ -1934,6 +1949,16 @@ private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     val body = JSONObject().put("uid", uid).put("title", name)
     val (code, txt) = httpPost("/api/orders/create/manual", body)
     return code in 200..299 && (txt?.contains("ok", true) == true)
+}
+
+suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int): Pair<Boolean, String?> {
+    val body = JSONObject()
+        .put("uid", uid)
+        .put("product", product)
+        .put("usd", usd)
+    val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
+    val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true)
+    return Pair(ok, txt)
 }
 
 private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {

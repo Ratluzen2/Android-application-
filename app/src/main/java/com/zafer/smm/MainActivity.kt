@@ -863,91 +863,8 @@ fun PackageGrid(
 }
 
 @Composable
-@Composable
-fun ConfirmPackageIdDialog(
-    sectionTitle: String,
-    label: String,
-    priceUsd: Int,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var accountId by remember { mutableStateOf("") }
-    val idLabel = when {
-        sectionTitle.contains("ببجي") -> "أدخل ID حساب ببجي (PUBG ID)"
-        sectionTitle.contains("لودو") -> "أدخل ID حساب لودو"
-        else -> "أدخل ID الحساب داخل اللعبة"
-    }
-    val idHint = when {
-        sectionTitle.contains("ببجي") -> "مثال: رقم PUBG دون مسافات"
-        sectionTitle.contains("لودو") -> "مثال: ID لودو كما يظهر داخل اللعبة"
-        else -> "أدخل ID اللعبة بدقة"
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { 
-            TextButton(onClick = { if (accountId.isNotBlank()) onConfirm(accountId.trim()) }, enabled = accountId.isNotBlank()) { 
-                Text("تأكيد الشراء") 
-            } 
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
-        title = { Text(sectionTitle, color = OnBg) },
-        text = {
-            Column {
-                Text("الباقة المختارة: " + label, color = OnBg, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(6.dp))
-                Text("السعر المستحق: $" + priceUsd, color = Dim)
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = accountId,
-                    onValueChange = { accountId = it },
-                    label = { Text(idLabel) },
-                    placeholder = { Text(idHint) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(4.dp))
-                Text("رجاءً أدخل ID حسابك داخل اللعبة بدقّة ليتم الشحن بشكل صحيح.", color = Dim, fontSize = 12.sp)
-            }
-        }
-    )
-}
-@Composable
-fun ConfirmPackageIdDialog(
-    sectionTitle: String,
-    label: String,
-    priceUsd: Int,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var accountId by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { 
-            TextButton(onClick = { if (accountId.isNotBlank()) onConfirm(accountId.trim()) }, enabled = accountId.isNotBlank()) { 
-                Text("تأكيد الشراء") 
-            } 
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
-        title = { Text(sectionTitle, color = OnBg) },
-        text = {
-            Column {
-                Text("الباقة المختارة: " + label, color = OnBg, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(6.dp))
-                Text("السعر المستحق: $" + priceUsd, color = Dim)
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = accountId,
-                    onValueChange = { accountId = it },
-                    label = { Text("أدخل ID الحساب") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(4.dp))
-                Text("رجاءً أدخل ID الحساب بدقّة ليتم الشحن بشكل صحيح.", color = Dim, fontSize = 12.sp)
-            }
-        }
-    )
-}
+
+
 
 
 @Composable private fun ManualSectionsScreen(
@@ -1104,7 +1021,7 @@ fun ConfirmPackageIdDialog(
             sectionTitle = selectedManualFlow!!,
             label = pendingPkgLabel!!,
             priceUsd = pendingPkgPrice!!,
-            onConfirm = { accountId ->
+            onConfirm = { accountId: String ->
                 val flow = selectedManualFlow
                 val priceInt = pendingPkgPrice
                 scope.launch {
@@ -1145,7 +1062,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             sectionTitle = selectedManualFlow!!,
             usd = pendingUsd!!,
             price = pendingPrice!!,
-            onConfirm = { accountId ->
+            onConfirm = { accountId: String ->
                 val flow = selectedManualFlow
                 val amount = pendingUsd
                 scope.launch {
@@ -2495,4 +2412,44 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
             }
         )
     }
+}
+
+@Composable
+fun ConfirmPackageIdDialog(
+    sectionTitle: String,
+    label: String,
+    priceUsd: Int,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var accountId by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(sectionTitle) },
+        text = {
+            Column {
+                Text("أدخل " + label)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = accountId,
+                    onValueChange = { accountId = it },
+                    singleLine = true,
+                    label = { Text(label) }
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("السعر: $" + priceUsd.toString())
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(accountId) }) {
+                Text("تأكيد")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("إلغاء")
+            }
+        }
+    )
 }

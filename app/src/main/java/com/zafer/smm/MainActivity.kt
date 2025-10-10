@@ -1080,7 +1080,6 @@ private fun ConfirmPackageDialog(
         )
     }
 
-}
 @Composable private fun WalletScreen(
     uid: String,
     noticeTick: Int = 0,

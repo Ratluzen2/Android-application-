@@ -994,6 +994,45 @@ private fun ConfirmPackageDialog(
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
                 )
             }
+            "شحن شدات ببجي" -> {
+                PackageGrid(
+                    title = "شحن شدات ببجي",
+                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
+                    packages = pubgPackages,
+                    onSelect = { selectedPackage = it },
+                    onBack = { selectedManualFlow = null; selectedPackage = null }
+                )
+            }
+            "شراء الماسات لودو" -> {
+                PackageGrid(
+                    title = "شراء الماسات لودو",
+                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
+                    packages = ludoDiamondPackages,
+                    onSelect = { selectedPackage = it },
+                    onBack = { selectedManualFlow = null; selectedPackage = null }
+                )
+            }
+            "شراء ذهب لودو" -> {
+                PackageGrid(
+                    title = "شراء ذهب لودو",
+                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
+                    packages = ludoGoldPackages,
+                    onSelect = { selectedPackage = it },
+                    onBack = { selectedManualFlow = null; selectedPackage = null }
+                )
+            }
+                AmountGrid(
+                    title = "شراء رصيد كورك",
+                    subtitle = "كل 5$ = 7$",
+                    amounts = commonAmounts,
+                    priceOf = { usd -> priceForKorek(usd) },
+                    onSelect = { usd, price ->
+                        pendingUsd = usd
+                        pendingPrice = price
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                )
+            }
         }
     }
 

@@ -967,13 +967,12 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     approveWithCode = false,
                     onBack = { current = null }
                 )
-                "pending_itunes" -> AdminPendingGenericList(
-                    title = "طلبات الايتونز المعلقة",
+                "pending_itunes" -> AdminPendingGenericList(title = "طلبات iTunes المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingItunes,
                     itemFilter = { true },
                     approveWithCode = true,                                      // ✅ يطلب كود آيتونز
-                    codeFieldLabel = "كود آيتونز",
+                    codeFieldLabel = "كود الايتونز",
                     onBack = { current = null }
                 )
                 "pending_pubg" -> AdminPendingGenericList(

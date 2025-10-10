@@ -778,6 +778,12 @@ private fun ConfirmAmountDialog(
         }
     )
 
+
+}
+
+/* الأقسام اليدوية (ايتونز/هاتف/ببجي/لودو) */
+
+
 /* =========================
    Package Picker (PUBG / Ludo)
    ========================= */
@@ -880,9 +886,7 @@ fun ConfirmPackageDialog(
         }
     )
 }
-}
 
-/* الأقسام اليدوية (ايتونز/هاتف/ببجي/لودو) */
 @Composable private fun ManualSectionsScreen(
     title: String,
     uid: String,

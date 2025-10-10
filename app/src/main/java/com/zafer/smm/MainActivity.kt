@@ -783,7 +783,7 @@ private fun ConfirmAmountDialog(
    ========================= */
 data class PackageOption(val label: String, val priceUsd: Int)
 
-private val pubgPackages = listOf(
+val pubgPackages = listOf(
     PackageOption("60 شدة", 2),
     PackageOption("325 شدة", 9),
     PackageOption("660 شدة", 15),
@@ -792,7 +792,7 @@ private val pubgPackages = listOf(
     PackageOption("8100 شدة", 100),
     PackageOption("16200 شدة", 185)
 )
-private val ludoDiamondsPackages = listOf(
+val ludoDiamondsPackages = listOf(
     PackageOption("810 الماسة", 5),
     PackageOption("2280 الماسة", 10),
     PackageOption("5080 الماسة", 20),
@@ -802,7 +802,7 @@ private val ludoDiamondsPackages = listOf(
     PackageOption("164800 الماسة", 475),
     PackageOption("275400 الماسة", 800)
 )
-private val ludoGoldPackages = listOf(
+val ludoGoldPackages = listOf(
     PackageOption("66680 ذهب", 5),
     PackageOption("219500 ذهب", 10),
     PackageOption("1443000 ذهب", 20),
@@ -814,7 +814,7 @@ private val ludoGoldPackages = listOf(
 )
 
 @Composable
-private fun PackageGrid(
+fun PackageGrid(
     title: String,
     subtitle: String,
     packages: List<PackageOption>,
@@ -841,7 +841,7 @@ private fun PackageGrid(
                             .weight(1f)
                             .padding(4.dp)
                             .clickable { onSelect(opt) },
-                        colors = CardDefaults.elevatedCardColors(containerColor = Bg2)
+                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
                     ) {
                         Column(Modifier.padding(12.dp)) {
                             Text(opt.label, fontWeight = FontWeight.SemiBold, color = OnBg)
@@ -857,7 +857,7 @@ private fun PackageGrid(
 }
 
 @Composable
-private fun ConfirmPackageDialog(
+fun ConfirmPackageDialog(
     sectionTitle: String,
     label: String,
     priceUsd: Int,

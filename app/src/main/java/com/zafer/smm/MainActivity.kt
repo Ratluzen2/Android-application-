@@ -90,7 +90,7 @@ private object AdminEndpoints {
     const val pendingLudo     = "/api/admin/pending/ludo"
     const val pendingBalances = "/api/admin/pending/balances"
 
-    // ✅ الكروت المعلّقة لأسيا سيل
+    // ✅. الكروت المعلّقة لأسيا سيل
     const val pendingCards    = "/api/admin/pending/cards"
     fun topupCardReject(id: Int) = "/api/admin/topup_cards/$id/reject"
     fun topupCardExecute(id: Int) = "/api/admin/topup_cards/$id/execute"

@@ -2,7 +2,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
-import androidx.compose.ui.draw.clip
 
 import android.content.Context
 import android.os.Bundle
@@ -48,52 +47,24 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
-import kotlin.random.import kotlin.random.Random androidx.compose.ui.draw.clip
+import kotlin.random.Random
+import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.ContentCopy
-
-
-
 
 @Composable
 private fun NoticeBody(text: String) {
     val clip = LocalClipboardManager.current
-    // يلتقط الأكواد بصيغ متعددة: "الكود: XXXX" أو "كود الايتونز - XXXX" أو "card code: XXXX"
-    val codeRegex = Regex(
-        pattern = "(?i)(?:\\b(?:كود|الكود|ايتونز|الكارت|itunes|card|voucher|redeem)\\b[^\\n:：-]*[:：-]\\s*)([A-Za-z0-9][A-Za-z0-9\\- ]{4,})"
-    )
+    val codeRegex = "(?:الكود|code|card|voucher|redeem)\\s*[:：-]?\\s*([A-Za-z0-9][A-Za-z0-9-]{5,})".toRegex(RegexOption.IGNORE_CASE)
     val match = codeRegex.find(text)
     if (match != null) {
-        val code = match.groupValues[1].trim()
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             SelectionContainer {
-                Text(text, color = Dim, fontSize = 12.sp)
+                Text(text, color = Dim, fontSize = 12.sp, modifier = Modifier.weight(1f))
             }
-            Spacer(Modifier.height(6.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Good.copy(alpha = 0.12f))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .clickable {
-                        clip.setText(AnnotatedString(code))
-                    }
-            ) {
-                Icon(Icons.Default.ContentCopy, contentDescription = "Copy", tint = Good)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = code,
-                    color = Good,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    modifier = Modifier.weight(1f)
-                )
-                TextButton(onClick = { clip.setText(AnnotatedString(code)) }) {
-                    Text("نسخ", color = Good, fontWeight = FontWeight.Bold)
-                }
-            }
+            TextButton(onClick = {
+                val c = match.groupValues.getOrNull(1) ?: text
+                clip.setText(AnnotatedString(c))
+            }) { Text("نسخ") }
         }
     } else {
         SelectionContainer {
@@ -808,54 +779,20 @@ private fun ConfirmAmountDialog(
             }
         }
     )
-
-
 }
-
-/* الأقسام اليدوية (ايتونز/هاتف/ببجي/لودو) */
 
 
 /* =========================
-   Package Picker (PUBG / Ludo)
+   Package Picker (PUBG & Ludo)
    ========================= */
-data class PackageOption(val label: String, val priceUsd: Int)
-
-val pubgPackages = listOf(
-    PackageOption("60 شدة", 2),
-    PackageOption("325 شدة", 9),
-    PackageOption("660 شدة", 15),
-    PackageOption("1800 شدة", 40),
-    PackageOption("3850 شدة", 55),
-    PackageOption("8100 شدة", 100),
-    PackageOption("16200 شدة", 185)
-)
-val ludoDiamondsPackages = listOf(
-    PackageOption("810 الماسة", 5),
-    PackageOption("2280 الماسة", 10),
-    PackageOption("5080 الماسة", 20),
-    PackageOption("12750 الماسة", 35),
-    PackageOption("27200 الماسة", 85),
-    PackageOption("54900 الماسة", 165),
-    PackageOption("164800 الماسة", 475),
-    PackageOption("275400 الماسة", 800)
-)
-val ludoGoldPackages = listOf(
-    PackageOption("66680 ذهب", 5),
-    PackageOption("219500 ذهب", 10),
-    PackageOption("1443000 ذهب", 20),
-    PackageOption("3627000 ذهب", 35),
-    PackageOption("9830000 ذهب", 85),
-    PackageOption("24835000 ذهب", 165),
-    PackageOption("74550000 ذهب", 475),
-    PackageOption("124550000 ذهب", 800)
-)
+data class PurchasePackage(val title: String, val priceUsd: Int)
 
 @Composable
-fun PackageGrid(
+private fun PackageGrid(
     title: String,
     subtitle: String,
-    packages: List<PackageOption>,
-    onSelect: (PackageOption) -> Unit,
+    packages: List<PurchasePackage>,
+    onSelect: (PurchasePackage) -> Unit,
     onBack: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -872,18 +809,21 @@ fun PackageGrid(
         val rows = packages.chunked(2)
         rows.forEach { pair ->
             Row(Modifier.fillMaxWidth()) {
-                pair.forEach { opt ->
+                pair.forEach { p ->
                     ElevatedCard(
                         modifier = Modifier
                             .weight(1f)
                             .padding(4.dp)
-                            .clickable { onSelect(opt) },
-                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+                            .clickable { onSelect(p) },
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = Surface1,
+                            contentColor = OnBg
+                        )
                     ) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(opt.label, fontWeight = FontWeight.SemiBold, color = OnBg)
+                        Column(Modifier.padding(16.dp)) {
+                            Text(p.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = OnBg)
                             Spacer(Modifier.height(4.dp))
-                            Text("السعر: ${'$'}${opt.priceUsd}", color = Dim, fontSize = 12.sp)
+                            Text("السعر: ${'$'}{p.priceUsd}${'$'}", color = Dim, fontSize = 12.sp)
                         }
                     }
                 }
@@ -893,67 +833,74 @@ fun PackageGrid(
     }
 }
 
-
-
 @Composable
-
-@Composable
-fun AccountIdDialog(
-    visible: Boolean,
+private fun ConfirmPackageDialog(
     sectionTitle: String,
-    label: String,
-    priceUsd: Int,
-    onConfirm: (String) -> Unit,
+    pack: PurchasePackage,
+    onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    if (!visible) return
-    ConfirmPackageIdDialog(
-        sectionTitle = sectionTitle,
-        label = label,
-        priceUsd = priceUsd,
-        onConfirm = onConfirm,
-        onDismiss = onDismiss
-    )
-}
-
-fun ConfirmPackageIdDialog(
-    sectionTitle: String,
-    label: String,
-    priceUsd: Int,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var accountId by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { 
-            TextButton(onClick = { if (accountId.isNotBlank()) onConfirm(accountId.trim()) }, enabled = accountId.isNotBlank()) { 
-                Text("تأكيد الشراء") 
-            } 
-        },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("تأكيد الشراء") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
         title = { Text(sectionTitle, color = OnBg) },
         text = {
             Column {
-                Text("الباقة المختارة: " + label, color = OnBg, fontWeight = FontWeight.SemiBold)
+                Text(pack.title, color = OnBg, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
-                Text("السعر المستحق: $" + priceUsd, color = Dim)
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = accountId,
-                    onValueChange = { accountId = it },
-                    label = { Text("أدخل ID الحساب") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(4.dp))
-                Text("رجاءً أدخل ID الحساب بدقّة ليتم الشحن بشكل صحيح.", color = Dim, fontSize = 12.sp)
+                Text("السعر: ${'$'}{pack.priceUsd}${'$'}", color = Dim)
+                Spacer(Modifier.height(8.dp))
+                Text("سيتم خصم المبلغ من رصيدك وإرسال الطلب للمراجعة من المالك.", color = Dim, fontSize = 12.sp)
             }
         }
     )
 }
 
+@Composable
+private fun ConfirmPackageIdDialog(
+    sectionTitle: String,
+    packageLabel: String,
+    priceUsd: Int,
+    idHint: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var accountId by remember { mutableStateOf("") }
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            tonalElevation = 6.dp,
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(text = sectionTitle, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Spacer(Modifier.height(8.dp))
+                Text(text = packageLabel)
+                Spacer(Modifier.height(6.dp))
+                Text(text = "السعر: $$priceUsd", fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = accountId,
+                    onValueChange = { accountId = it },
+                    label = { Text(idHint) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(onClick = { if (accountId.isNotBlank()) onConfirm(accountId.trim()) }) {
+                        Text("تأكيد")
+                    }
+                    OutlinedButton(onClick = onDismiss) { Text("إلغاء") }
+                }
+            }
+        }
+    }
+}
 
+
+
+/* الأقسام اليدوية (ايتونز/هاتف/ببجي/لودو) */
 @Composable private fun ManualSectionsScreen(
     title: String,
     uid: String,
@@ -965,8 +912,7 @@ fun ConfirmPackageIdDialog(
     var selectedManualFlow by remember { mutableStateOf<String?>(null) }
     var pendingUsd by remember { mutableStateOf<Int?>(null) }
     var pendingPrice by remember { mutableStateOf<Double?>(null) }
-    var pendingPkgLabel by remember { mutableStateOf<String?>(null) }
-    var pendingPkgPrice by remember { mutableStateOf<Int?>(null) }
+    var selectedPackage by remember { mutableStateOf<PurchasePackage?>(null) }
 
     val items = when (title) {
         "قسم شراء رصيد ايتونز" -> listOf("شراء رصيد ايتونز")
@@ -975,6 +921,38 @@ fun ConfirmPackageIdDialog(
         "قسم خدمات الودو"       -> listOf("شراء الماسات لودو", "شراء ذهب لودو")
         else -> emptyList()
     }
+
+    // حزم ببجي & لودو
+    val pubgPackages = listOf(
+        PurchasePackage("60 شدة", 2),
+        PurchasePackage("325 شدة", 9),
+        PurchasePackage("660 شدة", 15),
+        PurchasePackage("1800 شدة", 40),
+        PurchasePackage("3850 شدة", 55),
+        PurchasePackage("8100 شدة", 100),
+        PurchasePackage("16200 شدة", 185)
+    )
+    val ludoDiamondPackages = listOf(
+        PurchasePackage("810 الماسة", 5),
+        PurchasePackage("2280 الماسة", 10),
+        PurchasePackage("5080 الماسة", 20),
+        PurchasePackage("12750 الماسة", 35),
+        PurchasePackage("27200 الماسة", 85),
+        PurchasePackage("54900 الماسة", 165),
+        PurchasePackage("164800 الماسة", 475),
+        PurchasePackage("275400 الماسة", 800)
+    )
+    val ludoGoldPackages = listOf(
+        PurchasePackage("66680 ذهب", 5),
+        PurchasePackage("219500 ذهب", 10),
+        PurchasePackage("1443000 ذهب", 20),
+        PurchasePackage("3627000 ذهب", 35),
+        PurchasePackage("9830000 ذهب", 85),
+        PurchasePackage("24835000 ذهب", 165),
+        PurchasePackage("74550000 ذهب", 475),
+        PurchasePackage("124550000 ذهب", 800)
+    )
+
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1064,92 +1042,51 @@ fun ConfirmPackageIdDialog(
             "شحن شدات ببجي" -> {
                 PackageGrid(
                     title = "شحن شدات ببجي",
-                    subtitle = "اختر الباقة",
+                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
                     packages = pubgPackages,
-                    onSelect = { opt ->
-                        pendingPkgLabel = opt.label
-                        pendingPkgPrice = opt.priceUsd
-                    },
-                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                    onSelect = { selectedPackage = it },
+                    onBack = { selectedManualFlow = null; selectedPackage = null }
                 )
             }
             "شراء الماسات لودو" -> {
                 PackageGrid(
                     title = "شراء الماسات لودو",
-                    subtitle = "اختر الباقة",
-                    packages = ludoDiamondsPackages,
-                    onSelect = { opt ->
-                        pendingPkgLabel = opt.label
-                        pendingPkgPrice = opt.priceUsd
-                    },
-                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
+                    packages = ludoDiamondPackages,
+                    onSelect = { selectedPackage = it },
+                    onBack = { selectedManualFlow = null; selectedPackage = null }
                 )
             }
             "شراء ذهب لودو" -> {
                 PackageGrid(
                     title = "شراء ذهب لودو",
-                    subtitle = "اختر الباقة",
+                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
                     packages = ludoGoldPackages,
-                    onSelect = { opt ->
-                        pendingPkgLabel = opt.label
-                        pendingPkgPrice = opt.priceUsd
+                    onSelect = { selectedPackage = it },
+                    onBack = { selectedManualFlow = null; selectedPackage = null }
+                )
+            }
+                AmountGrid(
+                    title = "شراء رصيد كورك",
+                    subtitle = "كل 5$ = 7$",
+                    amounts = commonAmounts,
+                    priceOf = { usd -> priceForKorek(usd) },
+                    onSelect = { usd, price ->
+                        pendingUsd = usd
+                        pendingPrice = price
                     },
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
                 )
             }
-
         }
     }
 
-    
-    if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماسات لودو","شراء ذهب لودو") &&
-        pendingPkgLabel != null && pendingPkgPrice != null) {
-        ConfirmPackageIdDialog(
-            sectionTitle = selectedManualFlow!!,
-            label = pendingPkgLabel!!,
-            priceUsd = pendingPkgPrice!!,
-            onConfirm = { accountId ->
-                val flow = selectedManualFlow
-                val priceInt = pendingPkgPrice
-                scope.launch {
-                    if (flow != null && priceInt != null) {
-                        val product = when (flow) {
-                            "شحن شدات ببجي" -> "pubg_uc"
-                            "شراء الماسات لودو" -> "ludo_diamonds"
-                            "شراء ذهب لودو" -> "ludo_gold"
-                            else -> "manual"
-                        }
-                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, accountId)
-                        if (ok) {
-                            onToast("تم استلام طلبك (${pendingPkgLabel}).")
-                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة. ID اللعبة: " + accountId, forOwner = false))
-                            onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=" + uid + " يحتاج مراجعة. ID اللعبة: " + accountId, forOwner = true))
-                        } else {
-                            val msg = (txt ?: "").lowercase()
-                            if (msg.contains("insufficient")) {
-                                onToast("رصيدك غير كافٍ لإتمام العملية.")
-                            } else {
-                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
-                            }
-                        }
-                    }
-                    pendingPkgLabel = null
-                    pendingPkgPrice = null
-                    selectedManualFlow = null
-                }
-            },
-            onDismiss = {
-                pendingPkgLabel = null
-                pendingPkgPrice = null
-            }
-        )
-    }
-if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
+    if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         ConfirmAmountDialog(
             sectionTitle = selectedManualFlow!!,
             usd = pendingUsd!!,
             price = pendingPrice!!,
-            onConfirm = { accountId ->
+            onConfirm = {
                 val flow = selectedManualFlow
                 val amount = pendingUsd
                 scope.launch {
@@ -1188,8 +1125,50 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         )
     }
 
-}
-@Composable private fun WalletScreen(
+@Composable private 
+    // ==== حوار إدخال ID للحِزم (PUBG / لودو) ====
+    if (selectedPackage != null && selectedManualFlow != null) {
+        val pkg = selectedPackage!!
+        val flow = selectedManualFlow!!
+        val idLabel = when {
+            flow.contains("ببجي") -> "أدخل ID حساب ببجي"
+            flow.contains("ألماسة") || flow.contains("الماسات") || flow.contains("الألماسات") -> "أدخل ID حساب لودو"
+            flow.contains("ذهب") -> "أدخل ID حساب لودو"
+            flow.contains("Ludo", ignoreCase = true) -> "أدخل ID حساب لودو"
+            else -> "أدخل معرف الحساب"
+        }
+        ConfirmPackageIdDialog(
+            sectionTitle = flow,
+            packageLabel = pkg.label,
+            priceUsd = pkg.priceUsd,
+            idHint = idLabel,
+            onConfirm = { accountId ->
+                scope.launch {
+                    try {
+                        val productTitle = "$" + pkg.priceUsd + " - " + flow + " - " + pkg.label + " (ID: " + accountId + ")"
+                        val ok = apiCreateManualPaidOrder(uid, productTitle, pkg.priceUsd)
+                        if (ok) {
+                            onToast("تم إرسال طلبك بنجاح")
+                            onAddNotice(
+                                "تم إنشاء طلب ${flow}",
+                                "الطلب: ${pkg.label} — ID: ${accountId}",
+                            )
+                            selectedPackage = null
+                        } else {
+                            onToast("تعذر إرسال الطلب، حاول لاحقًا")
+                        }
+                    } catch (e: Exception) {
+                        onToast("خطأ: ${e.message}")
+                    } finally {
+                        selectedPackage = null
+                    }
+                }
+            },
+            onDismiss = { selectedPackage = null }
+        )
+    }
+
+fun WalletScreen(
     uid: String,
     noticeTick: Int = 0,
     onAddNotice: (AppNotice) -> Unit,
@@ -2207,13 +2186,12 @@ private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
-suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int, accountId: String? = null): Pair<Boolean, String?> {
+suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int): Pair<Boolean, String?> {
     val body = JSONObject()
         .put("uid", uid)
         .put("product", product)
         .put("usd", usd)
-        .apply { if (!accountId.isNullOrBlank()) put("account_id", accountId) }
-val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
+    val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
     val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true)
     return Pair(ok, txt)
 }

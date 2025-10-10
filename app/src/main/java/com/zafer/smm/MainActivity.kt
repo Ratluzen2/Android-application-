@@ -547,38 +547,6 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
         else -> emptyList()
     }
 
-    // حزم ببجي & لودو
-    val pubgPackages = listOf(
-        PurchasePackage("60 شدة", 2),
-        PurchasePackage("325 شدة", 9),
-        PurchasePackage("660 شدة", 15),
-        PurchasePackage("1800 شدة", 40),
-        PurchasePackage("3850 شدة", 55),
-        PurchasePackage("8100 شدة", 100),
-        PurchasePackage("16200 شدة", 185)
-    )
-    val ludoDiamondPackages = listOf(
-        PurchasePackage("810 الماسة", 5),
-        PurchasePackage("2280 الماسة", 10),
-        PurchasePackage("5080 الماسة", 20),
-        PurchasePackage("12750 الماسة", 35),
-        PurchasePackage("27200 الماسة", 85),
-        PurchasePackage("54900 الماسة", 165),
-        PurchasePackage("164800 الماسة", 475),
-        PurchasePackage("275400 الماسة", 800)
-    )
-    val ludoGoldPackages = listOf(
-        PurchasePackage("66680 ذهب", 5),
-        PurchasePackage("219500 ذهب", 10),
-        PurchasePackage("1443000 ذهب", 20),
-        PurchasePackage("3627000 ذهب", 35),
-        PurchasePackage("9830000 ذهب", 85),
-        PurchasePackage("24835000 ذهب", 165),
-        PurchasePackage("74550000 ذهب", 475),
-        PurchasePackage("124550000 ذهب", 800)
-    )
-
-
     if (inCat.isNotEmpty()) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -853,7 +821,7 @@ private fun PackageGrid(
                         Column(Modifier.padding(16.dp)) {
                             Text(p.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = OnBg)
                             Spacer(Modifier.height(4.dp))
-                            Text("السعر: ${p.priceUsd}$", color = Dim, fontSize = 12.sp)
+                            Text("السعر: ${'$'}{p.priceUsd}${'$'}", color = Dim, fontSize = 12.sp)
                         }
                     }
                 }
@@ -879,7 +847,7 @@ private fun ConfirmPackageDialog(
             Column {
                 Text(pack.title, color = OnBg, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
-                Text("السعر: ${pack.priceUsd}$", color = Dim)
+                Text("السعر: ${'$'}{pack.priceUsd}${'$'}", color = Dim)
                 Spacer(Modifier.height(8.dp))
                 Text("سيتم خصم المبلغ من رصيدك وإرسال الطلب للمراجعة من المالك.", color = Dim, fontSize = 12.sp)
             }
@@ -899,6 +867,7 @@ private fun ConfirmPackageDialog(
     var selectedManualFlow by remember { mutableStateOf<String?>(null) }
     var pendingUsd by remember { mutableStateOf<Int?>(null) }
     var pendingPrice by remember { mutableStateOf<Double?>(null) }
+    var selectedPackage by remember { mutableStateOf<PurchasePackage?>(null) }
 
     val items = when (title) {
         "قسم شراء رصيد ايتونز" -> listOf("شراء رصيد ايتونز")
@@ -1013,34 +982,6 @@ private fun ConfirmPackageDialog(
                 )
             }
             "شراء رصيد كورك" -> {
-            "شحن شدات ببجي" -> {
-                PackageGrid(
-                    title = "شحن شدات ببجي",
-                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
-                    packages = pubgPackages,
-                    onSelect = { selectedPackage = it },
-                    onBack = { selectedManualFlow = null; selectedPackage = null }
-                )
-            }
-            "شراء الماسات لودو" -> {
-                PackageGrid(
-                    title = "شراء الماسات لودو",
-                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
-                    packages = ludoDiamondPackages,
-                    onSelect = { selectedPackage = it },
-                    onBack = { selectedManualFlow = null; selectedPackage = null }
-                )
-            }
-            "شراء ذهب لودو" -> {
-                PackageGrid(
-                    title = "شراء ذهب لودو",
-                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
-                    packages = ludoGoldPackages,
-                    onSelect = { selectedPackage = it },
-                    onBack = { selectedManualFlow = null; selectedPackage = null }
-                )
-            }
-
                 AmountGrid(
                     title = "شراء رصيد كورك",
                     subtitle = "كل 5$ = 7$",

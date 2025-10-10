@@ -457,7 +457,10 @@ fun AppRoot() {
                         Text("• ${itx.title}", fontWeight = FontWeight.SemiBold, color = OnBg)
                         
                         val clip = LocalClipboardManager.current
-                        val codeRegex = Regex("(?:الكود|code|card|voucher|redeem)\s*[:：-]?\s*([A-Za-z0-9][A-Za-z0-9\-]{5,})", RegexOption.IGNORE_CASE)
+                        val codeRegex = Regex(
+                            \"\"\"(?:الكود|code|card|voucher|redeem)\s*[:：-]?\s*([A-Za-z0-9][A-Za-z0-9-]{5,})\"\"\",
+                            RegexOption.IGNORE_CASE
+                        )
                         val match = codeRegex.find(itx.body)
                         if (match != null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {

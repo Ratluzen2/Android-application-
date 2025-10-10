@@ -22,8 +22,6 @@ import androidx.compose.material3.*
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -779,20 +777,48 @@ private fun ConfirmAmountDialog(
             }
         }
     )
-}
-
 
 /* =========================
-   Package Picker (PUBG & Ludo)
+   Package Picker (PUBG / Ludo)
    ========================= */
-data class PurchasePackage(val title: String, val priceUsd: Int)
+data class PackageOption(val label: String, val priceUsd: Int)
+
+private val pubgPackages = listOf(
+    PackageOption("60 شدة", 2),
+    PackageOption("325 شدة", 9),
+    PackageOption("660 شدة", 15),
+    PackageOption("1800 شدة", 40),
+    PackageOption("3850 شدة", 55),
+    PackageOption("8100 شدة", 100),
+    PackageOption("16200 شدة", 185)
+)
+private val ludoDiamondsPackages = listOf(
+    PackageOption("810 الماسة", 5),
+    PackageOption("2280 الماسة", 10),
+    PackageOption("5080 الماسة", 20),
+    PackageOption("12750 الماسة", 35),
+    PackageOption("27200 الماسة", 85),
+    PackageOption("54900 الماسة", 165),
+    PackageOption("164800 الماسة", 475),
+    PackageOption("275400 الماسة", 800)
+)
+private val ludoGoldPackages = listOf(
+    PackageOption("66680 ذهب", 5),
+    PackageOption("219500 ذهب", 10),
+    PackageOption("1443000 ذهب", 20),
+    PackageOption("3627000 ذهب", 35),
+    PackageOption("9830000 ذهب", 85),
+    PackageOption("24835000 ذهب", 165),
+    PackageOption("74550000 ذهب", 475),
+    PackageOption("124550000 ذهب", 800)
+)
 
 @Composable
 private fun PackageGrid(
     title: String,
     subtitle: String,
-    packages: List<PurchasePackage>,
-    onSelect: (PurchasePackage) -> Unit,
+    packages: List<PackageOption>,
+    onSelect: (PackageOption) -> Unit,
     onBack: () -> Unit
 ) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -809,21 +835,18 @@ private fun PackageGrid(
         val rows = packages.chunked(2)
         rows.forEach { pair ->
             Row(Modifier.fillMaxWidth()) {
-                pair.forEach { p ->
+                pair.forEach { opt ->
                     ElevatedCard(
                         modifier = Modifier
                             .weight(1f)
                             .padding(4.dp)
-                            .clickable { onSelect(p) },
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = Surface1,
-                            contentColor = OnBg
-                        )
+                            .clickable { onSelect(opt) },
+                        colors = CardDefaults.elevatedCardColors(containerColor = Bg2)
                     ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(p.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = OnBg)
+                        Column(Modifier.padding(12.dp)) {
+                            Text(opt.label, fontWeight = FontWeight.SemiBold, color = OnBg)
                             Spacer(Modifier.height(4.dp))
-                            Text("السعر: ${'$'}{p.priceUsd}${'$'}", color = Dim, fontSize = 12.sp)
+                            Text("السعر: ${'$'}${opt.priceUsd}", color = Dim, fontSize = 12.sp)
                         }
                     }
                 }
@@ -836,7 +859,8 @@ private fun PackageGrid(
 @Composable
 private fun ConfirmPackageDialog(
     sectionTitle: String,
-    pack: PurchasePackage,
+    label: String,
+    priceUsd: Int,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -847,14 +871,15 @@ private fun ConfirmPackageDialog(
         title = { Text(sectionTitle, color = OnBg) },
         text = {
             Column {
-                Text(pack.title, color = OnBg, fontWeight = FontWeight.SemiBold)
+                Text("الباقة المختارة: $label", color = OnBg, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
-                Text("السعر: ${'$'}{pack.priceUsd}${'$'}", color = Dim)
+                Text("السعر المستحق: ${'$'}$priceUsd", color = Dim)
                 Spacer(Modifier.height(8.dp))
-                Text("سيتم خصم المبلغ من رصيدك وإرسال الطلب للمراجعة من المالك.", color = Dim, fontSize = 12.sp)
+                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 12.sp)
             }
         }
     )
+}
 }
 
 /* الأقسام اليدوية (ايتونز/هاتف/ببجي/لودو) */
@@ -869,7 +894,8 @@ private fun ConfirmPackageDialog(
     var selectedManualFlow by remember { mutableStateOf<String?>(null) }
     var pendingUsd by remember { mutableStateOf<Int?>(null) }
     var pendingPrice by remember { mutableStateOf<Double?>(null) }
-    var selectedPackage by remember { mutableStateOf<PurchasePackage?>(null) }
+    var pendingPkgLabel by remember { mutableStateOf<String?>(null) }
+    var pendingPkgPrice by remember { mutableStateOf<Int?>(null) }
 
     val items = when (title) {
         "قسم شراء رصيد ايتونز" -> listOf("شراء رصيد ايتونز")
@@ -878,38 +904,6 @@ private fun ConfirmPackageDialog(
         "قسم خدمات الودو"       -> listOf("شراء الماسات لودو", "شراء ذهب لودو")
         else -> emptyList()
     }
-
-    // حزم ببجي & لودو
-    val pubgPackages = listOf(
-        PurchasePackage("60 شدة", 2),
-        PurchasePackage("325 شدة", 9),
-        PurchasePackage("660 شدة", 15),
-        PurchasePackage("1800 شدة", 40),
-        PurchasePackage("3850 شدة", 55),
-        PurchasePackage("8100 شدة", 100),
-        PurchasePackage("16200 شدة", 185)
-    )
-    val ludoDiamondPackages = listOf(
-        PurchasePackage("810 الماسة", 5),
-        PurchasePackage("2280 الماسة", 10),
-        PurchasePackage("5080 الماسة", 20),
-        PurchasePackage("12750 الماسة", 35),
-        PurchasePackage("27200 الماسة", 85),
-        PurchasePackage("54900 الماسة", 165),
-        PurchasePackage("164800 الماسة", 475),
-        PurchasePackage("275400 الماسة", 800)
-    )
-    val ludoGoldPackages = listOf(
-        PurchasePackage("66680 ذهب", 5),
-        PurchasePackage("219500 ذهب", 10),
-        PurchasePackage("1443000 ذهب", 20),
-        PurchasePackage("3627000 ذهب", 35),
-        PurchasePackage("9830000 ذهب", 85),
-        PurchasePackage("24835000 ذهب", 165),
-        PurchasePackage("74550000 ذهب", 475),
-        PurchasePackage("124550000 ذهب", 800)
-    )
-
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -999,34 +993,87 @@ private fun ConfirmPackageDialog(
             "شحن شدات ببجي" -> {
                 PackageGrid(
                     title = "شحن شدات ببجي",
-                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
+                    subtitle = "اختر الباقة",
                     packages = pubgPackages,
-                    onSelect = { selectedPackage = it },
-                    onBack = { selectedManualFlow = null; selectedPackage = null }
+                    onSelect = { opt ->
+                        pendingPkgLabel = opt.label
+                        pendingPkgPrice = opt.priceUsd
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
                 )
             }
             "شراء الماسات لودو" -> {
                 PackageGrid(
                     title = "شراء الماسات لودو",
-                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
-                    packages = ludoDiamondPackages,
-                    onSelect = { selectedPackage = it },
-                    onBack = { selectedManualFlow = null; selectedPackage = null }
+                    subtitle = "اختر الباقة",
+                    packages = ludoDiamondsPackages,
+                    onSelect = { opt ->
+                        pendingPkgLabel = opt.label
+                        pendingPkgPrice = opt.priceUsd
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
                 )
             }
             "شراء ذهب لودو" -> {
                 PackageGrid(
                     title = "شراء ذهب لودو",
-                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
+                    subtitle = "اختر الباقة",
                     packages = ludoGoldPackages,
-                    onSelect = { selectedPackage = it },
-                    onBack = { selectedManualFlow = null; selectedPackage = null }
+                    onSelect = { opt ->
+                        pendingPkgLabel = opt.label
+                        pendingPkgPrice = opt.priceUsd
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
                 )
             }
+
         }
     }
 
-    if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
+    
+    if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماسات لودو","شراء ذهب لودو") &&
+        pendingPkgLabel != null && pendingPkgPrice != null) {
+        ConfirmPackageDialog(
+            sectionTitle = selectedManualFlow!!,
+            label = pendingPkgLabel!!,
+            priceUsd = pendingPkgPrice!!,
+            onConfirm = {
+                val flow = selectedManualFlow
+                val priceInt = pendingPkgPrice
+                scope.launch {
+                    if (flow != null && priceInt != null) {
+                        val product = when (flow) {
+                            "شحن شدات ببجي" -> "pubg_uc"
+                            "شراء الماسات لودو" -> "ludo_diamonds"
+                            "شراء ذهب لودو" -> "ludo_gold"
+                            else -> "manual"
+                        }
+                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt)
+                        if (ok) {
+                            onToast("تم استلام طلبك (${pendingPkgLabel}).")
+                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
+                            onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} يحتاج مراجعة.", forOwner = true))
+                        } else {
+                            val msg = (txt ?: "").lowercase()
+                            if (msg.contains("insufficient")) {
+                                onToast("رصيدك غير كافٍ لإتمام العملية.")
+                            } else {
+                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
+                            }
+                        }
+                    }
+                    pendingPkgLabel = null
+                    pendingPkgPrice = null
+                    selectedManualFlow = null
+                }
+            },
+            onDismiss = {
+                pendingPkgLabel = null
+                pendingPkgPrice = null
+            }
+        )
+    }
+if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         ConfirmAmountDialog(
             sectionTitle = selectedManualFlow!!,
             usd = pendingUsd!!,
@@ -1070,6 +1117,7 @@ private fun ConfirmPackageDialog(
         )
     }
 
+}
 @Composable private fun WalletScreen(
     uid: String,
     noticeTick: Int = 0,

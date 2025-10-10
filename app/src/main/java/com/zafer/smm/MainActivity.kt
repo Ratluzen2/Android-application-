@@ -547,6 +547,38 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
         else -> emptyList()
     }
 
+    // حزم ببجي & لودو
+    val pubgPackages = listOf(
+        PurchasePackage("60 شدة", 2),
+        PurchasePackage("325 شدة", 9),
+        PurchasePackage("660 شدة", 15),
+        PurchasePackage("1800 شدة", 40),
+        PurchasePackage("3850 شدة", 55),
+        PurchasePackage("8100 شدة", 100),
+        PurchasePackage("16200 شدة", 185)
+    )
+    val ludoDiamondPackages = listOf(
+        PurchasePackage("810 الماسة", 5),
+        PurchasePackage("2280 الماسة", 10),
+        PurchasePackage("5080 الماسة", 20),
+        PurchasePackage("12750 الماسة", 35),
+        PurchasePackage("27200 الماسة", 85),
+        PurchasePackage("54900 الماسة", 165),
+        PurchasePackage("164800 الماسة", 475),
+        PurchasePackage("275400 الماسة", 800)
+    )
+    val ludoGoldPackages = listOf(
+        PurchasePackage("66680 ذهب", 5),
+        PurchasePackage("219500 ذهب", 10),
+        PurchasePackage("1443000 ذهب", 20),
+        PurchasePackage("3627000 ذهب", 35),
+        PurchasePackage("9830000 ذهب", 85),
+        PurchasePackage("24835000 ذهب", 165),
+        PurchasePackage("74550000 ذهب", 475),
+        PurchasePackage("124550000 ذهب", 800)
+    )
+
+
     if (inCat.isNotEmpty()) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -779,6 +811,82 @@ private fun ConfirmAmountDialog(
     )
 }
 
+
+/* =========================
+   Package Picker (PUBG & Ludo)
+   ========================= */
+data class PurchasePackage(val title: String, val priceUsd: Int)
+
+@Composable
+private fun PackageGrid(
+    title: String,
+    subtitle: String,
+    packages: List<PurchasePackage>,
+    onSelect: (PurchasePackage) -> Unit,
+    onBack: () -> Unit
+) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Column {
+                Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
+        val rows = packages.chunked(2)
+        rows.forEach { pair ->
+            Row(Modifier.fillMaxWidth()) {
+                pair.forEach { p ->
+                    ElevatedCard(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(4.dp)
+                            .clickable { onSelect(p) },
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = Surface1,
+                            contentColor = OnBg
+                        )
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(p.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = OnBg)
+                            Spacer(Modifier.height(4.dp))
+                            Text("السعر: ${p.priceUsd}$", color = Dim, fontSize = 12.sp)
+                        }
+                    }
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConfirmPackageDialog(
+    sectionTitle: String,
+    pack: PurchasePackage,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onConfirm) { Text("تأكيد الشراء") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
+        title = { Text(sectionTitle, color = OnBg) },
+        text = {
+            Column {
+                Text(pack.title, color = OnBg, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Text("السعر: ${pack.priceUsd}$", color = Dim)
+                Spacer(Modifier.height(8.dp))
+                Text("سيتم خصم المبلغ من رصيدك وإرسال الطلب للمراجعة من المالك.", color = Dim, fontSize = 12.sp)
+            }
+        }
+    )
+}
+
 /* الأقسام اليدوية (ايتونز/هاتف/ببجي/لودو) */
 @Composable private fun ManualSectionsScreen(
     title: String,
@@ -799,6 +907,38 @@ private fun ConfirmAmountDialog(
         "قسم خدمات الودو"       -> listOf("شراء الماسات لودو", "شراء ذهب لودو")
         else -> emptyList()
     }
+
+    // حزم ببجي & لودو
+    val pubgPackages = listOf(
+        PurchasePackage("60 شدة", 2),
+        PurchasePackage("325 شدة", 9),
+        PurchasePackage("660 شدة", 15),
+        PurchasePackage("1800 شدة", 40),
+        PurchasePackage("3850 شدة", 55),
+        PurchasePackage("8100 شدة", 100),
+        PurchasePackage("16200 شدة", 185)
+    )
+    val ludoDiamondPackages = listOf(
+        PurchasePackage("810 الماسة", 5),
+        PurchasePackage("2280 الماسة", 10),
+        PurchasePackage("5080 الماسة", 20),
+        PurchasePackage("12750 الماسة", 35),
+        PurchasePackage("27200 الماسة", 85),
+        PurchasePackage("54900 الماسة", 165),
+        PurchasePackage("164800 الماسة", 475),
+        PurchasePackage("275400 الماسة", 800)
+    )
+    val ludoGoldPackages = listOf(
+        PurchasePackage("66680 ذهب", 5),
+        PurchasePackage("219500 ذهب", 10),
+        PurchasePackage("1443000 ذهب", 20),
+        PurchasePackage("3627000 ذهب", 35),
+        PurchasePackage("9830000 ذهب", 85),
+        PurchasePackage("24835000 ذهب", 165),
+        PurchasePackage("74550000 ذهب", 475),
+        PurchasePackage("124550000 ذهب", 800)
+    )
+
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -873,6 +1013,34 @@ private fun ConfirmAmountDialog(
                 )
             }
             "شراء رصيد كورك" -> {
+            "شحن شدات ببجي" -> {
+                PackageGrid(
+                    title = "شحن شدات ببجي",
+                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
+                    packages = pubgPackages,
+                    onSelect = { selectedPackage = it },
+                    onBack = { selectedManualFlow = null; selectedPackage = null }
+                )
+            }
+            "شراء الماسات لودو" -> {
+                PackageGrid(
+                    title = "شراء الماسات لودو",
+                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
+                    packages = ludoDiamondPackages,
+                    onSelect = { selectedPackage = it },
+                    onBack = { selectedManualFlow = null; selectedPackage = null }
+                )
+            }
+            "شراء ذهب لودو" -> {
+                PackageGrid(
+                    title = "شراء ذهب لودو",
+                    subtitle = "اختر الباقة المناسبة وسيتم خصم المبلغ فورًا",
+                    packages = ludoGoldPackages,
+                    onSelect = { selectedPackage = it },
+                    onBack = { selectedManualFlow = null; selectedPackage = null }
+                )
+            }
+
                 AmountGrid(
                     title = "شراء رصيد كورك",
                     subtitle = "كل 5$ = 7$",

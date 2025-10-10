@@ -1023,18 +1023,6 @@ private fun ConfirmPackageDialog(
                     onBack = { selectedManualFlow = null; selectedPackage = null }
                 )
             }
-                AmountGrid(
-                    title = "شراء رصيد كورك",
-                    subtitle = "كل 5$ = 7$",
-                    amounts = commonAmounts,
-                    priceOf = { usd -> priceForKorek(usd) },
-                    onSelect = { usd, price ->
-                        pendingUsd = usd
-                        pendingPrice = price
-                    },
-                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
-                )
-            }
         }
     }
 

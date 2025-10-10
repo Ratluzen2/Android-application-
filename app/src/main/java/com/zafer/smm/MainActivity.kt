@@ -228,10 +228,12 @@ fun AppRoot() {
     var noticeTick by remember { mutableStateOf(0) }
     var showNoticeCenter by remember { mutableStateOf(false) }
 
-    val unreadUser = notices.count { !it.forOwner }
-    val unreadOwner = notices.count { it.forOwner }
+    var lastSeenUser by remember { mutableStateOf(loadLastSeen(ctx, false)) }
+    var lastSeenOwner by remember { mutableStateOf(loadLastSeen(ctx, true)) }
 
-    var currentTab by remember { mutableStateOf(Tab.HOME) }
+    val unreadUser = notices.count { !it.forOwner && it.ts > lastSeenUser }
+    val unreadOwner = notices.count { it.forOwner && it.ts > lastSeenOwner }
+var currentTab by remember { mutableStateOf(Tab.HOME) }
 
     // فحص الصحة + تسجيل UID
     LaunchedEffect(Unit) {
@@ -362,7 +364,16 @@ fun AppRoot() {
                 notices = if (ownerMode) notices.filter { !it.forOwner } else notices.filter { it.forOwner }
                 saveNotices(ctx, notices)
             },
-            onDismiss = { showNoticeCenter = false }
+            onDismiss = {
+                if (ownerMode) {
+                    lastSeenOwner = System.currentTimeMillis()
+                    saveLastSeen(ctx, true, lastSeenOwner)
+                } else {
+                    lastSeenUser = System.currentTimeMillis()
+                    saveLastSeen(ctx, false, lastSeenUser)
+                }
+                showNoticeCenter = false
+            }
         )
     }
 }
@@ -1626,6 +1637,15 @@ private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
     prefs(ctx).edit().putString("notices_json", arr.toString()).apply()
 }
 
+
+
+/* تتبع آخر وقت قراءة الإشعارات لكل وضع (مستخدم/مالك) */
+private fun lastSeenKey(forOwner: Boolean) = if (forOwner) "last_seen_owner" else "last_seen_user"
+private fun loadLastSeen(ctx: Context, forOwner: Boolean): Long =
+    prefs(ctx).getLong(lastSeenKey(forOwner), 0L)
+private fun saveLastSeen(ctx: Context, forOwner: Boolean, ts: Long = System.currentTimeMillis()) {
+    prefs(ctx).edit().putLong(lastSeenKey(forOwner), ts).apply()
+}
 /* شبكة - GET (suspend) */
 private suspend fun httpGet(path: String, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
     withContext(Dispatchers.IO) {

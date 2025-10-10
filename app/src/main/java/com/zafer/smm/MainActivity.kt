@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -454,7 +455,26 @@ fun AppRoot() {
                     items(notices.sortedByDescending { it.ts }) { itx ->
                         val dt = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(itx.ts))
                         Text("• ${itx.title}", fontWeight = FontWeight.SemiBold, color = OnBg)
-                        Text(itx.body, color = Dim, fontSize = 12.sp)
+                        
+                        val clip = LocalClipboardManager.current
+                        val codeRegex = Regex("(?:الكود|code|card|voucher|redeem)\s*[:：-]?\s*([A-Za-z0-9][A-Za-z0-9\-]{5,})", RegexOption.IGNORE_CASE)
+                        val match = codeRegex.find(itx.body)
+                        if (match != null) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                SelectionContainer {
+                                    Text(itx.body, color = Dim, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                                }
+                                TextButton(onClick = {
+                                    val c = match.groupValues.getOrNull(1) ?: itx.body
+                                    clip.setText(AnnotatedString(c))
+                                }) { Text("نسخ") }
+                            }
+                        } else {
+                            SelectionContainer {
+                                Text(itx.body, color = Dim, fontSize = 12.sp)
+                            }
+                        }
+
                         Text(dt, color = Dim, fontSize = 10.sp)
                         Divider(Modifier.padding(vertical = 8.dp), color = Surface1)
                     }

@@ -55,7 +55,7 @@ import kotlin.random.Random
 private const val API_BASE =
     "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com" // عدّلها إذا تغيّر الباكند
 
-/** اتصال مباشر مع مزوّد SMM (اختياري) */
+/** اتصال مباشر مع مزوّد SMM ( اختي. اري) */
 private const val PROVIDER_DIRECT_URL = "https://kd1s.com/api/v2"
 private const val PROVIDER_DIRECT_KEY_VALUE = "25a9ceb07be0d8b2ba88e70dcbe92e06"
 

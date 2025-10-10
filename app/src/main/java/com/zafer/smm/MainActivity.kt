@@ -1766,7 +1766,7 @@ private fun mergeNotices(local: List<AppNotice>, incoming: List<AppNotice>): Lis
 private suspend fun apiFetchNotificationsByUid(uid: String, limit: Int = 50): List<AppNotice>? {
     // 1) try by-uid
     val (code1, txt1) = httpGet("/api/user/by-uid/$uid/notifications?status=unread&limit=$limit")
-    if (code1 in 200..299 && txt1 != None) {
+    if (code1 in 200..299 && txt1 != null) {
         try {
             val arr = org.json.JSONArray(txt1!!.trim())
             val out = mutableListOf<AppNotice>()
@@ -1782,9 +1782,9 @@ private suspend fun apiFetchNotificationsByUid(uid: String, limit: Int = 50): Li
     }
     // 2) fallback to numeric id route if available (only if uid is numeric)
     val uidNum = uid.toLongOrNull()
-    if (uidNum != None) {
+    if (uidNum != null) {
         val (code2, txt2) = httpGet("/api/user/$uidNum/notifications?status=unread&limit=$limit")
-        if (code2 in 200..299 && txt2 != None) {
+        if (code2 in 200..299 && txt2 != null) {
             try {
                 val arr = org.json.JSONArray(txt2!!.trim())
                 val out = mutableListOf<AppNotice>()

@@ -896,6 +896,26 @@ fun PackageGrid(
 
 
 @Composable
+
+@Composable
+fun AccountIdDialog(
+    visible: Boolean,
+    sectionTitle: String,
+    label: String,
+    priceUsd: Int,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    if (!visible) return
+    ConfirmPackageIdDialog(
+        sectionTitle = sectionTitle,
+        label = label,
+        priceUsd = priceUsd,
+        onConfirm = onConfirm,
+        onDismiss = onDismiss
+    )
+}
+
 fun ConfirmPackageIdDialog(
     sectionTitle: String,
     label: String,

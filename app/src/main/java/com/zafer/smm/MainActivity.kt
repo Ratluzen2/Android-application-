@@ -72,6 +72,7 @@ private object AdminEndpoints {
 
     const val orderApprove    = "/api/admin/orders/%d/approve"
     const val orderDeliver    = "/api/admin/orders/%d/deliver"
+    const val orderReject     = "/api/admin/orders/%d/reject"
 
     // قد تتوفر في باكندك، وإلا ستظهر "تعذر جلب البيانات"
     const val walletTopup     = "/api/admin/wallet/topup"
@@ -199,6 +200,7 @@ fun AppRoot() {
     var showSettings by remember { mutableStateOf(false) }
 
     var notices by remember { mutableStateOf(loadNotices(ctx)) }
+    var noticeTick by remember { mutableStateOf(0) }
     var showNoticeCenter by remember { mutableStateOf(false) }
 
     val unreadUser = notices.count { !it.forOwner }
@@ -212,6 +214,21 @@ fun AppRoot() {
         while (true) {
             online = pingHealth()
             delay(15_000)
+        }
+    }
+
+    // ✅ جلب الإشعارات من الخادم ودمجها، وتحديث العداد تلقائيًا
+    LaunchedEffect(uid) {
+        while (true) {
+            val remote = apiFetchNotificationsByUid(uid) ?: emptyList()
+            val before = notices.size
+            val merged = mergeNotices(notices.filter { !it.forOwner }, remote) + notices.filter { it.forOwner }
+            if (merged.size != before) {
+                notices = merged
+                saveNotices(ctx, notices)
+                noticeTick++
+            }
+            delay(10_000)
         }
     }
 
@@ -250,6 +267,7 @@ fun AppRoot() {
             )
             Tab.WALLET -> WalletScreen(
                 uid = uid,
+                noticeTick = noticeTick,
                 onAddNotice = {
                     notices = notices + it
                     saveNotices(ctx, notices)
@@ -690,6 +708,7 @@ fun AppRoot() {
    ========================= */
 @Composable private fun WalletScreen(
     uid: String,
+    noticeTick: Int = 0,
     onAddNotice: (AppNotice) -> Unit,
     onToast: (String) -> Unit
 ) {
@@ -700,6 +719,7 @@ fun AppRoot() {
     var sending by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { balance = apiGetBalance(uid) }
+    LaunchedEffect(noticeTick) { balance = apiGetBalance(uid) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("رصيدي", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = OnBg)
@@ -1089,6 +1109,9 @@ private fun isApiOrder(o: OrderItem): Boolean {
     suspend fun doDeliverPlain(id: String): Boolean =
         apiAdminPOST(String.format(AdminEndpoints.orderDeliver, id.toInt()), token)
 
+    suspend fun doReject(id: String): Boolean =
+        apiAdminPOST(String.format(AdminEndpoints.orderReject, id.toInt()), token, JSONObject().put("reason","Rejected by owner"))
+
     suspend fun doDeliverWithCode(id: String, code: String): Boolean =
         apiAdminPOST(
             String.format(AdminEndpoints.orderDeliver, id.toInt()),
@@ -1143,7 +1166,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                                 }) { Text("تنفيذ") }
                                 TextButton(onClick = {
                                     scope.launch {
-                                        val ok = doDeliverPlain(o.id) // نستخدم deliver كـ "رفض/تسليم" حسب منطقك
+                                        val ok = doReject(o.id)
                                         snack = if (ok) "تم الرفض" else "فشل التنفيذ"
                                         if (ok) reloadKey++
                                     }
@@ -1729,6 +1752,56 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
         }
     } catch (_: Exception) { null }
 }
+
+
+/* ===== إشعارات المستخدم من الخادم ===== */
+private fun noticeKey(n: AppNotice) = n.title + "|" + n.body + "|" + n.ts
+
+private fun mergeNotices(local: List<AppNotice>, incoming: List<AppNotice>): List<AppNotice> {
+    val seen = local.associateBy { noticeKey(it) }.toMutableMap()
+    incoming.forEach { n -> seen.putIfAbsent(noticeKey(n), n) }
+    return seen.values.sortedByDescending { it.ts }
+}
+
+private suspend fun apiFetchNotificationsByUid(uid: String, limit: Int = 50): List<AppNotice>? {
+    // 1) try by-uid
+    val (code1, txt1) = httpGet("/api/user/by-uid/$uid/notifications?status=unread&limit=$limit")
+    if (code1 in 200..299 && txt1 != None) {
+        try {
+            val arr = org.json.JSONArray(txt1!!.trim())
+            val out = mutableListOf<AppNotice>()
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val title = o.optString("title","إشعار")
+                val body  = o.optString("body","")
+                val tsMs  = o.optLong("created_at", System.currentTimeMillis())
+                out += AppNotice(title, body, if (tsMs < 2_000_000_000L) tsMs*1000 else tsMs, forOwner = false)
+            }
+            return out
+        } catch (_: Exception) { /* fallthrough */ }
+    }
+    // 2) fallback to numeric id route if available (only if uid is numeric)
+    val uidNum = uid.toLongOrNull()
+    if (uidNum != None) {
+        val (code2, txt2) = httpGet("/api/user/$uidNum/notifications?status=unread&limit=$limit")
+        if (code2 in 200..299 && txt2 != None) {
+            try {
+                val arr = org.json.JSONArray(txt2!!.trim())
+                val out = mutableListOf<AppNotice>()
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    val title = o.optString("title","إشعار")
+                    val body  = o.optString("body","")
+                    val tsMs  = o.optLong("created_at", System.currentTimeMillis())
+                    out += AppNotice(title, body, if (tsMs < 2_000_000_000L) tsMs*1000 else tsMs, forOwner = false)
+                }
+                return out
+            } catch (_: Exception) { /* ignore */ }
+        }
+    }
+    return null
+}
+
 
 /* دخول المالك */
 private suspend fun apiAdminLogin(password: String): String? {

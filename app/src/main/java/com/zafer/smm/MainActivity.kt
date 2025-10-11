@@ -50,6 +50,8 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.random.Random
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 // --- App API Base URL (added automatically) ---
 private const val BASE_URL = "https://YOUR-BACKEND-BASE-URL" // TODO: replace with your Heroku/Backend URL
@@ -893,43 +895,9 @@ fun ConfirmPackageDialog(
     )
 }
 
-@Composable
-private fun ConfirmPackageIdDialog(
-    sectionTitle: String,
-    label: String,
-    priceUsd: Int,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var accountId by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = sectionTitle) },
-        text = {
-            Column {
-                Text(text = label)
-                Spacer(Modifier.height(8.dp))
-                Text(text = "الرجاء إدخال رقم الحساب داخل اللعبة (ID):")
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = accountId,
-                    onValueChange = { accountId = it },
-                    singleLine = true,
-                    label = { Text("رقم الحساب") },
-                    placeholder = { Text("مثال: 1234567890") }
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(text = "السعر: $priceUsd$")
-            }
-        },
-        confirmButton = {
-            Button(onClick = { onConfirm(accountId.trim()) }, enabled = accountId.trim().isNotEmpty()) {
-                Text("تأكيد الشراء")
-            }
-        },
-        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("إلغاء") } }
-    )
-}
+
+// Removed duplicate ConfirmPackageIdDialog (kept later definition)
+
 
 
 

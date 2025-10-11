@@ -1613,6 +1613,20 @@ if (itemFilter == null || itemFilter.invoke(item)) {
                                 Spacer(Modifier.height(4.dp))
                                 Text("الوقت: $dt", color = Dim, fontSize = 12.sp)
                             }
+                            if (o.accountId.isNotBlank()) {
+                                Spacer(Modifier.height(4.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Player ID: ", color = OnBg)
+                                    Text(
+                                        o.accountId,
+                                        color = Accent,
+                                        modifier = Modifier
+                                            .clickable { LocalClipboardManager.current.setText(AnnotatedString(o.accountId)) }
+                                            .padding(4.dp)
+                                    )
+                                }
+                            }
+
                             val clip = LocalClipboardManager.current
 if (o.accountId.isNotBlank()) {
     Spacer(Modifier.height(4.dp))
@@ -1701,18 +1715,7 @@ Row {
 /* =========================
    شاشة الكروت المعلّقة (المالك)
    ========================= */
-@Composable private fun AdminPendingCardsScreen(
-    token: String,
-    onBack: () -> Unit
-) {
-    val scope = rememberCoroutineScope()
-    var list by remember { mutableStateOf<List<PendingCard>?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var err by remember { mutableStateOf<String?>(null) }
-    var reloadKey by remember { mutableStateOf(0) }
-
-    var execFor by remember { mutableStateOf<PendingCard?>(null) }
-    var amountText by remember { mutableStateOf("") }
+remember { mutableStateOf("") }
     var snack by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(reloadKey) {
@@ -1766,22 +1769,7 @@ Row {
                                 Spacer(Modifier.height(4.dp))
                                 Text("الوقت: $dt", color = Dim, fontSize = 12.sp)
                             }
-                            val clip = LocalClipboardManager.current
-if (o.accountId.isNotBlank()) {
-    Spacer(Modifier.height(4.dp))
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Player ID: ", color = OnBg)
-        Text(
-            o.accountId,
-            color = Accent,
-            modifier = Modifier
-                .clickable { clip.setText(AnnotatedString(o.accountId)) }
-                .padding(4.dp)
-        )
-    }
-}
-Spacer(Modifier.height(8.dp))
-Row {
+                            Row {
 
                                 TextButton(onClick = { execFor = c }) { Text("تنفيذ") }
                                 TextButton(onClick = {

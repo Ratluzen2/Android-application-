@@ -1,3 +1,4 @@
+
 @file:Suppress("UnusedImport", "SpellCheckingInspection")
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
@@ -14,6 +15,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -47,6 +50,29 @@ import java.util.Locale
 import kotlin.math.ceil
 import kotlin.random.Random
 
+@Composable
+private fun NoticeBody(text: String) {
+    val clip = LocalClipboardManager.current
+    val codeRegex = "(?:الكود|code|card|voucher|redeem)\\s*[:：-]?\\s*([A-Za-z0-9][A-Za-z0-9-]{5,})".toRegex(RegexOption.IGNORE_CASE)
+    val match = codeRegex.find(text)
+    if (match != null) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            SelectionContainer {
+                Text(text, color = Dim, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            }
+            TextButton(onClick = {
+                val c = match.groupValues.getOrNull(1) ?: text
+                clip.setText(AnnotatedString(c))
+            }) { Text("نسخ") }
+        }
+    } else {
+        SelectionContainer {
+            Text(text, color = Dim, fontSize = 12.sp)
+        }
+    }
+}
+
+
 /* =========================
    إعدادات الخادم
    ========================= */
@@ -63,6 +89,7 @@ private object AdminEndpoints {
     const val pendingItunes   = "/api/admin/pending/itunes"
     const val pendingPubg     = "/api/admin/pending/pubg"
     const val pendingLudo     = "/api/admin/pending/ludo"
+    const val pendingBalances = "/api/admin/pending/balances"
 
     // ✅ الكروت المعلّقة لأسيا سيل
     const val pendingCards    = "/api/admin/pending/cards"
@@ -71,6 +98,7 @@ private object AdminEndpoints {
 
     const val orderApprove    = "/api/admin/orders/%d/approve"
     const val orderDeliver    = "/api/admin/orders/%d/deliver"
+    const val orderReject     = "/api/admin/orders/%d/reject"
 
     // قد تتوفر في باكندك، وإلا ستظهر "تعذر جلب البيانات"
     const val walletTopup     = "/api/admin/wallet/topup"
@@ -198,12 +226,15 @@ fun AppRoot() {
     var showSettings by remember { mutableStateOf(false) }
 
     var notices by remember { mutableStateOf(loadNotices(ctx)) }
+    var noticeTick by remember { mutableStateOf(0) }
     var showNoticeCenter by remember { mutableStateOf(false) }
 
-    val unreadUser = notices.count { !it.forOwner }
-    val unreadOwner = notices.count { it.forOwner }
+    var lastSeenUser by remember { mutableStateOf(loadLastSeen(ctx, false)) }
+    var lastSeenOwner by remember { mutableStateOf(loadLastSeen(ctx, true)) }
 
-    var currentTab by remember { mutableStateOf(Tab.HOME) }
+    val unreadUser = notices.count { !it.forOwner && it.ts > lastSeenUser }
+    val unreadOwner = notices.count { it.forOwner && it.ts > lastSeenOwner }
+var currentTab by remember { mutableStateOf(Tab.HOME) }
 
     // فحص الصحة + تسجيل UID
     LaunchedEffect(Unit) {
@@ -211,6 +242,21 @@ fun AppRoot() {
         while (true) {
             online = pingHealth()
             delay(15_000)
+        }
+    }
+
+    // ✅ جلب الإشعارات من الخادم ودمجها، وتحديث العداد تلقائيًا
+    LaunchedEffect(uid) {
+        while (true) {
+            val remote = apiFetchNotificationsByUid(uid) ?: emptyList()
+            val before = notices.size
+            val merged = mergeNotices(notices.filter { !it.forOwner }, remote) + notices.filter { it.forOwner }
+            if (merged.size != before) {
+                notices = merged
+                saveNotices(ctx, notices)
+                noticeTick++
+            }
+            delay(10_000)
         }
     }
 
@@ -249,6 +295,7 @@ fun AppRoot() {
             )
             Tab.WALLET -> WalletScreen(
                 uid = uid,
+                noticeTick = noticeTick,
                 onAddNotice = {
                     notices = notices + it
                     saveNotices(ctx, notices)
@@ -318,7 +365,16 @@ fun AppRoot() {
                 notices = if (ownerMode) notices.filter { !it.forOwner } else notices.filter { it.forOwner }
                 saveNotices(ctx, notices)
             },
-            onDismiss = { showNoticeCenter = false }
+            onDismiss = {
+                if (ownerMode) {
+                    lastSeenOwner = System.currentTimeMillis()
+                    saveLastSeen(ctx, true, lastSeenOwner)
+                } else {
+                    lastSeenUser = System.currentTimeMillis()
+                    saveLastSeen(ctx, false, lastSeenUser)
+                }
+                showNoticeCenter = false
+            }
         )
     }
 }
@@ -434,7 +490,7 @@ fun AppRoot() {
                     items(notices.sortedByDescending { it.ts }) { itx ->
                         val dt = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(itx.ts))
                         Text("• ${itx.title}", fontWeight = FontWeight.SemiBold, color = OnBg)
-                        Text(itx.body, color = Dim, fontSize = 12.sp)
+                        NoticeBody(itx.body)
                         Text(dt, color = Dim, fontSize = 10.sp)
                         Divider(Modifier.padding(vertical = 8.dp), color = Surface1)
                     }
@@ -627,7 +683,211 @@ fun AppRoot() {
     )
 }
 
+
+/* =========================
+   Amount Picker (iTunes & Phone Cards)
+   ========================= */
+data class AmountOption(val label: String, val usd: Int)
+
+private val commonAmounts = listOf(5,10,15,20,25,30,40,50,100)
+
+private fun priceForItunes(usd: Int): Double {
+    // كل 5$ = 9$
+    val steps = (usd / 5.0)
+    return steps * 9.0
+}
+private fun priceForAtheerOrAsiacell(usd: Int): Double {
+    // كل 5$ = 7$
+    val steps = (usd / 5.0)
+    return steps * 7.0
+}
+private fun priceForKorek(usd: Int): Double {
+    // كل 5$ = 7$
+    val steps = (usd / 5.0)
+    return steps * 7.0
+}
+
+@Composable
+private fun AmountGrid(
+    title: String,
+    subtitle: String,
+    amounts: List<Int>,
+    priceOf: (Int) -> Double,
+    onSelect: (usd: Int, price: Double) -> Unit,
+    onBack: () -> Unit
+) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Column {
+                Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
+        val rows = amounts.chunked(2)
+        rows.forEach { pair ->
+            Row(Modifier.fillMaxWidth()) {
+                pair.forEach { usd ->
+                    val price = String.format(java.util.Locale.getDefault(), "%.2f", priceOf(usd))
+                    ElevatedCard(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(4.dp)
+                            .clickable { onSelect(usd, priceOf(usd)) },
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = Surface1,
+                            contentColor = OnBg
+                        )
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text("$usd$", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
+                            Spacer(Modifier.height(4.dp))
+                            Text("السعر: $price$", color = Dim, fontSize = 12.sp)
+                        }
+                    }
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConfirmAmountDialog(
+    sectionTitle: String,
+    usd: Int,
+    price: Double,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onConfirm) { Text("تأكيد الشراء") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
+        title = { Text(sectionTitle, color = OnBg) },
+        text = {
+            Column {
+                Text("القيمة المختارة: ${usd}$", color = OnBg, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Text(String.format(java.util.Locale.getDefault(), "السعر المستحق: %.2f$", price), color = Dim)
+                Spacer(Modifier.height(8.dp))
+                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 12.sp)
+            }
+        }
+    )
+
+
+}
+
 /* الأقسام اليدوية (ايتونز/هاتف/ببجي/لودو) */
+
+
+/* =========================
+   Package Picker (PUBG / Ludo)
+   ========================= */
+data class PackageOption(val label: String, val priceUsd: Int)
+
+val pubgPackages = listOf(
+    PackageOption("60 شدة", 2),
+    PackageOption("325 شدة", 9),
+    PackageOption("660 شدة", 15),
+    PackageOption("1800 شدة", 40),
+    PackageOption("3850 شدة", 55),
+    PackageOption("8100 شدة", 100),
+    PackageOption("16200 شدة", 185)
+)
+val ludoDiamondsPackages = listOf(
+    PackageOption("810 الماسة", 5),
+    PackageOption("2280 الماسة", 10),
+    PackageOption("5080 الماسة", 20),
+    PackageOption("12750 الماسة", 35),
+    PackageOption("27200 الماسة", 85),
+    PackageOption("54900 الماسة", 165),
+    PackageOption("164800 الماسة", 475),
+    PackageOption("275400 الماسة", 800)
+)
+val ludoGoldPackages = listOf(
+    PackageOption("66680 ذهب", 5),
+    PackageOption("219500 ذهب", 10),
+    PackageOption("1443000 ذهب", 20),
+    PackageOption("3627000 ذهب", 35),
+    PackageOption("9830000 ذهب", 85),
+    PackageOption("24835000 ذهب", 165),
+    PackageOption("74550000 ذهب", 475),
+    PackageOption("124550000 ذهب", 800)
+)
+
+@Composable
+fun PackageGrid(
+    title: String,
+    subtitle: String,
+    packages: List<PackageOption>,
+    onSelect: (PackageOption) -> Unit,
+    onBack: () -> Unit
+) {
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Column {
+                Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
+        val rows = packages.chunked(2)
+        rows.forEach { pair ->
+            Row(Modifier.fillMaxWidth()) {
+                pair.forEach { opt ->
+                    ElevatedCard(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(4.dp)
+                            .clickable { onSelect(opt) },
+                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(opt.label, fontWeight = FontWeight.SemiBold, color = OnBg)
+                            Spacer(Modifier.height(4.dp))
+                            Text("السعر: ${'$'}${opt.priceUsd}", color = Dim, fontSize = 12.sp)
+                        }
+                    }
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+fun ConfirmPackageDialog(
+    sectionTitle: String,
+    label: String,
+    priceUsd: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onConfirm) { Text("تأكيد الشراء") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
+        title = { Text(sectionTitle, color = OnBg) },
+        text = {
+            Column {
+                Text("الباقة المختارة: $label", color = OnBg, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Text("السعر المستحق: ${'$'}$priceUsd", color = Dim)
+                Spacer(Modifier.height(8.dp))
+                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 12.sp)
+            }
+        }
+    )
+}
+
 @Composable private fun ManualSectionsScreen(
     title: String,
     uid: String,
@@ -636,6 +896,12 @@ fun AppRoot() {
     onAddNotice: (AppNotice) -> Unit
 ) {
     val scope = rememberCoroutineScope()
+    var selectedManualFlow by remember { mutableStateOf<String?>(null) }
+    var pendingUsd by remember { mutableStateOf<Int?>(null) }
+    var pendingPrice by remember { mutableStateOf<Double?>(null) }
+    var pendingPkgLabel by remember { mutableStateOf<String?>(null) }
+    var pendingPkgPrice by remember { mutableStateOf<Int?>(null) }
+
     val items = when (title) {
         "قسم شراء رصيد ايتونز" -> listOf("شراء رصيد ايتونز")
         "قسم شراء رصيد هاتف"  -> listOf("شراء رصيد اثير", "شراء رصيد اسياسيل", "شراء رصيد كورك")
@@ -643,10 +909,6 @@ fun AppRoot() {
         "قسم خدمات الودو"       -> listOf("شراء الماسات لودو", "شراء ذهب لودو")
         else -> emptyList()
     }
-
-    // ✅ حالة لإظهار نافذة طلب "رقم اللعبة" لخدمات لودو وببجي
-    var showGameIdDialog by remember { mutableStateOf(false) }
-    var pendingManualItem by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -662,23 +924,7 @@ fun AppRoot() {
                     .fillMaxWidth()
                     .padding(bottom = 8.dp)
                     .clickable {
-                        // ✅ عند لودو/ببجي نطلب رقم اللعبة أولًا
-                        if (title in listOf("قسم شحن شدات ببجي", "قسم خدمات الودو")) {
-                            pendingManualItem = name
-                            showGameIdDialog = true
-                        } else {
-                            // باقي الأقسام كما هي (بدون رقم لعبة)
-                            scope.launch {
-                                val ok = apiCreateManualOrder(uid, name)
-                                if (ok) {
-                                    onToast("تم استلام طلبك ($name)، سيتم مراجعته من المالك.")
-                                    onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $name للمراجعة.", forOwner = false))
-                                    onAddNotice(AppNotice("طلب يدوي جديد", "طلب $name من UID=$uid يحتاج مراجعة.", forOwner = true))
-                                } else {
-                                    onToast("تعذر إرسال الطلب. حاول لاحقًا.")
-                                }
-                            }
-                        }
+                        selectedManualFlow = name
                     },
                 colors = CardDefaults.elevatedCardColors(
                     containerColor = Surface1,
@@ -694,75 +940,195 @@ fun AppRoot() {
         }
     }
 
-    // ✅ نافذة إدخال رقم اللعبة — تُستخدم فقط لببجي/لودو
-    GameIdDialog(
-        visible = showGameIdDialog,
-        title = "أدخل رقم اللعبة",
-        onSubmit = { gameId ->
-            showGameIdDialog = false
-            val item = pendingManualItem ?: return@GameIdDialog
-            pendingManualItem = null
+    // ----- Manual flows UI -----
+    if (selectedManualFlow != null) {
+        when (selectedManualFlow) {
+            "شراء رصيد ايتونز" -> {
+                AmountGrid(
+                    title = "شراء رصيد ايتونز",
+                    subtitle = "كل 5$ = 9$",
+                    amounts = commonAmounts,
+                    priceOf = { usd -> priceForItunes(usd) },
+                    onSelect = { usd, price ->
+                        pendingUsd = usd
+                        pendingPrice = price
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                )
+            }
+            "شراء رصيد اثير" -> {
+                AmountGrid(
+                    title = "شراء رصيد اثير",
+                    subtitle = "كل 5$ = 7$",
+                    amounts = commonAmounts,
+                    priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
+                    onSelect = { usd, price ->
+                        pendingUsd = usd
+                        pendingPrice = price
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                )
+            }
+            "شراء رصيد اسياسيل" -> {
+                AmountGrid(
+                    title = "شراء رصيد اسياسيل",
+                    subtitle = "كل 5$ = 7$",
+                    amounts = commonAmounts,
+                    priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
+                    onSelect = { usd, price ->
+                        pendingUsd = usd
+                        pendingPrice = price
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                )
+            }
+            "شراء رصيد كورك" -> {
+                AmountGrid(
+                    title = "شراء رصيد كورك",
+                    subtitle = "كل 5$ = 7$",
+                    amounts = commonAmounts,
+                    priceOf = { usd -> priceForKorek(usd) },
+                    onSelect = { usd, price ->
+                        pendingUsd = usd
+                        pendingPrice = price
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                )
+            }
+            "شحن شدات ببجي" -> {
+                PackageGrid(
+                    title = "شحن شدات ببجي",
+                    subtitle = "اختر الباقة",
+                    packages = pubgPackages,
+                    onSelect = { opt ->
+                        pendingPkgLabel = opt.label
+                        pendingPkgPrice = opt.priceUsd
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                )
+            }
+            "شراء الماسات لودو" -> {
+                PackageGrid(
+                    title = "شراء الماسات لودو",
+                    subtitle = "اختر الباقة",
+                    packages = ludoDiamondsPackages,
+                    onSelect = { opt ->
+                        pendingPkgLabel = opt.label
+                        pendingPkgPrice = opt.priceUsd
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                )
+            }
+            "شراء ذهب لودو" -> {
+                PackageGrid(
+                    title = "شراء ذهب لودو",
+                    subtitle = "اختر الباقة",
+                    packages = ludoGoldPackages,
+                    onSelect = { opt ->
+                        pendingPkgLabel = opt.label
+                        pendingPkgPrice = opt.priceUsd
+                    },
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                )
+            }
+
+        }
+    }
+
+    
+    if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماسات لودو","شراء ذهب لودو") &&
+    pendingPkgLabel != null && pendingPkgPrice != null) {
+    ConfirmPackageIdDialog(
+        sectionTitle = selectedManualFlow!!,
+        label = pendingPkgLabel!!,
+        priceUsd = pendingPkgPrice!!,
+        onConfirm = { accountId ->
+            val flow = selectedManualFlow
+            val priceInt = pendingPkgPrice
             scope.launch {
-                // نُضمّن رقم اللعبة داخل العنوان ليصل للمالك بوضوح
-                val displayTitle = "$item (رقم اللعبة: $gameId)"
-                val ok = apiCreateManualOrder(uid, displayTitle)
-                if (ok) {
-                    onToast("تم استلام طلبك ($item).")
-                    onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $item للمراجعة.", forOwner = false))
-                    onAddNotice(AppNotice("طلب جديد", "طلب $item من UID=$uid برقم لعبة $gameId يحتاج مراجعة.", forOwner = true))
-                } else {
-                    onToast("تعذر إرسال الطلب. حاول لاحقًا.")
+                if (flow != null && priceInt != null) {
+                    val product = when (flow) {
+                        "شحن شدات ببجي" -> "pubg_uc"
+                        "شراء الماسات لودو" -> "ludo_diamonds"
+                        "شراء ذهب لودو" -> "ludo_gold"
+                        else -> "manual"
+                    }
+                    val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, accountId)
+                    if (ok) {
+                        onToast("تم استلام طلبك (${pendingPkgLabel}).")
+                        onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة. الحساب: ${accountId}", forOwner = false))
+                        onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} (ID: ${accountId}) يحتاج مراجعة.", forOwner = true))
+                    } else {
+                        val msg = (txt ?: "").lowercase()
+                        if (msg.contains("insufficient")) {
+                            onToast("رصيدك غير كافٍ لإتمام العملية.")
+                        } else {
+                            onToast(txt ?: "تعذر إرسال الطلب. حاول لاحقًا.")
+                        }
+                    }
                 }
+                // إغلاق الحوار
+                pendingPkgLabel = null
+                pendingPkgPrice = null
+                selectedManualFlow = null
             }
         },
         onDismiss = {
-            showGameIdDialog = false
-            pendingManualItem = null
+            pendingPkgLabel = null
+            pendingPkgPrice = null
+            selectedManualFlow = null
         }
     )
 }
 
-/* ✅ مربع حوار لإدخال رقم اللعبة */
-@Composable
-fun GameIdDialog(
-    visible: Boolean,
-    title: String,
-    onSubmit: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    if (!visible) return
-    var value by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column {
-                Text("يرجى إدخال رقم اللعبة المرتبط بحسابك.")
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = { value = it.filter { ch -> ch.isDigit() } }, // أرقام فقط
-                    singleLine = true,
-                    label = { Text("رقم اللعبة") },
-                )
+if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
+        ConfirmAmountDialog(
+            sectionTitle = selectedManualFlow!!,
+            usd = pendingUsd!!,
+            price = pendingPrice!!,
+            onConfirm = {
+                val flow = selectedManualFlow
+                val amount = pendingUsd
+                scope.launch {
+                    if (flow != null && amount != null) {
+                        val product = when (flow) {
+                            "شراء رصيد ايتونز" -> "itunes"
+                            "شراء رصيد اثير" -> "atheer"
+                            "شراء رصيد اسياسيل" -> "asiacell"
+                            "شراء رصيد كورك" -> "korek"
+                            else -> "manual"
+                        }
+                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, amount)
+                        if (ok) {
+                            val label = "$flow ${amount}$"
+                            onToast("تم استلام طلبك ($label).")
+                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $label للمراجعة.", forOwner = false))
+                            onAddNotice(AppNotice("طلب جديد", "طلب $label من UID=$uid يحتاج مراجعة.", forOwner = true))
+                        } else {
+                            val msg = (txt ?: "").lowercase()
+                            if (msg.contains("insufficient")) {
+                                onToast("رصيدك غير كافٍ لإتمام العملية.")
+                            } else {
+                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
+                            }
+                        }
+                    }
+                    pendingUsd = null
+                    pendingPrice = null
+                    selectedManualFlow = null
+                }
+            },
+            onDismiss = {
+                pendingUsd = null
+                pendingPrice = null
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { if (value.isNotBlank()) onSubmit(value) }) {
-                Text("إرسال")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("إلغاء") }
-        }
-    )
-}
+        )
+    }
 
-/* =========================
-   تبويب رصيدي (أسيا سيل)
-   ========================= */
+}
 @Composable private fun WalletScreen(
     uid: String,
+    noticeTick: Int = 0,
     onAddNotice: (AppNotice) -> Unit,
     onToast: (String) -> Unit
 ) {
@@ -773,6 +1139,7 @@ fun GameIdDialog(
     var sending by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { balance = apiGetBalance(uid) }
+    LaunchedEffect(noticeTick) { balance = apiGetBalance(uid) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("رصيدي", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = OnBg)
@@ -918,6 +1285,21 @@ fun GameIdDialog(
 /* =========================
    فلاتر لتصنيف الطلبات
    ========================= */
+
+private fun isIraqTelcoCardPurchase(title: String): Boolean {
+    val t = title.lowercase()
+    // must be one of the 3 Iraqi telcos
+    val telco = t.contains("اثير") || t.contains("asiacell") || t.contains("أسيا") || t.contains("اسياسيل") || t.contains("korek") || t.contains("كورك")
+    // words that indicate physical/virtual CARD purchase (not direct top-up)
+    val hasCardWord = t.contains("شراء") || t.contains("كارت") || t.contains("بطاقة") || t.contains("voucher") || t.contains("كود") || t.contains("رمز")
+    // negative list: anything that implies DIRECT TOP-UP / via Asiacell
+    val isTopup = t.contains("شحن") || t.contains("topup") || t.contains("top-up") || t.contains("recharge") || t.contains("شحن عبر") || t.contains("شحن اسيا") || t.contains("direct")
+    // explicitly exclude iTunes
+    val notItunes = !t.contains("itunes") && !t.contains("ايتونز")
+    // accept only if telco + card purchase semantics, and strictly NOT a top-up wording
+    return telco && hasCardWord && !isTopup && notItunes
+}
+
 private fun isPhoneTopupTitle(title: String): Boolean {
     val t = title.lowercase()
     return t.contains("شراء رصيد") || t.contains("رصيد هاتف")
@@ -966,12 +1348,12 @@ private fun isApiOrder(o: OrderItem): Boolean {
 
         if (current == null) {
             val buttons = listOf(
-                "الطلبات المعلقة (الخدمات)" to "pending_services",
+                "طلبات خدمات API المعلقة" to "pending_services",
                 "طلبات الايتونز المعلقة"   to "pending_itunes",
-                "طلبات شدات ببجي"          to "pending_pubg",
+                "طلبات ببجي المعلقة"          to "pending_pubg",
                 "طلبات لودو المعلقة"       to "pending_ludo",
-                "طلبات الأرصدة المعلقة"    to "pending_phone",   // ✅ جديد
-                "الكروت المعلقة"           to "pending_cards",
+                "طلبات شراء الكارتات"    to "pending_phone",   // ✅ جديد
+                "طلبات شحن أسيا سيل"     to "pending_cards",
                 "إضافة الرصيد"             to "topup",
                 "خصم الرصيد"               to "deduct",
                 "عدد المستخدمين"           to "users_count",
@@ -998,24 +1380,23 @@ private fun isApiOrder(o: OrderItem): Boolean {
         } else {
             when (current) {
                 "pending_services" -> AdminPendingGenericList(
-                    title = "الطلبات المعلقة (الخدمات)",
+                    title = "طلبات خدمات API المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingServices,
-                    itemFilter = { item -> isApiOrder(item) },                  // ✅ فقط طلبات API
+                    itemFilter = { true },                  // ✅ فقط طلبات API
                     approveWithCode = false,
                     onBack = { current = null }
                 )
-                "pending_itunes" -> AdminPendingGenericList(
-                    title = "طلبات الايتونز المعلقة",
+                "pending_itunes" -> AdminPendingGenericList(title = "طلبات iTunes المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingItunes,
                     itemFilter = { true },
                     approveWithCode = true,                                      // ✅ يطلب كود آيتونز
-                    codeFieldLabel = "كود آيتونز",
+                    codeFieldLabel = "كود الايتونز",
                     onBack = { current = null }
                 )
                 "pending_pubg" -> AdminPendingGenericList(
-                    title = "طلبات شدات ببجي",
+                    title = "طلبات ببجي المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingPubg,
                     itemFilter = { true },
@@ -1031,13 +1412,14 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     onBack = { current = null }
                 )
                 "pending_phone" -> AdminPendingGenericList(
-                    title = "طلبات الأرصدة المعلقة",
+
+                    title = "طلبات شراء الكارتات",
                     token = token!!,
                     // يمكن أن يعود من مسار مخصص للأرصدة؛ إن لم يوجد نستعمل services مع فلترة العنوان:
-                    fetchUrl = AdminEndpoints.pendingServices,
-                    itemFilter = { item -> isPhoneTopupTitle(item.title) && item.quantity == 0 },
+                    fetchUrl = AdminEndpoints.pendingBalances,
+                    itemFilter = { item -> isIraqTelcoCardPurchase(item.title) },
                     approveWithCode = true,                                      // ✅ يطلب رقم الكارت
-                    codeFieldLabel = "رقم الكارت",
+                    codeFieldLabel = "كود الكارت",
                     onBack = { current = null }
                 )
                 // ✅ شاشة الكروت المعلّقة الخاصة — UID + كارت + تنفيذ/رفض + وقت
@@ -1146,6 +1528,9 @@ private fun isApiOrder(o: OrderItem): Boolean {
     suspend fun doDeliverPlain(id: String): Boolean =
         apiAdminPOST(String.format(AdminEndpoints.orderDeliver, id.toInt()), token)
 
+    suspend fun doReject(id: String): Boolean =
+        apiAdminPOST(String.format(AdminEndpoints.orderReject, id.toInt()), token, JSONObject().put("reason","Rejected by owner"))
+
     suspend fun doDeliverWithCode(id: String, code: String): Boolean =
         apiAdminPOST(
             String.format(AdminEndpoints.orderDeliver, id.toInt()),
@@ -1200,7 +1585,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                                 }) { Text("تنفيذ") }
                                 TextButton(onClick = {
                                     scope.launch {
-                                        val ok = doDeliverPlain(o.id) // نستخدم deliver كـ "رفض/تسليم" حسب منطقك
+                                        val ok = doReject(o.id)
                                         snack = if (ok) "تم الرفض" else "فشل التنفيذ"
                                         if (ok) reloadKey++
                                     }
@@ -1283,7 +1668,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
             Spacer(Modifier.width(6.dp))
-            Text("الكروت المعلقة", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+            Text("طلبات شحن أسيا سيل", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
         }
         Spacer(Modifier.height(10.dp))
 
@@ -1636,6 +2021,15 @@ private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
     prefs(ctx).edit().putString("notices_json", arr.toString()).apply()
 }
 
+
+
+/* تتبع آخر وقت قراءة الإشعارات لكل وضع (مستخدم/مالك) */
+private fun lastSeenKey(forOwner: Boolean) = if (forOwner) "last_seen_owner" else "last_seen_user"
+private fun loadLastSeen(ctx: Context, forOwner: Boolean): Long =
+    prefs(ctx).getLong(lastSeenKey(forOwner), 0L)
+private fun saveLastSeen(ctx: Context, forOwner: Boolean, ts: Long = System.currentTimeMillis()) {
+    prefs(ctx).edit().putLong(lastSeenKey(forOwner), ts).apply()
+}
 /* شبكة - GET (suspend) */
 private suspend fun httpGet(path: String, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
     withContext(Dispatchers.IO) {
@@ -1744,10 +2138,20 @@ private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
     } catch (_: Exception) { true }
 }
 
-private suspend fun apiCreateManualOrder(uid: String, title: String): Boolean {
-    val body = JSONObject().put("uid", uid).put("title", title)
+private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
+    val body = JSONObject().put("uid", uid).put("title", name)
     val (code, txt) = httpPost("/api/orders/create/manual", body)
     return code in 200..299 && (txt?.contains("ok", true) == true)
+}
+
+suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int): Pair<Boolean, String?> {
+    val body = JSONObject()
+        .put("uid", uid)
+        .put("product", product)
+        .put("usd", usd)
+    val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
+    val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true)
+    return Pair(ok, txt)
 }
 
 private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
@@ -1786,6 +2190,56 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
         }
     } catch (_: Exception) { null }
 }
+
+
+/* ===== إشعارات المستخدم من الخادم ===== */
+private fun noticeKey(n: AppNotice) = n.title + "|" + n.body + "|" + n.ts
+
+private fun mergeNotices(local: List<AppNotice>, incoming: List<AppNotice>): List<AppNotice> {
+    val seen = local.associateBy { noticeKey(it) }.toMutableMap()
+    incoming.forEach { n -> seen.putIfAbsent(noticeKey(n), n) }
+    return seen.values.sortedByDescending { it.ts }
+}
+
+private suspend fun apiFetchNotificationsByUid(uid: String, limit: Int = 50): List<AppNotice>? {
+    // 1) try by-uid
+    val (code1, txt1) = httpGet("/api/user/by-uid/$uid/notifications?status=unread&limit=$limit")
+    if (code1 in 200..299 && txt1 != null) {
+        try {
+            val arr = org.json.JSONArray(txt1!!.trim())
+            val out = mutableListOf<AppNotice>()
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val title = o.optString("title","إشعار")
+                val body  = o.optString("body","")
+                val tsMs  = o.optLong("created_at", System.currentTimeMillis())
+                out += AppNotice(title, body, if (tsMs < 2_000_000_000L) tsMs*1000 else tsMs, forOwner = false)
+            }
+            return out
+        } catch (_: Exception) { /* fallthrough */ }
+    }
+    // 2) fallback to numeric id route if available (only if uid is numeric)
+    val uidNum = uid.toLongOrNull()
+    if (uidNum != null) {
+        val (code2, txt2) = httpGet("/api/user/$uidNum/notifications?status=unread&limit=$limit")
+        if (code2 in 200..299 && txt2 != null) {
+            try {
+                val arr = org.json.JSONArray(txt2!!.trim())
+                val out = mutableListOf<AppNotice>()
+                for (i in 0 until arr.length()) {
+                    val o = arr.getJSONObject(i)
+                    val title = o.optString("title","إشعار")
+                    val body  = o.optString("body","")
+                    val tsMs  = o.optLong("created_at", System.currentTimeMillis())
+                    out += AppNotice(title, body, if (tsMs < 2_000_000_000L) tsMs*1000 else tsMs, forOwner = false)
+                }
+                return out
+            } catch (_: Exception) { /* ignore */ }
+        }
+    }
+    return null
+}
+
 
 /* دخول المالك */
 private suspend fun apiAdminLogin(password: String): String? {
@@ -1980,5 +2434,82 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
                 }
             }
         )
+    }
+}
+
+
+@Composable
+private fun ConfirmPackageIdDialog(
+    sectionTitle: String,
+    label: String,
+    priceUsd: Int,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var accountId by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (accountId.isBlank()) return@TextButton
+                    onConfirm(accountId.trim())
+                }
+            ) { Text("تأكيد") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("إلغاء") }
+        },
+        title = { Text(sectionTitle, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text("الباقة: $label")
+                Spacer(Modifier.height(6.dp))
+                Text("السعر: ${priceUsd}$")
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = accountId,
+                    onValueChange = { accountId = it },
+                    label = { Text("أدخل رقم حساب اللعبة") },
+                    singleLine = true
+                )
+            }
+        }
+    )
+}
+
+
+// نسخة تدعم تمرير رقم حساب اللعبة ضمن الطلب
+private suspend fun apiCreateManualPaidOrder(
+    uid: String,
+    product: String,
+    usd: Int,
+    accountId: String?
+): Pair<Boolean, String?> {
+    return withContext(Dispatchers.IO) {
+        try {
+            val url = URL("$BASE_URL/api/orders/create/manual_paid")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 15000
+                readTimeout = 15000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            }
+            val body = JSONObject().apply {
+                put("uid", uid)
+                put("product", product)
+                put("usd", usd)
+                if (accountId != null && accountId.isNotBlank()) put("account_id", accountId.trim())
+            }.toString()
+            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val resp = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            if (code in 200..299) true to resp else false to resp
+        } catch (e: Exception) {
+            false to e.message
+        }
     }
 }

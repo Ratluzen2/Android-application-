@@ -50,6 +50,10 @@ import java.util.Locale
 import kotlin.math.ceil
 import kotlin.random.Random
 
+// --- App API Base URL (added automatically) ---
+private const val BASE_URL = "https://YOUR-BACKEND-BASE-URL" // TODO: replace with your Heroku/Backend URL
+
+
 @Composable
 private fun NoticeBody(text: String) {
     val clip = LocalClipboardManager.current
@@ -1037,50 +1041,47 @@ fun ConfirmPackageDialog(
 
     
     if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماسات لودو","شراء ذهب لودو") &&
-    pendingPkgLabel != null && pendingPkgPrice != null) {
-    ConfirmPackageIdDialog(
-        sectionTitle = selectedManualFlow!!,
-        label = pendingPkgLabel!!,
-        priceUsd = pendingPkgPrice!!,
-        onConfirm = { accountId ->
-            val flow = selectedManualFlow
-            val priceInt = pendingPkgPrice
-            scope.launch {
-                if (flow != null && priceInt != null) {
-                    val product = when (flow) {
-                        "شحن شدات ببجي" -> "pubg_uc"
-                        "شراء الماسات لودو" -> "ludo_diamonds"
-                        "شراء ذهب لودو" -> "ludo_gold"
-                        else -> "manual"
-                    }
-                    val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, accountId)
-                    if (ok) {
-                        onToast("تم استلام طلبك (${pendingPkgLabel}).")
-                        onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة. الحساب: ${accountId}", forOwner = false))
-                        onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} (ID: ${accountId}) يحتاج مراجعة.", forOwner = true))
-                    } else {
-                        val msg = (txt ?: "").lowercase()
-                        if (msg.contains("insufficient")) {
-                            onToast("رصيدك غير كافٍ لإتمام العملية.")
+        pendingPkgLabel != null && pendingPkgPrice != null) {
+        ConfirmPackageDialog(
+            sectionTitle = selectedManualFlow!!,
+            label = pendingPkgLabel!!,
+            priceUsd = pendingPkgPrice!!,
+            onConfirm = {
+                val flow = selectedManualFlow
+                val priceInt = pendingPkgPrice
+                scope.launch {
+                    if (flow != null && priceInt != null) {
+                        val product = when (flow) {
+                            "شحن شدات ببجي" -> "pubg_uc"
+                            "شراء الماسات لودو" -> "ludo_diamonds"
+                            "شراء ذهب لودو" -> "ludo_gold"
+                            else -> "manual"
+                        }
+                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt)
+                        if (ok) {
+                            onToast("تم استلام طلبك (${pendingPkgLabel}).")
+                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
+                            onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} يحتاج مراجعة.", forOwner = true))
                         } else {
-                            onToast(txt ?: "تعذر إرسال الطلب. حاول لاحقًا.")
+                            val msg = (txt ?: "").lowercase()
+                            if (msg.contains("insufficient")) {
+                                onToast("رصيدك غير كافٍ لإتمام العملية.")
+                            } else {
+                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
+                            }
                         }
                     }
+                    pendingPkgLabel = null
+                    pendingPkgPrice = null
+                    selectedManualFlow = null
                 }
-                // إغلاق الحوار
+            },
+            onDismiss = {
                 pendingPkgLabel = null
                 pendingPkgPrice = null
-                selectedManualFlow = null
             }
-        },
-        onDismiss = {
-            pendingPkgLabel = null
-            pendingPkgPrice = null
-            selectedManualFlow = null
-        }
-    )
-}
-
+        )
+    }
 if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         ConfirmAmountDialog(
             sectionTitle = selectedManualFlow!!,
@@ -2434,82 +2435,5 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
                 }
             }
         )
-    }
-}
-
-
-@Composable
-private fun ConfirmPackageIdDialog(
-    sectionTitle: String,
-    label: String,
-    priceUsd: Int,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var accountId by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    if (accountId.isBlank()) return@TextButton
-                    onConfirm(accountId.trim())
-                }
-            ) { Text("تأكيد") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("إلغاء") }
-        },
-        title = { Text(sectionTitle, fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
-                Text("الباقة: $label")
-                Spacer(Modifier.height(6.dp))
-                Text("السعر: ${priceUsd}$")
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = accountId,
-                    onValueChange = { accountId = it },
-                    label = { Text("أدخل رقم حساب اللعبة") },
-                    singleLine = true
-                )
-            }
-        }
-    )
-}
-
-
-// نسخة تدعم تمرير رقم حساب اللعبة ضمن الطلب
-private suspend fun apiCreateManualPaidOrder(
-    uid: String,
-    product: String,
-    usd: Int,
-    accountId: String?
-): Pair<Boolean, String?> {
-    return withContext(Dispatchers.IO) {
-        try {
-            val url = URL("$BASE_URL/api/orders/create/manual_paid")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 15000
-                readTimeout = 15000
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            }
-            val body = JSONObject().apply {
-                put("uid", uid)
-                put("product", product)
-                put("usd", usd)
-                if (accountId != null && accountId.isNotBlank()) put("account_id", accountId.trim())
-            }.toString()
-            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-
-            val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val resp = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            if (code in 200..299) true to resp else false to resp
-        } catch (e: Exception) {
-            false to e.message
-        }
     }
 }

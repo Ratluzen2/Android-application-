@@ -888,52 +888,6 @@ fun ConfirmPackageDialog(
     )
 }
 
-@Composable
-fun ConfirmPackageIdDialog(
-    sectionTitle: String,
-    label: String,
-    priceUsd: Int,
-    onConfirm: (accountId: String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var accountId by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                enabled = accountId.trim().isNotEmpty() && !busy,
-                onClick = { onConfirm(accountId.trim()) }
-            ) { Text(if (busy) "يرسل..." else "تأكيد الشراء") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
-        title = { Text(sectionTitle, color = OnBg) },
-        text = {
-            Column {
-                Text("الباقة المختارة: $label", color = OnBg, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(6.dp))
-                Text("السعر المستحق: ${'$'}$priceUsd", color = Dim)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = accountId,
-                    onValueChange = { accountId = it },
-                    singleLine = true,
-                    label = { Text("معرّف اللاعب / Game ID") },
-                    colors = TextFieldDefaults.outlinedTextFieldColors(
-                        cursorColor = Accent,
-                        focusedBorderColor = Accent, unfocusedBorderColor = Dim,
-                        focusedLabelColor = OnBg, unfocusedLabelColor = Dim
-                    )
-                )
-                Spacer(Modifier.height(6.dp))
-                Text("أدخل رقم الحساب بدقة. الطلب لن يُرسل بدون هذا الحقل.", color = Dim, fontSize = 12.sp)
-            }
-        }
-    )
-}
-
-
-
 @Composable private fun ManualSectionsScreen(
     title: String,
     uid: String,
@@ -1082,41 +1036,34 @@ fun ConfirmPackageIdDialog(
     }
 
     
-    
-if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماسات لودو","شراء ذهب لودو") &&
+    if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماسات لودو","شراء ذهب لودو") &&
         pendingPkgLabel != null && pendingPkgPrice != null) {
-        ConfirmPackageIdDialog(
+        ConfirmPackageDialog(
             sectionTitle = selectedManualFlow!!,
             label = pendingPkgLabel!!,
             priceUsd = pendingPkgPrice!!,
-            onConfirm = { accountId ->
+            onConfirm = {
                 val flow = selectedManualFlow
                 val priceInt = pendingPkgPrice
                 scope.launch {
                     if (flow != null && priceInt != null) {
-                        // رصيد المستخدم قبل الإرسال
-                        val bal = apiGetBalance(uid) ?: 0.0
-                        if (bal < priceInt) {
-                            onToast("رصيدك غير كافٍ. السعر: ${'$'}$priceInt | رصيدك: ${"%.2f".format(bal)}${'$'}")
+                        val product = when (flow) {
+                            "شحن شدات ببجي" -> "pubg_uc"
+                            "شراء الماسات لودو" -> "ludo_diamonds"
+                            "شراء ذهب لودو" -> "ludo_gold"
+                            else -> "manual"
+                        }
+                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt)
+                        if (ok) {
+                            onToast("تم استلام طلبك (${pendingPkgLabel}).")
+                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
+                            onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} يحتاج مراجعة.", forOwner = true))
                         } else {
-                            val product = when (flow) {
-                                "شحن شدات ببجي" -> "pubg_uc"
-                                "شراء الماسات لودو" -> "ludo_diamonds"
-                                "شراء ذهب لودو" -> "ludo_gold"
-                                else -> "manual"
-                            }
-                            val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, accountId)
-                            if (ok) {
-                                onToast("تم استلام طلبك (${pendingPkgLabel}).")
-                                onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
-                                onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} (Player: ${accountId}) يحتاج مراجعة.", forOwner = true))
+                            val msg = (txt ?: "").lowercase()
+                            if (msg.contains("insufficient")) {
+                                onToast("رصيدك غير كافٍ لإتمام العملية.")
                             } else {
-                                val msg = (txt ?: "").lowercase()
-                                if (msg.contains("insufficient")) {
-                                    onToast("رصيدك غير كافٍ لإتمام العملية.")
-                                } else {
-                                    onToast("تعذر إرسال الطلب. حاول لاحقًا.")
-                                }
+                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
                             }
                         }
                     }
@@ -1131,7 +1078,52 @@ if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماس
             }
         )
     }
-                        @Composable private fun WalletScreen(
+if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
+        ConfirmAmountDialog(
+            sectionTitle = selectedManualFlow!!,
+            usd = pendingUsd!!,
+            price = pendingPrice!!,
+            onConfirm = {
+                val flow = selectedManualFlow
+                val amount = pendingUsd
+                scope.launch {
+                    if (flow != null && amount != null) {
+                        val product = when (flow) {
+                            "شراء رصيد ايتونز" -> "itunes"
+                            "شراء رصيد اثير" -> "atheer"
+                            "شراء رصيد اسياسيل" -> "asiacell"
+                            "شراء رصيد كورك" -> "korek"
+                            else -> "manual"
+                        }
+                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, amount)
+                        if (ok) {
+                            val label = "$flow ${amount}$"
+                            onToast("تم استلام طلبك ($label).")
+                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $label للمراجعة.", forOwner = false))
+                            onAddNotice(AppNotice("طلب جديد", "طلب $label من UID=$uid يحتاج مراجعة.", forOwner = true))
+                        } else {
+                            val msg = (txt ?: "").lowercase()
+                            if (msg.contains("insufficient")) {
+                                onToast("رصيدك غير كافٍ لإتمام العملية.")
+                            } else {
+                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
+                            }
+                        }
+                    }
+                    pendingUsd = null
+                    pendingPrice = null
+                    selectedManualFlow = null
+                }
+            },
+            onDismiss = {
+                pendingUsd = null
+                pendingPrice = null
+            }
+        )
+    }
+
+}
+@Composable private fun WalletScreen(
     uid: String,
     noticeTick: Int = 0,
     onAddNotice: (AppNotice) -> Unit,
@@ -2149,12 +2141,11 @@ private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
-suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int, accountId: String? = null): Pair<Boolean, String?> {
+suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int): Pair<Boolean, String?> {
     val body = JSONObject()
         .put("uid", uid)
         .put("product", product)
         .put("usd", usd)
-    if (accountId != null && accountId.isNotBlank()) body.put("account_id", accountId)
     val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
     val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true)
     return Pair(ok, txt)

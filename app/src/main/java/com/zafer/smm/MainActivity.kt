@@ -162,8 +162,8 @@ data class OrderItem(
     val status: OrderStatus,
     val createdAt: Long,
     val uid: String = ""            // ✅ إن توفّر من الباكند
+    , val accountId: String = ""
 )
-
 /* ✅ نموذج خاص بكروت أسيا سيل (لواجهة المالك) */
 data class PendingCard(
     val id: Int,
@@ -1546,9 +1546,10 @@ private fun isApiOrder(o: OrderItem): Boolean {
                         payload = o.optString("link",""),
                         status = OrderStatus.Pending,
                         createdAt = o.optLong("created_at", 0L),
-                        uid = o.optString("uid","")
+                        uid = o.optString("uid",""),
+                        accountId = o.optString("account_id","")
                     )
-                    if (itemFilter == null || itemFilter.invoke(item)) {
+if (itemFilter == null || itemFilter.invoke(item)) {
                         parsed += item
                     }
                 }
@@ -1612,8 +1613,23 @@ private fun isApiOrder(o: OrderItem): Boolean {
                                 Spacer(Modifier.height(4.dp))
                                 Text("الوقت: $dt", color = Dim, fontSize = 12.sp)
                             }
-                            Spacer(Modifier.height(8.dp))
-                            Row {
+                            val clip = LocalClipboardManager.current
+if (o.accountId.isNotBlank()) {
+    Spacer(Modifier.height(4.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Player ID: ", color = OnBg)
+        Text(
+            o.accountId,
+            color = Accent,
+            modifier = Modifier
+                .clickable { clip.setText(AnnotatedString(o.accountId)) }
+                .padding(4.dp)
+        )
+    }
+}
+Spacer(Modifier.height(8.dp))
+Row {
+
                                 TextButton(onClick = {
                                     if (approveWithCode) {
                                         approveFor = o
@@ -1750,8 +1766,23 @@ private fun isApiOrder(o: OrderItem): Boolean {
                                 Spacer(Modifier.height(4.dp))
                                 Text("الوقت: $dt", color = Dim, fontSize = 12.sp)
                             }
-                            Spacer(Modifier.height(8.dp))
-                            Row {
+                            val clip = LocalClipboardManager.current
+if (o.accountId.isNotBlank()) {
+    Spacer(Modifier.height(4.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Player ID: ", color = OnBg)
+        Text(
+            o.accountId,
+            color = Accent,
+            modifier = Modifier
+                .clickable { clip.setText(AnnotatedString(o.accountId)) }
+                .padding(4.dp)
+        )
+    }
+}
+Spacer(Modifier.height(8.dp))
+Row {
+
                                 TextButton(onClick = { execFor = c }) { Text("تنفيذ") }
                                 TextButton(onClick = {
                                     scope.launch {

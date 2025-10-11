@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.runtime.*
@@ -892,6 +893,46 @@ fun ConfirmPackageDialog(
     )
 }
 
+@Composable
+private fun ConfirmPackageIdDialog(
+    sectionTitle: String,
+    label: String,
+    priceUsd: Int,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var accountId by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = sectionTitle) },
+        text = {
+            Column {
+                Text(text = label)
+                Spacer(Modifier.height(8.dp))
+                Text(text = "الرجاء إدخال رقم الحساب داخل اللعبة (ID):")
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = accountId,
+                    onValueChange = { accountId = it },
+                    singleLine = true,
+                    label = { Text("رقم الحساب") },
+                    placeholder = { Text("مثال: 1234567890") }
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(text = "السعر: $priceUsd$")
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(accountId.trim()) }, enabled = accountId.trim().isNotEmpty()) {
+                Text("تأكيد الشراء")
+            }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
+}
+
+
+
 @Composable private fun ManualSectionsScreen(
     title: String,
     uid: String,
@@ -1127,6 +1168,48 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     }
 
 }
+
+@Composable
+private fun ConfirmPackageIdDialog(
+    sectionTitle: String,
+    label: String,
+    priceUsd: Int,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var accountId by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = sectionTitle) },
+        text = {
+            Column {
+                Text(text = label)
+                Spacer(Modifier.height(8.dp))
+                Text(text = "الرجاء إدخال رقم الحساب داخل اللعبة (ID):")
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = accountId,
+                    onValueChange = { accountId = it },
+                    singleLine = true,
+                    label = { Text("رقم الحساب") },
+                    placeholder = { Text("مثال: 1234567890") }
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(text = "السعر: $priceUsd$")
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(accountId.trim()) },
+                enabled = accountId.trim().isNotEmpty()
+            ) { Text("تأكيد الشراء") }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("إلغاء") }
+        }
+    )
+}
+
 @Composable private fun WalletScreen(
     uid: String,
     noticeTick: Int = 0,
@@ -2145,11 +2228,17 @@ private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
-suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int): Pair<Boolean, String?> {
+suspend fun apiCreateManualPaidOrder(
+    uid: String,
+    product: String,
+    usd: Int,
+    note: String? = null
+): Pair<Boolean, String?> {
     val body = JSONObject()
         .put("uid", uid)
         .put("product", product)
         .put("usd", usd)
+    if (note != null && note.isNotBlank()) body.put("note", note)
     val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
     val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true)
     return Pair(ok, txt)

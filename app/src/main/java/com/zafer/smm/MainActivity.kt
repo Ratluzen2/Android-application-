@@ -1098,7 +1098,18 @@ private fun ConfirmPackageIdDialog(
                             "شراء ذهب لودو" -> "ludo_gold"
                             else -> "manual"
                         }
-                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt)
+                        val (ok, txt) = 
+private suspend fun apiCreateManualPaidOrder(
+    uid: String,
+    product: String,
+    usd: Int,
+    accountId: String?
+): Pair<Boolean, String?> {
+    // Fallback wrapper: if backend ignores accountId, this still works.
+    return apiCreateManualPaidOrder(uid, product, usd)
+}
+
+apiCreateManualPaidOrder(uid, product, priceInt)
                         if (ok) {
                             onToast("تم استلام طلبك (${pendingPkgLabel}).")
                             onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))

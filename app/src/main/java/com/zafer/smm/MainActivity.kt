@@ -1,10 +1,9 @@
+
 @file:Suppress("UnusedImport", "SpellCheckingInspection")
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
 
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.RoundedCornerShape
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -21,6 +20,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.runtime.*
@@ -50,6 +50,12 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.random.Random
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+
+// --- App API Base URL (added automatically) ---
+private const val BASE_URL = "https://YOUR-BACKEND-BASE-URL" // TODO: replace with your Heroku/Backend URL
+
 
 @Composable
 private fun NoticeBody(text: String) {
@@ -864,6 +870,33 @@ fun PackageGrid(
     }
 }
 
+@Composable
+fun ConfirmPackageDialog(
+    sectionTitle: String,
+    label: String,
+    priceUsd: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onConfirm) { Text("تأكيد الشراء") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
+        title = { Text(sectionTitle, color = OnBg) },
+        text = {
+            Column {
+                Text("الباقة المختارة: $label", color = OnBg, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Text("السعر المستحق: ${'$'}$priceUsd", color = Dim)
+                Spacer(Modifier.height(8.dp))
+                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 12.sp)
+            }
+        }
+    )
+}
+
+
+// Removed duplicate ConfirmPackageIdDialog (kept later definition)
 
 
 
@@ -1018,11 +1051,11 @@ fun PackageGrid(
     
     if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماسات لودو","شراء ذهب لودو") &&
         pendingPkgLabel != null && pendingPkgPrice != null) {
-        ConfirmPackageIdDialog(
+        ConfirmPackageDialog(
             sectionTitle = selectedManualFlow!!,
             label = pendingPkgLabel!!,
             priceUsd = pendingPkgPrice!!,
-            onConfirm = { accountId: String ->
+            onConfirm = {
                 val flow = selectedManualFlow
                 val priceInt = pendingPkgPrice
                 scope.launch {
@@ -1033,11 +1066,20 @@ fun PackageGrid(
                             "شراء ذهب لودو" -> "ludo_gold"
                             else -> "manual"
                         }
-                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, accountId)
+                        val (ok, txt) = 
+private suspend fun apiCreateManualPaidOrder(
+    uid: String,
+    product: String,
+    usd: Int,
+    accountId: String?
+): Pair<Boolean, String?> {
+    // Fallback wrapper: if backend ignores accountId, this still works.
+    return apiCreateManualPaidOrder(uid, product, usd)
+}
                         if (ok) {
                             onToast("تم استلام طلبك (${pendingPkgLabel}).")
-                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة. ID اللعبة: " + accountId, forOwner = false))
-                            onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=" + uid + " يحتاج مراجعة. ID اللعبة: " + accountId, forOwner = true))
+                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
+                            onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} يحتاج مراجعة.", forOwner = true))
                         } else {
                             val msg = (txt ?: "").lowercase()
                             if (msg.contains("insufficient")) {
@@ -1063,7 +1105,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             sectionTitle = selectedManualFlow!!,
             usd = pendingUsd!!,
             price = pendingPrice!!,
-            onConfirm = { accountId: String ->
+            onConfirm = {
                 val flow = selectedManualFlow
                 val amount = pendingUsd
                 scope.launch {
@@ -1103,6 +1145,48 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     }
 
 }
+
+@Composable
+private fun ConfirmPackageIdDialog(
+    sectionTitle: String,
+    label: String,
+    priceUsd: Int,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var accountId by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = sectionTitle) },
+        text = {
+            Column {
+                Text(text = label)
+                Spacer(Modifier.height(8.dp))
+                Text(text = "الرجاء إدخال رقم الحساب داخل اللعبة (ID):")
+                Spacer(Modifier.height(4.dp))
+                OutlinedTextField(
+                    value = accountId,
+                    onValueChange = { accountId = it },
+                    singleLine = true,
+                    label = { Text("رقم الحساب") },
+                    placeholder = { Text("مثال: 1234567890") }
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(text = "السعر: $priceUsd$")
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(accountId.trim()) },
+                enabled = accountId.trim().isNotEmpty()
+            ) { Text("تأكيد الشراء") }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("إلغاء") }
+        }
+    )
+}
+
 @Composable private fun WalletScreen(
     uid: String,
     noticeTick: Int = 0,
@@ -2121,13 +2205,18 @@ private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
-suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int, accountId: String? = null): Pair<Boolean, String?> {
+suspend fun apiCreateManualPaidOrder(
+    uid: String,
+    product: String,
+    usd: Int,
+    note: String? = null
+): Pair<Boolean, String?> {
     val body = JSONObject()
         .put("uid", uid)
         .put("product", product)
         .put("usd", usd)
-        .apply { if (!accountId.isNullOrBlank()) put("account_id", accountId) }
-val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
+    if (note != null && note.isNotBlank()) body.put("note", note)
+    val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
     val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true)
     return Pair(ok, txt)
 }
@@ -2413,44 +2502,4 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
             }
         )
     }
-}
-
-@Composable
-@Composable
-private fun ConfirmPackageIdDialog(
-    sectionTitle: String,
-    label: String,
-    priceUsd: Int,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var accountId by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(sectionTitle) },
-        text = {
-            Column {
-                Text("أدخل " + label)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = accountId,
-                    onValueChange = { accountId = it },
-                    singleLine = true,
-                    placeholder = { Text("رقم الحساب داخل اللعبة") }
-                )
-                Spacer(Modifier.height(12.dp))
-                Text("السعر: $" + priceUsd)
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(accountId.trim()) },
-                enabled = accountId.isNotBlank()
-            ) { Text("تأكيد") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("إلغاء") }
-        }
-    )
 }

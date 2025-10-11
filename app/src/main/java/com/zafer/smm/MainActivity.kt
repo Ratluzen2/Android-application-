@@ -1131,77 +1131,7 @@ if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماس
             }
         )
     }
-                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt)
-                        if (ok) {
-                            onToast("تم استلام طلبك (${pendingPkgLabel}).")
-                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
-                            onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} يحتاج مراجعة.", forOwner = true))
-                        } else {
-                            val msg = (txt ?: "").lowercase()
-                            if (msg.contains("insufficient")) {
-                                onToast("رصيدك غير كافٍ لإتمام العملية.")
-                            } else {
-                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
-                            }
-                        }
-                    }
-                    pendingPkgLabel = null
-                    pendingPkgPrice = null
-                    selectedManualFlow = null
-                }
-            },
-            onDismiss = {
-                pendingPkgLabel = null
-                pendingPkgPrice = null
-            }
-        )
-    }
-if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
-        ConfirmAmountDialog(
-            sectionTitle = selectedManualFlow!!,
-            usd = pendingUsd!!,
-            price = pendingPrice!!,
-            onConfirm = {
-                val flow = selectedManualFlow
-                val amount = pendingUsd
-                scope.launch {
-                    if (flow != null && amount != null) {
-                        val product = when (flow) {
-                            "شراء رصيد ايتونز" -> "itunes"
-                            "شراء رصيد اثير" -> "atheer"
-                            "شراء رصيد اسياسيل" -> "asiacell"
-                            "شراء رصيد كورك" -> "korek"
-                            else -> "manual"
-                        }
-                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, amount)
-                        if (ok) {
-                            val label = "$flow ${amount}$"
-                            onToast("تم استلام طلبك ($label).")
-                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $label للمراجعة.", forOwner = false))
-                            onAddNotice(AppNotice("طلب جديد", "طلب $label من UID=$uid يحتاج مراجعة.", forOwner = true))
-                        } else {
-                            val msg = (txt ?: "").lowercase()
-                            if (msg.contains("insufficient")) {
-                                onToast("رصيدك غير كافٍ لإتمام العملية.")
-                            } else {
-                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
-                            }
-                        }
-                    }
-                    pendingUsd = null
-                    pendingPrice = null
-                    selectedManualFlow = null
-                }
-            },
-            onDismiss = {
-                pendingUsd = null
-                pendingPrice = null
-            }
-        )
-    }
-
-}
-@Composable private fun WalletScreen(
+                        @Composable private fun WalletScreen(
     uid: String,
     noticeTick: Int = 0,
     onAddNotice: (AppNotice) -> Unit,

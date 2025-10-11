@@ -192,7 +192,7 @@ enum class Tab { HOME, SERVICES, WALLET, ORDERS, SUPPORT }
 data class AppNotice(
     val title: String,
     val body: String,
-    val ts: Long = System.currenttTimeMillis(),
+    val ts: Long = System.currentTimeMillis(),
     val forOwner: Boolean = false
 )
 data class ServiceDef(
@@ -265,7 +265,7 @@ class MainActivity : ComponentActivity() {
    ========================= */
 @Composable
 fun AppRoot() {
-    val ctx = LocalContext.currentt
+    val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
     var uid by remember { mutableStateOf(loadOrCreateUid(ctx)) }
@@ -285,7 +285,7 @@ fun AppRoot() {
 
     val unreadUser = notices.count { !it.forOwner && it.ts > lastSeenUser }
     val unreadOwner = notices.count { it.forOwner && it.ts > lastSeenOwner }
-var currenttTab by remember { mutableStateOf(Tab.HOME) }
+var currentTab by remember { mutableStateOf(Tab.HOME) }
 
     // فحص الصحة + تسجيل UID
     LaunchedEffect(Unit) {
@@ -324,7 +324,7 @@ var currenttTab by remember { mutableStateOf(Tab.HOME) }
             .fillMaxSize()
             .background(Bg)
     ) {
-        when (currenttTab) {
+        when (currentTab) {
             Tab.HOME -> {
                 if (ownerMode) {
                     OwnerPanel(
@@ -370,8 +370,8 @@ var currenttTab by remember { mutableStateOf(Tab.HOME) }
         )
 
         BottomNavBar(
-            currentt = currenttTab,
-            onChange = { currenttTab = it },
+            current = currentTab,
+            onChange = { currentTab = it },
             modifier = Modifier.align(Alignment.BottomCenter)
         )
 
@@ -418,10 +418,10 @@ var currenttTab by remember { mutableStateOf(Tab.HOME) }
             },
             onDismiss = {
                 if (ownerMode) {
-                    lastSeenOwner = System.currenttTimeMillis()
+                    lastSeenOwner = System.currentTimeMillis()
                     saveLastSeen(ctx, true, lastSeenOwner)
                 } else {
-                    lastSeenUser = System.currenttTimeMillis()
+                    lastSeenUser = System.currentTimeMillis()
                     saveLastSeen(ctx, false, lastSeenUser)
                 }
                 showNoticeCenter = false
@@ -439,7 +439,7 @@ var currenttTab by remember { mutableStateOf(Tab.HOME) }
     }
 }
 @Composable private fun SupportScreen() {
-    val uri = LocalUriHandler.currentt
+    val uri = LocalUriHandler.current
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("الدعم", color = OnBg, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
@@ -1419,12 +1419,12 @@ private fun isApiOrder(o: OrderItem): Boolean {
     onNeedLogin: () -> Unit,
     onToast: (String) -> Unit
 ) {
-    var currentt by remember { mutableStateOf<String?>(null) }
+    var current by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text("لوحة تحكم المالك", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = OnBg, modifier = Modifier.weight(1f))
-            IconButton(onClick = { currentt = "notices" }) {
+            IconButton(onClick = { current = "notices" }) {
                 Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
             }
         }
@@ -1439,7 +1439,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
             return false
         }
 
-        if (currentt == null) {
+        if (current == null) {
             val buttons = listOf(
                 "طلبات خدمات API المعلقة" to "pending_services",
                 "طلبات الايتونز المعلقة"   to "pending_itunes",
@@ -1458,7 +1458,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                 Row(Modifier.fillMaxWidth()) {
                     row.forEach { (title, key) ->
                         ElevatedButton(
-                            onClick = { if (!needToken()) currentt = key },
+                            onClick = { if (!needToken()) current = key },
                             modifier = Modifier
                                 .weight(1f)
                                 .padding(4.dp),
@@ -1472,10 +1472,10 @@ private fun isApiOrder(o: OrderItem): Boolean {
                 }
             }
         } else {
-            when (currentt) {
+            when (current) {
                 "edit_svc_ids" -> ServiceIdEditorScreen(
                     token = token!!,
-                    onBack = { currentt = null }
+                    onBack = { current = null }
                 )
 
                 "pending_services" -> AdminPendingGenericList(
@@ -1484,7 +1484,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     fetchUrl = AdminEndpoints.pendingServices,
                     itemFilter = { true },                  // ✅ فقط طلبات API
                     approveWithCode = false,
-                    onBack = { currentt = null }
+                    onBack = { current = null }
                 )
                 "pending_itunes" -> AdminPendingGenericList(title = "طلبات iTunes المعلقة",
                     token = token!!,
@@ -1492,7 +1492,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     itemFilter = { true },
                     approveWithCode = true,                                      // ✅ يطلب كود آيتونز
                     codeFieldLabel = "كود الايتونز",
-                    onBack = { currentt = null }
+                    onBack = { current = null }
                 )
                 "pending_pubg" -> AdminPendingGenericList(
                     title = "طلبات ببجي المعلقة",
@@ -1500,7 +1500,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     fetchUrl = AdminEndpoints.pendingPubg,
                     itemFilter = { true },
                     approveWithCode = false,
-                    onBack = { currentt = null }
+                    onBack = { current = null }
                 )
                 "pending_ludo" -> AdminPendingGenericList(
                     title = "طلبات لودو المعلقة",
@@ -1508,7 +1508,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     fetchUrl = AdminEndpoints.pendingLudo,
                     itemFilter = { true },
                     approveWithCode = false,
-                    onBack = { currentt = null }
+                    onBack = { current = null }
                 )
                 "pending_phone" -> AdminPendingGenericList(
 
@@ -1519,37 +1519,37 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     itemFilter = { item -> isIraqTelcoCardPurchase(item.title) },
                     approveWithCode = true,                                      // ✅ يطلب رقم الكارت
                     codeFieldLabel = "كود الكارت",
-                    onBack = { currentt = null }
+                    onBack = { current = null }
                 )
                 // ✅ شاشة الكروت المعلّقة الخاصة — UID + كارت + تنفيذ/رفض + وقت
                 "pending_cards" -> AdminPendingCardsScreen(
                     token = token!!,
-                    onBack = { currentt = null }
+                    onBack = { current = null }
                 )
                 // إجراءات رصيد
                 "topup" -> TopupDeductScreen(
                     title = "إضافة الرصيد",
                     token = token!!,
                     endpoint = AdminEndpoints.walletTopup,
-                    onBack = { currentt = null }
+                    onBack = { current = null }
                 )
                 "deduct" -> TopupDeductScreen(
                     title = "خصم الرصيد",
                     token = token!!,
                     endpoint = AdminEndpoints.walletDeduct,
-                    onBack = { currentt = null }
+                    onBack = { current = null }
                 )
                 "users_count" -> UsersCountScreen(
                     token = token!!,
-                    onBack = { currentt = null }
+                    onBack = { current = null }
                 )
                 "users_balances" -> UsersBalancesScreen(
                     token = token!!,
-                    onBack = { currentt = null }
+                    onBack = { current = null }
                 )
                 "provider_balance" -> ProviderBalanceScreen(
                     token = token!!,
-                    onBack = { currentt = null }
+                    onBack = { current = null }
                 )
             }
         }
@@ -2238,13 +2238,13 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 /* =========================
    شريط سفلي
    ========================= */
-@Composable private fun BottomNavBar(currentt: Tab, onChange: (Tab) -> Unit, modifier: Modifier = Modifier) {
+@Composable private fun BottomNavBar(current: Tab, onChange: (Tab) -> Unit, modifier: Modifier = Modifier) {
     NavigationBar(modifier = modifier.fillMaxWidth(), containerColor = Surface1) {
-        NavItem(currentt == Tab.HOME, { onChange(Tab.HOME) }, Icons.Filled.Home, "الرئيسية")
-        NavItem(currentt == Tab.SERVICES, { onChange(Tab.SERVICES) }, Icons.Filled.List, "الخدمات")
-        NavItem(currentt == Tab.WALLET, { onChange(Tab.WALLET) }, Icons.Filled.AccountBalanceWallet, "رصيدي")
-        NavItem(currentt == Tab.ORDERS, { onChange(Tab.ORDERS) }, Icons.Filled.ShoppingCart, "الطلبات")
-        NavItem(currentt == Tab.SUPPORT, { onChange(Tab.SUPPORT) }, Icons.Filled.ChatBubble, "الدعم")
+        NavItem(current == Tab.HOME, { onChange(Tab.HOME) }, Icons.Filled.Home, "الرئيسية")
+        NavItem(current == Tab.SERVICES, { onChange(Tab.SERVICES) }, Icons.Filled.List, "الخدمات")
+        NavItem(current == Tab.WALLET, { onChange(Tab.WALLET) }, Icons.Filled.AccountBalanceWallet, "رصيدي")
+        NavItem(current == Tab.ORDERS, { onChange(Tab.ORDERS) }, Icons.Filled.ShoppingCart, "الطلبات")
+        NavItem(current == Tab.SUPPORT, { onChange(Tab.SUPPORT) }, Icons.Filled.ChatBubble, "الدعم")
     }
 }
 @Composable private fun RowScope.NavItem(
@@ -2271,7 +2271,7 @@ private fun loadOrCreateUid(ctx: Context): String {
     val sp = prefs(ctx)
     val existing = sp.getString("uid", null)
     if (existing != null) return existing
-    val fresh = "U" + (100000..999999).random(Random(System.currenttTimeMillis()))
+    val fresh = "U" + (100000..999999).random(Random(System.currentTimeMillis()))
     sp.edit().putString("uid", fresh).apply()
     return fresh
 }
@@ -2314,7 +2314,7 @@ private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
 private fun lastSeenKey(forOwner: Boolean) = if (forOwner) "last_seen_owner" else "last_seen_user"
 private fun loadLastSeen(ctx: Context, forOwner: Boolean): Long =
     prefs(ctx).getLong(lastSeenKey(forOwner), 0L)
-private fun saveLastSeen(ctx: Context, forOwner: Boolean, ts: Long = System.currenttTimeMillis()) {
+private fun saveLastSeen(ctx: Context, forOwner: Boolean, ts: Long = System.currentTimeMillis()) {
     prefs(ctx).edit().putLong(lastSeenKey(forOwner), ts).apply()
 }
 /* شبكة - GET (suspend) */
@@ -2500,7 +2500,7 @@ private suspend fun apiFetchNotificationsByUid(uid: String, limit: Int = 50): Li
                 val o = arr.getJSONObject(i)
                 val title = o.optString("title","إشعار")
                 val body  = o.optString("body","")
-                val tsMs  = o.optLong("created_at", System.currenttTimeMillis())
+                val tsMs  = o.optLong("created_at", System.currentTimeMillis())
                 out += AppNotice(title, body, if (tsMs < 2_000_000_000L) tsMs*1000 else tsMs, forOwner = false)
             }
             return out
@@ -2518,7 +2518,7 @@ private suspend fun apiFetchNotificationsByUid(uid: String, limit: Int = 50): Li
                     val o = arr.getJSONObject(i)
                     val title = o.optString("title","إشعار")
                     val body  = o.optString("body","")
-                    val tsMs  = o.optLong("created_at", System.currenttTimeMillis())
+                    val tsMs  = o.optLong("created_at", System.currentTimeMillis())
                     out += AppNotice(title, body, if (tsMs < 2_000_000_000L) tsMs*1000 else tsMs, forOwner = false)
                 }
                 return out

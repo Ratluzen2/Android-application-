@@ -26,8 +26,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.LocalClipboardManager
-import androidx.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
@@ -2419,7 +2418,7 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
     onOwnerLogout: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val clip: ClipboardManager = LocalClipboardManager.current
+    val clip = LocalClipboardManager.current
     var showAdminLogin by remember { mutableStateOf(false) }
 
     AlertDialog(

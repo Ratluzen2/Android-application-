@@ -11,8 +11,9 @@ android {
         applicationId "com.zafer.smm"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        // ⬆️ رفعنا رقم النسخة لتحديث الأيقونة على الأجهزة
+        versionCode 2
+        versionName "1.0.1"
         vectorDrawables { useSupportLibrary true }
     }
 

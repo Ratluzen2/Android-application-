@@ -49,6 +49,10 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.random.Random
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+
 
 @Composable
 private fun NoticeBody(text: String) {
@@ -212,6 +216,21 @@ class MainActivity : ComponentActivity() {
 /* =========================
    Root
    ========================= */
+
+
+/** App background that draws drawable/background_main.png behind content */
+@Composable
+fun AppBackground(content: @Composable () -> Unit) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Image(
+            painter = painterResource(id = R.drawable.background_main),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+        content()
+    }
+}
 @Composable
 fun AppRoot() {
     val ctx = LocalContext.current
@@ -268,11 +287,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Bg)
-    ) {
+    AppBackground {
         when (currentTab) {
             Tab.HOME -> {
                 if (ownerMode) {

@@ -20,7 +20,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.runtime.*
@@ -50,12 +49,6 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.random.Random
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.RoundedCornerShape
-
-// --- App API Base URL (added automatically) ---
-private const val BASE_URL = "https://YOUR-BACKEND-BASE-URL" // TODO: replace with your Heroku/Backend URL
-
 
 @Composable
 private fun NoticeBody(text: String) {
@@ -895,9 +888,49 @@ fun ConfirmPackageDialog(
     )
 }
 
-
-// Removed duplicate ConfirmPackageIdDialog (kept later definition)
-
+@Composable
+fun ConfirmPackageIdDialog(
+    sectionTitle: String,
+    label: String,
+    priceUsd: Int,
+    onConfirm: (accountId: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var accountId by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                enabled = accountId.trim().isNotEmpty() && !busy,
+                onClick = { onConfirm(accountId.trim()) }
+            ) { Text(if (busy) "يرسل..." else "تأكيد الشراء") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
+        title = { Text(sectionTitle, color = OnBg) },
+        text = {
+            Column {
+                Text("الباقة المختارة: $label", color = OnBg, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Text("السعر المستحق: ${'$'}$priceUsd", color = Dim)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = accountId,
+                    onValueChange = { accountId = it },
+                    singleLine = true,
+                    label = { Text("معرّف اللاعب / Game ID") },
+                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                        cursorColor = Accent,
+                        focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                        focusedLabelColor = OnBg, unfocusedLabelColor = Dim
+                    )
+                )
+                Spacer(Modifier.height(6.dp))
+                Text("أدخل رقم الحساب بدقة. الطلب لن يُرسل بدون هذا الحقل.", color = Dim, fontSize = 12.sp)
+            }
+        }
+    )
+}
 
 
 
@@ -1049,33 +1082,56 @@ fun ConfirmPackageDialog(
     }
 
     
-    if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماسات لودو","شراء ذهب لودو") &&
+    
+if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماسات لودو","شراء ذهب لودو") &&
         pendingPkgLabel != null && pendingPkgPrice != null) {
-        ConfirmPackageDialog(
+        ConfirmPackageIdDialog(
             sectionTitle = selectedManualFlow!!,
             label = pendingPkgLabel!!,
             priceUsd = pendingPkgPrice!!,
-            onConfirm = {
+            onConfirm = { accountId ->
                 val flow = selectedManualFlow
                 val priceInt = pendingPkgPrice
                 scope.launch {
                     if (flow != null && priceInt != null) {
-                        val product = when (flow) {
-                            "شحن شدات ببجي" -> "pubg_uc"
-                            "شراء الماسات لودو" -> "ludo_diamonds"
-                            "شراء ذهب لودو" -> "ludo_gold"
-                            else -> "manual"
+                        // رصيد المستخدم قبل الإرسال
+                        val bal = apiGetBalance(uid) ?: 0.0
+                        if (bal < priceInt) {
+                            onToast("رصيدك غير كافٍ. السعر: ${'$'}$priceInt | رصيدك: ${"%.2f".format(bal)}${'$'}")
+                        } else {
+                            val product = when (flow) {
+                                "شحن شدات ببجي" -> "pubg_uc"
+                                "شراء الماسات لودو" -> "ludo_diamonds"
+                                "شراء ذهب لودو" -> "ludo_gold"
+                                else -> "manual"
+                            }
+                            val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, accountId)
+                            if (ok) {
+                                onToast("تم استلام طلبك (${pendingPkgLabel}).")
+                                onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
+                                onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} (Player: ${accountId}) يحتاج مراجعة.", forOwner = true))
+                            } else {
+                                val msg = (txt ?: "").lowercase()
+                                if (msg.contains("insufficient")) {
+                                    onToast("رصيدك غير كافٍ لإتمام العملية.")
+                                } else {
+                                    onToast("تعذر إرسال الطلب. حاول لاحقًا.")
+                                }
+                            }
                         }
-                        val (ok, txt) = 
-private suspend fun apiCreateManualPaidOrder(
-    uid: String,
-    product: String,
-    usd: Int,
-    accountId: String?
-): Pair<Boolean, String?> {
-    // Fallback wrapper: if backend ignores accountId, this still works.
-    return apiCreateManualPaidOrder(uid, product, usd)
-}
+                    }
+                    pendingPkgLabel = null
+                    pendingPkgPrice = null
+                    selectedManualFlow = null
+                }
+            },
+            onDismiss = {
+                pendingPkgLabel = null
+                pendingPkgPrice = null
+            }
+        )
+    }
+                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt)
                         if (ok) {
                             onToast("تم استلام طلبك (${pendingPkgLabel}).")
                             onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
@@ -1145,48 +1201,6 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     }
 
 }
-
-@Composable
-private fun ConfirmPackageIdDialog(
-    sectionTitle: String,
-    label: String,
-    priceUsd: Int,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var accountId by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(text = sectionTitle) },
-        text = {
-            Column {
-                Text(text = label)
-                Spacer(Modifier.height(8.dp))
-                Text(text = "الرجاء إدخال رقم الحساب داخل اللعبة (ID):")
-                Spacer(Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = accountId,
-                    onValueChange = { accountId = it },
-                    singleLine = true,
-                    label = { Text("رقم الحساب") },
-                    placeholder = { Text("مثال: 1234567890") }
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(text = "السعر: $priceUsd$")
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(accountId.trim()) },
-                enabled = accountId.trim().isNotEmpty()
-            ) { Text("تأكيد الشراء") }
-        },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss) { Text("إلغاء") }
-        }
-    )
-}
-
 @Composable private fun WalletScreen(
     uid: String,
     noticeTick: Int = 0,
@@ -2205,17 +2219,12 @@ private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
-suspend fun apiCreateManualPaidOrder(
-    uid: String,
-    product: String,
-    usd: Int,
-    note: String? = null
-): Pair<Boolean, String?> {
+suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int, accountId: String? = null): Pair<Boolean, String?> {
     val body = JSONObject()
         .put("uid", uid)
         .put("product", product)
         .put("usd", usd)
-    if (note != null && note.isNotBlank()) body.put("note", note)
+    if (accountId != null && accountId.isNotBlank()) body.put("account_id", accountId)
     val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
     val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true)
     return Pair(ok, txt)

@@ -1713,10 +1713,6 @@ Row {
     var snack by remember { mutableStateOf<String?>(null) }
     var execFor by remember { mutableStateOf<PendingCard?>(null) }
     var amountText by remember { mutableStateOf("") }
-
-remember { mutableStateOf("") }
-    var snack by remember { mutableStateOf<String?>(null) }
-
     LaunchedEffect(reloadKey) {
         loading = true; err = null
         list = apiAdminFetchPendingCards(token)
@@ -1828,7 +1824,6 @@ remember { mutableStateOf("") }
             }
         )
     }
-}
 }
 /* =========================
    شاشات مضافة لإكمال النواقص

@@ -48,6 +48,8 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.random.Random
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 @Composable
 private fun NoticeBody(text: String) {
@@ -1020,7 +1022,7 @@ fun PackageGrid(
             sectionTitle = selectedManualFlow!!,
             label = pendingPkgLabel!!,
             priceUsd = pendingPkgPrice!!,
-            onConfirm = { accountId: String ->
+            onConfirm = {
                 val flow = selectedManualFlow
                 val priceInt = pendingPkgPrice
                 scope.launch {
@@ -1061,7 +1063,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             sectionTitle = selectedManualFlow!!,
             usd = pendingUsd!!,
             price = pendingPrice!!,
-            onConfirm = { accountId: String ->
+            onConfirm = {
                 val flow = selectedManualFlow
                 val amount = pendingUsd
                 scope.launch {

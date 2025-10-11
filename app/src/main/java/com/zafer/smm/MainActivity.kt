@@ -1022,7 +1022,7 @@ fun PackageGrid(
             sectionTitle = selectedManualFlow!!,
             label = pendingPkgLabel!!,
             priceUsd = pendingPkgPrice!!,
-            onConfirm = {
+            onConfirm = { id -> 
                 val flow = selectedManualFlow
                 val priceInt = pendingPkgPrice
                 scope.launch {
@@ -1033,21 +1033,19 @@ fun PackageGrid(
                             "شراء ذهب لودو" -> "ludo_gold"
                             else -> "manual"
                         }
-                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, accountId)
-                        if (ok) {
-                            onToast("تم استلام طلبك (${pendingPkgLabel}).")
-                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة. ID اللعبة: " + accountId, forOwner = false))
-                            onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=" + uid + " يحتاج مراجعة. ID اللعبة: " + accountId, forOwner = true))
-                        } else {
-                            val msg = (txt ?: "").lowercase()
-                            if (msg.contains("insufficient")) {
-                                onToast("رصيدك غير كافٍ لإتمام العملية.")
-                            } else {
-                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
-                            }
-                        }
-                    }
-                    pendingPkgLabel = null
+                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, id)
+if (ok) {
+    onToast("تم استلام طلبك (${pendingPkgLabel}).")
+    onAddNotice(AppNotice("طلب معلّق", "تم استلام طلب ${pendingPkgLabel} للمراجعة. ID اللعبة: " + id, forOwner = false))
+    onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من المستخدم " + uid + " يحتاج مراجعة. ID اللعبة: " + id, forOwner = true))
+} else {
+    val msg = (txt ?: "").lowercase()
+    if (msg.contains("insufficient")) {
+        onToast("رصيدك غير كافٍ لإتمام العملية.")
+    } else {
+        onToast("تعذر إرسال الطلب. حاول لاحقًا.")
+    }
+}pendingPkgLabel = null
                     pendingPkgPrice = null
                     selectedManualFlow = null
                 }
@@ -1063,7 +1061,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             sectionTitle = selectedManualFlow!!,
             usd = pendingUsd!!,
             price = pendingPrice!!,
-            onConfirm = {
+            onConfirm = { id -> 
                 val flow = selectedManualFlow
                 val amount = pendingUsd
                 scope.launch {

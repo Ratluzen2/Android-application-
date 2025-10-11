@@ -1627,20 +1627,6 @@ if (itemFilter == null || itemFilter.invoke(item)) {
                                 }
                             }
 
-                            val clip = LocalClipboardManager.current
-if (o.accountId.isNotBlank()) {
-    Spacer(Modifier.height(4.dp))
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Player ID: ", color = OnBg)
-        Text(
-            o.accountId,
-            color = Accent,
-            modifier = Modifier
-                .clickable { clip.setText(AnnotatedString(o.accountId)) }
-                .padding(4.dp)
-        )
-    }
-}
 Spacer(Modifier.height(8.dp))
 Row {
 
@@ -1715,6 +1701,19 @@ Row {
 /* =========================
    شاشة الكروت المعلّقة (المالك)
    ========================= */
+@Composable private fun AdminPendingCardsScreen(
+    token: String,
+    onBack: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var list by remember { mutableStateOf<List<PendingCard>?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var err by remember { mutableStateOf<String?>(null) }
+    var reloadKey by remember { mutableStateOf(0) }
+    var snack by remember { mutableStateOf<String?>(null) }
+    var execFor by remember { mutableStateOf<PendingCard?>(null) }
+    var amountText by remember { mutableStateOf("") }
+
 remember { mutableStateOf("") }
     var snack by remember { mutableStateOf<String?>(null) }
 
@@ -1830,7 +1829,7 @@ remember { mutableStateOf("") }
         )
     }
 }
-
+}
 /* =========================
    شاشات مضافة لإكمال النواقص
    ========================= */

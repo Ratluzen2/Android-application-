@@ -26,8 +26,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.ClipboardManager
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.LocalClipboardManager
+import androidx.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
@@ -447,7 +447,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
         val (txt, clr) = when (online) {
             true -> "الخادم: متصل" to Good
             false -> "الخادم: غير متصل" to Bad
-            else -> "الخادم: ..." to Dim
+            else -> "الخادم: " to Dim
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -644,7 +644,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
                     else onOrdered(false, "فشل إرسال الطلب.")
                     onDismiss()
                 }
-            }) { Text(if (loading) "يرسل..." else "شراء") }
+            }) { Text(if (loading) "يرسل" else "شراء") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
         title = { Text(service.uiKey) },
@@ -677,7 +677,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
                 Spacer(Modifier.height(8.dp))
                 Text("السعر التقريبي: $price\$", fontWeight = FontWeight.SemiBold, color = OnBg)
                 Spacer(Modifier.height(4.dp))
-                Text("رصيدك الحالي: ${userBalance?.let { "%.2f".format(it) } ?: "..."}\$", color = Dim, fontSize = 12.sp)
+                Text("رصيدك الحالي: ${userBalance?.let { "%.2f".format(it) } ?: ""}\$", color = Dim, fontSize = 12.sp)
             }
         }
     )
@@ -1187,7 +1187,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         Text("رصيدي", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = OnBg)
         Spacer(Modifier.height(8.dp))
         Text(
-            "الرصيد الحالي: ${balance?.let { "%.2f".format(it) } ?: "..."}$",
+            "الرصيد الحالي: ${balance?.let { "%.2f".format(it) } ?: ""}$",
             fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg
         )
         Spacer(Modifier.height(16.dp))
@@ -1252,7 +1252,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                             onToast("فشل إرسال الكارت")
                         }
                     }
-                }) { Text(if (sending) "يرسل..." else "إرسال") }
+                }) { Text(if (sending) "يرسل" else "إرسال") }
             },
             dismissButton = { TextButton(enabled = !sending, onClick = { askAsiacell = false }) { Text("إلغاء") } },
             title = { Text("شحن عبر أسيا سيل", color = OnBg) },
@@ -1297,7 +1297,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         Spacer(Modifier.height(10.dp))
 
         when {
-            loading -> Text("يتم التحميل...", color = Dim)
+            loading -> Text("يتم التحميل", color = Dim)
             err != null -> Text(err!!, color = Bad)
             orders.isNullOrEmpty() -> Text("لا توجد طلبات حتى الآن.", color = Dim)
             else -> LazyColumn {
@@ -1590,7 +1590,7 @@ if (itemFilter == null || itemFilter.invoke(item)) {
         Spacer(Modifier.height(10.dp))
 
         when {
-            loading -> Text("يتم التحميل...", color = Dim)
+            loading -> Text("يتم التحميل", color = Dim)
             err != null -> Text(err!!, color = Bad)
             list.isNullOrEmpty() -> Text("لا يوجد شيء معلق.", color = Dim)
             else -> LazyColumn {
@@ -1729,7 +1729,7 @@ Row {
         Spacer(Modifier.height(10.dp))
 
         when {
-            loading -> Text("يتم التحميل...", color = Dim)
+            loading -> Text("يتم التحميل", color = Dim)
             err != null -> Text(err!!, color = Bad)
             list.isNullOrEmpty() -> Text("لا توجد كروت معلّقة.", color = Dim)
             else -> LazyColumn {
@@ -1872,7 +1872,7 @@ Row {
                     msg = if (ok) "تمت العملية بنجاح" else "فشلت العملية"
                 }
             }
-        ) { Text(if (busy) "جارٍ التنفيذ..." else "تنفيذ") }
+        ) { Text(if (busy) "جارٍ التنفيذ" else "تنفيذ") }
 
         Spacer(Modifier.height(10.dp))
         msg?.let { Text(it, color = OnBg) }
@@ -1901,7 +1901,7 @@ Row {
             Text("عدد المستخدمين", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
         }
         Spacer(Modifier.height(12.dp))
-        if (loading) Text("يتم التحميل...", color = Dim)
+        if (loading) Text("يتم التحميل", color = Dim)
         else Text("العدد: ${count ?: 0}", color = OnBg, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = {
@@ -1934,7 +1934,7 @@ Row {
         }
         Spacer(Modifier.height(12.dp))
         when {
-            loading -> Text("يتم التحميل...", color = Dim)
+            loading -> Text("يتم التحميل", color = Dim)
             rows == null -> Text("تعذر جلب البيانات", color = Bad)
             rows!!.isEmpty() -> Text("لا توجد بيانات.", color = Dim)
             else -> LazyColumn {
@@ -1987,7 +1987,7 @@ Row {
         }
         Spacer(Modifier.height(12.dp))
         when {
-            loading -> Text("يتم التحميل...", color = Dim)
+            loading -> Text("يتم التحميل", color = Dim)
             err != null -> Text(err!!, color = Bad)
             else -> Text("الرصيد: ${"%.2f".format(bal ?: 0.0)}", color = OnBg, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         }

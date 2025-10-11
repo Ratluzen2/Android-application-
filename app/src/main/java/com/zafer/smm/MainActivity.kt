@@ -48,8 +48,6 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.random.Random
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.RoundedCornerShape
 
 @Composable
 private fun NoticeBody(text: String) {
@@ -864,9 +862,30 @@ fun PackageGrid(
     }
 }
 
-
-
-
+@Composable
+fun ConfirmPackageDialog(
+    sectionTitle: String,
+    label: String,
+    priceUsd: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onConfirm) { Text("تأكيد الشراء") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
+        title = { Text(sectionTitle, color = OnBg) },
+        text = {
+            Column {
+                Text("الباقة المختارة: $label", color = OnBg, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(6.dp))
+                Text("السعر المستحق: ${'$'}$priceUsd", color = Dim)
+                Spacer(Modifier.height(8.dp))
+                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 12.sp)
+            }
+        }
+    )
+}
 
 @Composable private fun ManualSectionsScreen(
     title: String,
@@ -1018,11 +1037,11 @@ fun PackageGrid(
     
     if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماسات لودو","شراء ذهب لودو") &&
         pendingPkgLabel != null && pendingPkgPrice != null) {
-        ConfirmPackageIdDialog(
+        ConfirmPackageDialog(
             sectionTitle = selectedManualFlow!!,
             label = pendingPkgLabel!!,
             priceUsd = pendingPkgPrice!!,
-            onConfirm = { id -> 
+            onConfirm = {
                 val flow = selectedManualFlow
                 val priceInt = pendingPkgPrice
                 scope.launch {
@@ -1033,19 +1052,21 @@ fun PackageGrid(
                             "شراء ذهب لودو" -> "ludo_gold"
                             else -> "manual"
                         }
-                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, id)
-if (ok) {
-    onToast("تم استلام طلبك (${pendingPkgLabel}).")
-    onAddNotice(AppNotice("طلب معلّق", "تم استلام طلب ${pendingPkgLabel} للمراجعة. ID اللعبة: " + id, forOwner = false))
-    onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من المستخدم " + uid + " يحتاج مراجعة. ID اللعبة: " + id, forOwner = true))
-} else {
-    val msg = (txt ?: "").lowercase()
-    if (msg.contains("insufficient")) {
-        onToast("رصيدك غير كافٍ لإتمام العملية.")
-    } else {
-        onToast("تعذر إرسال الطلب. حاول لاحقًا.")
-    }
-}pendingPkgLabel = null
+                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt)
+                        if (ok) {
+                            onToast("تم استلام طلبك (${pendingPkgLabel}).")
+                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
+                            onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} يحتاج مراجعة.", forOwner = true))
+                        } else {
+                            val msg = (txt ?: "").lowercase()
+                            if (msg.contains("insufficient")) {
+                                onToast("رصيدك غير كافٍ لإتمام العملية.")
+                            } else {
+                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
+                            }
+                        }
+                    }
+                    pendingPkgLabel = null
                     pendingPkgPrice = null
                     selectedManualFlow = null
                 }
@@ -1061,7 +1082,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             sectionTitle = selectedManualFlow!!,
             usd = pendingUsd!!,
             price = pendingPrice!!,
-            onConfirm = { id -> 
+            onConfirm = {
                 val flow = selectedManualFlow
                 val amount = pendingUsd
                 scope.launch {
@@ -2119,13 +2140,12 @@ private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
-suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int, accountId: String? = null): Pair<Boolean, String?> {
+suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int): Pair<Boolean, String?> {
     val body = JSONObject()
         .put("uid", uid)
         .put("product", product)
         .put("usd", usd)
-        .apply { if (!accountId.isNullOrBlank()) put("account_id", accountId) }
-val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
+    val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
     val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true)
     return Pair(ok, txt)
 }
@@ -2411,44 +2431,4 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
             }
         )
     }
-}
-
-@Composable
-fun ConfirmPackageIdDialog(
-    sectionTitle: String,
-    label: String,
-    priceUsd: Int,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var accountId by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(sectionTitle) },
-        text = {
-            Column {
-                Text("أدخل " + label)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = accountId,
-                    onValueChange = { accountId = it },
-                    singleLine = true,
-                    label = { Text(label) }
-                )
-                Spacer(Modifier.height(8.dp))
-                Text("السعر: $" + priceUsd.toString())
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(accountId) }) {
-                Text("تأكيد")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("إلغاء")
-            }
-        }
-    )
 }

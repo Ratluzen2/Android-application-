@@ -1614,13 +1614,14 @@ if (itemFilter == null || itemFilter.invoke(item)) {
                             }
                             if (o.accountId.isNotBlank()) {
                                 Spacer(Modifier.height(4.dp))
+                                val clip = LocalClipboardManager.current
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text("Player ID: ", color = OnBg)
                                     Text(
                                         o.accountId,
                                         color = Accent,
                                         modifier = Modifier
-                                            .clickable { LocalClipboardManager.current.setText(AnnotatedString(o.accountId)) }
+                                            .clickable { clip.setText(AnnotatedString(o.accountId)) }
                                             .padding(4.dp)
                                     )
                                 }

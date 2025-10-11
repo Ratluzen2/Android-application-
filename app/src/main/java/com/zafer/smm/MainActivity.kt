@@ -105,8 +105,60 @@ private object AdminEndpoints {
     const val usersCount      = "/api/admin/users/count"
     const val usersBalances   = "/api/admin/users/balances"
     const val providerBalance = "/api/admin/provider/balance"
+
+    // Overrides for service IDs (server-level)
+    const val svcIdsList = "/api/admin/service_ids/list"
+    const val svcIdSet   = "/api/admin/service_ids/set"
+    const val svcIdClear = "/api/admin/service_ids/clear"
 }
 
+
+/* =========================
+   Admin Service ID Overrides API
+   ========================= */
+private suspend fun apiAdminListSvcOverrides(token: String): Map<String, Long> {
+    val (code, txt) = httpGet(AdminEndpoints.svcIdsList, headers = mapOf("x-admin-password" to token))
+    if (code !in 200..299 || txt == null) return emptyMap()
+    return try {
+        val result = mutableMapOf<String, Long>()
+        val trimmed = txt.trim()
+        if (trimmed.startsWith("{")) {
+            val o = JSONObject(trimmed)
+            if (o.has("list")) {
+                val arr = o.optJSONArray("list") ?: JSONArray()
+                for (i in 0 until arr.length()) {
+                    val it = arr.optJSONObject(i) ?: continue
+                    val k = it.optString("ui_key", "")
+                    val v = it.optLong("service_id", 0L)
+                    if (k.isNotBlank() && v > 0) result[k] = v
+                }
+            } else {
+                // maybe dict style
+                val it = o.keys()
+                while (it.hasNext()) {
+                    val k = it.next()
+                    val v = o.optLong(k, 0L)
+                    if (k.isNotBlank() && v > 0) result[k] = v
+                }
+            }
+        } else {
+            // not expected
+        }
+        result
+    } catch (_: Exception) { emptyMap() }
+}
+
+private suspend fun apiAdminSetSvcOverride(token: String, uiKey: String, id: Long): Boolean {
+    val body = JSONObject().put("ui_key", uiKey).put("service_id", id)
+    val (code, _) = httpPost(AdminEndpoints.svcIdSet, body, headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
+
+private suspend fun apiAdminClearSvcOverride(token: String, uiKey: String): Boolean {
+    val body = JSONObject().put("ui_key", uiKey)
+    val (code, _) = httpPost(AdminEndpoints.svcIdClear, body, headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
 /* =========================
    Theme
    ========================= */
@@ -1400,7 +1452,8 @@ private fun isApiOrder(o: OrderItem): Boolean {
                 "عدد المستخدمين"           to "users_count",
                 "أرصدة المستخدمين"         to "users_balances",
                 "فحص رصيد API"             to "provider_balance"
-            )
+                            "تغيير رقم خدمات API" to "edit_svc_ids",
+)
             buttons.chunked(2).forEach { row ->
                 Row(Modifier.fillMaxWidth()) {
                     row.forEach { (title, key) ->
@@ -1420,6 +1473,11 @@ private fun isApiOrder(o: OrderItem): Boolean {
             }
         } else {
             when (current) {
+                "edit_svc_ids" -> ServiceIdEditorScreen(
+                    token = token!!,
+                    onBack = { current = null }
+                )
+
                 "pending_services" -> AdminPendingGenericList(
                     title = "طلبات خدمات API المعلقة",
                     token = token!!,
@@ -1697,6 +1755,177 @@ Row {
         )
     }
 }
+
+
+@Composable
+private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var selectedCat by remember { mutableStateOf<String?>(null) }
+    var overrides by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+    var loading by remember { mutableStateOf(true) }
+    var err by remember { mutableStateOf<String?>(null) }
+    var refreshKey by remember { mutableStateOf(0) }
+    var snack by remember { mutableStateOf<String?>(null) }
+
+    val cats = listOf(
+        "مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
+        "مشاهدات انستغرام", "لايكات انستغرام", "متابعين انستغرام", "مشاهدات بث انستا",
+        "خدمات التليجرام"
+    )
+
+    fun servicesFor(cat: String): List<ServiceDef> {
+        fun hasAll(key: String, vararg words: String) = words.all { key.contains(it) }
+        return servicesCatalog.filter { svc ->
+            val k = svc.uiKey
+            when (cat) {
+                "مشاهدات تيكتوك"   -> hasAll(k, "مشاهدات", "تيكتوك")
+                "لايكات تيكتوك"     -> hasAll(k, "لايكات", "تيكتوك")
+                "متابعين تيكتوك"    -> hasAll(k, "متابعين", "تيكتوك")
+                "مشاهدات بث تيكتوك" -> hasAll(k, "مشاهدات", "بث", "تيكتوك")
+                "رفع سكور تيكتوك"   -> k.contains("رفع سكور")
+                "مشاهدات انستغرام"  -> hasAll(k, "مشاهدات", "انستغرام")
+                "لايكات انستغرام"    -> hasAll(k, "لايكات", "انستغرام")
+                "متابعين انستغرام"   -> hasAll(k, "متابعين", "انستغرام")
+                "مشاهدات بث انستا"   -> hasAll(k, "مشاهدات", "بث", "انستا")
+                "خدمات التليجرام"    -> k.contains("تلي")
+                else -> false
+            }
+        }.map { svc ->
+            val cur = overrides[svc.uiKey] ?: svc.serviceId
+            svc.copy(serviceId = cur)
+        }
+    }
+
+    LaunchedEffect(refreshKey) {
+        loading = true; err = null
+        val data = apiAdminListSvcOverrides(token)
+        overrides = data
+        loading = false
+    }
+
+    snack?.let {
+        LaunchedEffect(it) {
+            delay(2000); snack = null
+        }
+        Snackbar(modifier = Modifier.padding(8.dp)) { Text(it) }
+    }
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg)
+            }
+            Spacer(Modifier.width(6.dp))
+            Text("تغيير رقم خدمات API", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+        }
+        Spacer(Modifier.height(10.dp))
+
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            return@Column
+        }
+        err?.let { e ->
+            Text("تعذر جلب البيانات: $e", color = Bad)
+            return@Column
+        }
+
+        if (selectedCat == null) {
+            cats.chunked(2).forEach { row ->
+                Row(Modifier.fillMaxWidth()) {
+                    row.forEach { c ->
+                        ElevatedCard(
+                            modifier = Modifier.weight(1f).padding(4.dp).clickable { selectedCat = c },
+                            colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                        ) { Text(c, Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold) }
+                    }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+        } else {
+            val list = servicesFor(selectedCat!!)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { selectedCat = null }) {
+                    Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg)
+                }
+                Spacer(Modifier.width(6.dp))
+                Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
+            }
+            Spacer(Modifier.height(10.dp))
+
+            LazyColumn {
+                items(list) { svc ->
+                    var showEdit by remember { mutableStateOf(false) }
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(svc.uiKey, fontWeight = FontWeight.SemiBold, color = OnBg)
+                            Spacer(Modifier.height(4.dp))
+                            val hasOverride = overrides.containsKey(svc.uiKey)
+                            val baseId = servicesCatalog.first { it.uiKey == svc.uiKey }.serviceId
+                            val curId = overrides[svc.uiKey] ?: baseId
+                            Text("الرقم الحالي: $curId" + if (hasOverride) " (معدل)" else " (افتراضي)", color = Dim, fontSize = 12.sp)
+                            Spacer(Modifier.height(8.dp))
+                            Row {
+                                TextButton(onClick = { showEdit = true }) { Text("تعديل") }
+                                Spacer(Modifier.width(6.dp))
+                                TextButton(enabled = hasOverride, onClick = {
+                                    scope.launch {
+                                        val ok = apiAdminClearSvcOverride(token, svc.uiKey)
+                                        if (ok) {
+                                            snack = "تم إرجاع الافتراضي"
+                                            refreshKey++
+                                        } else snack = "فشل إرجاع الافتراضي"
+                                    }
+                                }) { Text("إرجاع الافتراضي") }
+                            }
+                        }
+                    }
+
+                    if (showEdit) {
+                        var newIdText by remember { mutableStateOf(curId.toString()) }
+                        AlertDialog(
+                            onDismissRequest = { showEdit = false },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    val num = newIdText.trim().toLongOrNull()
+                                    if (num != null && num > 0) {
+                                        scope.launch {
+                                            val ok = apiAdminSetSvcOverride(token, svc.uiKey, num)
+                                            if (ok) {
+                                                snack = "تم الحفظ"
+                                                showEdit = false
+                                                refreshKey++
+                                            } else snack = "فشل الحفظ"
+                                        }
+                                    }
+                                }) { Text("حفظ") }
+                            },
+                            dismissButton = { TextButton(onClick = { showEdit = false }) { Text("إلغاء") } },
+                            title = { Text("تعديل رقم الخدمة", color = OnBg) },
+                            text = {
+                                Column {
+                                    Text("الخدمة: ${svc.uiKey}", color = Dim, fontSize = 12.sp)
+                                    Spacer(Modifier.height(6.dp))
+                                    OutlinedTextField(
+                                        value = newIdText,
+                                        onValueChange = { s -> if (s.isEmpty() || s.all { it.isDigit() }) newIdText = s },
+                                        singleLine = true,
+                                        label = { Text("Service ID") }
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
 
 /* =========================
    شاشة الكروت المعلّقة (المالك)

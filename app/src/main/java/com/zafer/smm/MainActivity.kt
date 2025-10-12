@@ -268,6 +268,36 @@ private suspend fun apiAdminClearPricing(token: String, uiKey: String): Boolean 
     val (code, _) = httpPost(AdminEndpoints.pricingClear, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
+/* =========================
+   Public Pricing (read-only for client)
+   ========================= */
+data class PublicPricingEntry(val pricePerK: Double, val minQty: Int, val maxQty: Int, val mode: String = "per_k")
+
+private suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, PublicPricingEntry> {
+    if (keys.isEmpty()) return emptyMap()
+    val encoded = keys.joinToString(",") { java.net.URLEncoder.encode(it, "UTF-8") }
+    val (code, txt) = httpGet("/api/public/pricing/bulk?keys=$encoded")
+    if (code !in 200..299 || txt == null) return emptyMap()
+    return try {
+        val out = mutableMapOf<String, PublicPricingEntry>()
+        val root = org.json.JSONObject(txt)
+        val map = root.optJSONObject("map") ?: org.json.JSONObject()
+        val iter = map.keys()
+        while (iter.hasNext()) {
+            val k = iter.next()
+            val obj = map.optJSONObject(k) ?: continue
+            out[k] = PublicPricingEntry(
+                pricePerK = obj.optDouble("price_per_k", 0.0),
+                minQty = obj.optInt("min_qty", 0),
+                maxQty = obj.optInt("max_qty", 0),
+                mode = obj.optString("mode", "per_k")
+            )
+        }
+        out
+    } catch (_: Exception) { emptyMap() }
+}
+
+
 
 @Composable
 private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
@@ -1026,14 +1056,16 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
     }
 
 
-    // ⬇️ تطبيق التعديلات العامة على الأسعار/الكميات فورًا
-    var effectiveMap by remember { mutableStateOf<Map<String, PublicPricingEntry>>(emptyMap()) }
+    // Apply live pricing overrides on top of catalog items
+    val effectiveMapState = remember { mutableStateOf<Map<String, PublicPricingEntry>>(emptyMap()) }
     LaunchedEffect(selectedCategory) {
         val keys = inCat.map { it.uiKey }
-        try { effectiveMap = apiPublicPricingBulk(keys) } catch (_: Throwable) { /* ignore */ }
+        try {
+            effectiveMapState.value = apiPublicPricingBulk(keys)
+        } catch (_: Throwable) { /* ignore */ }
     }
     val listToShow = inCat.map { s ->
-        val ov = effectiveMap[s.uiKey]
+        val ov = effectiveMapState.value[s.uiKey]
         if (ov != null) s.copy(min = ov.minQty, max = ov.maxQty, pricePerK = ov.pricePerK) else s
     }
     if (listToShow.isNotEmpty()) {

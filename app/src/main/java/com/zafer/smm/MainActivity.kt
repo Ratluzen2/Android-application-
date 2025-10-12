@@ -3,6 +3,9 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.mutableStateListOf
 
 import android.content.Context
@@ -175,6 +178,8 @@ private suspend fun apiAdminClearSvcOverride(token: String, uiKey: String): Bool
 }
 
 /* =========================
+*/
+
    
 
 data class PendingSvcItem(val id: Long, val title: String, val quantity: Int, val price: Double)
@@ -366,7 +371,7 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
     LaunchedEffect(selectedCat, refreshOrders) {
         loadingOrders = true
         val all = try { apiAdminFetchPendingServices(token) } catch (_: Throwable) { emptyList() }
-        val flt = all.filter { it.title.contains(if (selectedCat=="ببجي") "ببجي" else "لودو") || it.title.contains(if (selectedCat=="ببجي") "pubg" else "ludo", true) }
+        val flt = all.filter { item.title.contains(if (selectedCat=="ببجي") "ببجي" else "لودو") || item.title.contains(if (selectedCat=="ببجي") "pubg" else "ludo", true) }
         orders.clear(); orders.addAll(flt)
         loadingOrders = false
     }

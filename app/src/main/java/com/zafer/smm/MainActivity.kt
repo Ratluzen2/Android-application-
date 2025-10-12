@@ -3,47 +3,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
-
-
-// ===== Pricing public API (bulk) =====
-data class PublicPricingEntry(
-    val price_per_k: Double,
-    val min_qty: Int,
-    val max_qty: Int,
-    val mode: String
-)
-
-data class PublicPricingBulkResponse(
-    val map: Map<String, PublicPricingEntry> = emptyMap(),
-    val keys: List<String> = emptyList()
-)
-
-suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, PublicPricingEntry> {
-    // Basic OkHttp call (fits existing style without extra Retrofit interface changes)
-    val client = okhttp3.OkHttpClient()
-    val url = BASE_URL.trimEnd('/') + "/api/public/pricing/bulk?keys=" + keys.joinToString(",") { java.net.URLEncoder.encode(it, "UTF-8") }
-    val req = okhttp3.Request.Builder().url(url).get().build()
-    client.newCall(req).execute().use { resp ->
-        if (!resp.isSuccessful) error("pricing bulk http ${'$'}{resp.code}")
-        val body = resp.body?.string() ?: "{}"
-        val json = org.json.JSONObject(body)
-        val map = mutableMapOf<String, PublicPricingEntry>()
-        if (json.has("map")) {
-            val m = json.getJSONObject("map")
-            for (k in m.keys()) {
-                val o = m.getJSONObject(k)
-                map[k] = PublicPricingEntry(
-                    price_per_k = o.optDouble("price_per_k", 0.0),
-                    min_qty = o.optInt("min_qty", 0),
-                    max_qty = o.optInt("max_qty", 0),
-                    mode = o.optString("mode", "per_k")
-                )
-            }
-        }
-        return map
-    }
-}
-
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.width
@@ -309,6 +268,36 @@ private suspend fun apiAdminClearPricing(token: String, uiKey: String): Boolean 
     val (code, _) = httpPost(AdminEndpoints.pricingClear, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
+/* =========================
+   Public Pricing (read-only for client)
+   ========================= */
+data class PublicPricingEntry(val pricePerK: Double, val minQty: Int, val maxQty: Int, val mode: String = "per_k")
+
+private suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, PublicPricingEntry> {
+    if (keys.isEmpty()) return emptyMap()
+    val encoded = keys.joinToString(",") { URLEncoder.encode(it, "UTF-8") }
+    val (code, txt) = httpGet("/api/public/pricing/bulk?keys=$encoded")
+    if (code !in 200..299 || txt == null) return emptyMap()
+    return try {
+        val out = mutableMapOf<String, PublicPricingEntry>()
+        val root = JSONObject(txt)
+        val map = root.optJSONObject("map") ?: JSONObject()
+        val iter = map.keys()
+        while (iter.hasNext()) {
+            val k = iter.next()
+            val obj = map.optJSONObject(k) ?: continue
+            val pe = PublicPricingEntry(
+                pricePerK = obj.optDouble("price_per_k", 0.0),
+                minQty = obj.optInt("min_qty", 0),
+                maxQty = obj.optInt("max_qty", 0),
+                mode = obj.optString("mode", "per_k")
+            )
+            out[k] = pe
+        }
+        out
+    } catch (_: Exception) { emptyMap() }
+}
+
 
 @Composable
 private fun PricingEditorScreen(token: String, onBack: () -> Unit) {

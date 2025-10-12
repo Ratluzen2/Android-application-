@@ -31,6 +31,10 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
+
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -308,8 +312,22 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
         
 // بطاقات سريعة لتسعير عام لببجي/لودو
 Row(Modifier.fillMaxWidth()) {
-    GlobalPricingCard(title = "ببجي (سعر عام)", key = "cat.pubg", token = token!!, overrides = overrides, onSaved = { refreshKey++ }, onSnack = { snack = it })
-    GlobalPricingCard(title = "لودو (سعر عام)", key = "cat.ludo", token = token!!, overrides = overrides, onSaved = { refreshKey++ }, onSnack = { snack = it })
+    GlobalPricingCard(
+        title = "ببجي (سعر عام)",
+        key = "cat.pubg",
+        token = token!!,
+        overrides = overrides,
+        onSaved = { refreshKey++ },
+        onSnack = { msg -> snack = msg }
+    )
+    GlobalPricingCard(
+        title = "لودو (سعر عام)",
+        key = "cat.ludo",
+        token = token!!,
+        overrides = overrides,
+        onSaved = { refreshKey++ },
+        onSnack = { msg -> snack = msg }
+    )
 }
 Spacer(Modifier.height(6.dp))
 Spacer(Modifier.height(10.dp))
@@ -374,7 +392,7 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
                                 value = priceTxt,
-                                onValueChange = { priceTxt = it },
+                                onValueChange = { v -> priceTxt = v },
                                 label = { Text("السعر المباشر (لهذا الطلب)") },
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
@@ -462,6 +480,71 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                 }
             }
         }
+    }
+}
+
+
+@Composable
+private fun GlobalPricingCard(
+    title: String,
+    key: String,                 // "cat.pubg" أو "cat.ludo"
+    token: String,
+    overrides: Map<String, PricingOverride>,
+    onSaved: () -> Unit,
+    onSnack: (String) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var open by remember { mutableStateOf(false) }
+    val ov = overrides[key]
+
+    ElevatedCard(
+        modifier = Modifier
+            .weight(1f)
+            .padding(4.dp)
+            .clickable { open = true },
+        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+    ) {
+        Text(title, Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold)
+    }
+
+    if (open) {
+        var price by remember { mutableStateOf(TextFieldValue((ov?.pricePerK ?: 0.0).toString())) }
+        AlertDialog(
+            onDismissRequest = { open = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        val p = price.text.toDoubleOrNull() ?: 0.0
+                        val ok = apiAdminSetPricing(token, key, p, 0, 0, mode = "flat")
+                        if (ok) { onSnack("تم الحفظ"); open = false; onSaved() } else onSnack("فشل الحفظ")
+                    }
+                }) { Text("حفظ") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = { open = false }) { Text("إلغاء") }
+                    if (ov != null) {
+                        TextButton(onClick = {
+                            scope.launch {
+                                val ok = apiAdminClearPricing(token, key)
+                                if (ok) { onSnack("تم حذف التعديل"); open = false; onSaved() } else onSnack("فشل الحذف")
+                            }
+                        }) { Text("حذف التعديل") }
+                    }
+                }
+            },
+            title = { Text(title) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = price,
+                        onValueChange = { v -> price = v },
+                        label = { Text("السعر المباشر") },
+                        singleLine = true
+                    )
+                }
+            }
+        )
     }
 }
 /* =========================

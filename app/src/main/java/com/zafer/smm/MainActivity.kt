@@ -118,6 +118,7 @@ private object AdminEndpoints {
     const val pricingClear= "/api/admin/pricing/clear"
     const val orderSetPrice = "/api/admin/pricing/order/set"
     const val orderClearPrice = "/api/admin/pricing/order/clear"
+    const val orderSetQty = "/api/admin/pricing/order/set_qty"
 }
 
 
@@ -198,6 +199,13 @@ private suspend fun apiAdminSetOrderPrice(token: String, orderId: Long, price: D
     return code in 200..299
 }
 
+
+
+private suspend fun apiAdminSetOrderQty(token: String, orderId: Long, quantity: Int, reprice: Boolean = false): Boolean {
+    val body = JSONObject().put("order_id", orderId).put("quantity", quantity).put("reprice", reprice)
+    val (code, _) = httpPost(AdminEndpoints.orderSetQty, body, headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
 private suspend fun apiAdminClearOrderPrice(token: String, orderId: Long): Boolean {
     val body = JSONObject().put("order_id", orderId)
     val (code, _) = httpPost(AdminEndpoints.orderClearPrice, body, headers = mapOf("x-admin-password" to token))

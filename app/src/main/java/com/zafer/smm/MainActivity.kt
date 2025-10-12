@@ -3,6 +3,47 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
+
+
+// ===== Pricing public API (bulk) =====
+data class PublicPricingEntry(
+    val price_per_k: Double,
+    val min_qty: Int,
+    val max_qty: Int,
+    val mode: String
+)
+
+data class PublicPricingBulkResponse(
+    val map: Map<String, PublicPricingEntry> = emptyMap(),
+    val keys: List<String> = emptyList()
+)
+
+suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, PublicPricingEntry> {
+    // Basic OkHttp call (fits existing style without extra Retrofit interface changes)
+    val client = okhttp3.OkHttpClient()
+    val url = BASE_URL.trimEnd('/') + "/api/public/pricing/bulk?keys=" + keys.joinToString(",") { java.net.URLEncoder.encode(it, "UTF-8") }
+    val req = okhttp3.Request.Builder().url(url).get().build()
+    client.newCall(req).execute().use { resp ->
+        if (!resp.isSuccessful) error("pricing bulk http ${'$'}{resp.code}")
+        val body = resp.body?.string() ?: "{}"
+        val json = org.json.JSONObject(body)
+        val map = mutableMapOf<String, PublicPricingEntry>()
+        if (json.has("map")) {
+            val m = json.getJSONObject("map")
+            for (k in m.keys()) {
+                val o = m.getJSONObject(k)
+                map[k] = PublicPricingEntry(
+                    price_per_k = o.optDouble("price_per_k", 0.0),
+                    min_qty = o.optInt("min_qty", 0),
+                    max_qty = o.optInt("max_qty", 0),
+                    mode = o.optString("mode", "per_k")
+                )
+            }
+        }
+        return map
+    }
+}
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.width

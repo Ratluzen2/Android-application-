@@ -295,14 +295,12 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
                 "لايكات تيكتوك"     -> hasAll(k, "لايكات", "تيكتوك")
                 "متابعين تيكتوك"    -> hasAll(k, "متابعين", "تيكتوك")
                 "مشاهدات بث تيكتوك" -> hasAll(k, "مشاهدات", "بث", "تيكتوك")
-                "رفع سكور تيكتوك"   -> (k.contains("سكور") || k.contains("البث") || hasAll(k, "رفع", "سكور"))
+                "رفع سكور تيكتوك"   -> hasAll(k, "رفع", "سكور", "تيكتوك")
                 "مشاهدات انستغرام"  -> hasAll(k, "مشاهدات", "انستغرام")
                 "لايكات انستغرام"    -> hasAll(k, "لايكات", "انستغرام")
                 "متابعين انستغرام"   -> hasAll(k, "متابعين", "انستغرام")
                 "مشاهدات بث انستا"   -> hasAll(k, "مشاهدات", "بث", "انستا")
                 "خدمات التليجرام"    -> k.contains("تيليجرام") || k.contains("التليجرام") || k.contains("تلي")
-                "ببجي"              -> (k.contains("ببجي") || k.contains("PUBG") || k.contains("شدات"))
-                "لودو"              -> (k.contains("لودو"))
                 else -> false
             }
         }
@@ -351,84 +349,102 @@ if (loading) { CircularProgressIndicator(color = Accent); return@Column }
 
 /* PUBG/Ludo Orders Editor */
 if (selectedCat == "ببجي" || selectedCat == "لودو") {
-    val orders = remember { mutableStateListOf<PendingSvcItem>() }
-    var loadingOrders by remember { mutableStateOf(true) }
-    var refreshOrders by remember { mutableStateOf(0) }
+    // عرض باقات ببجي/لودو وتعديل السعر والكمية بشكل مخصص لكل باقة
+    data class PkgSpec(val key: String, val title: String, val defQty: Int, val defPrice: Double)
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(selectedCat, refreshOrders) {
-        loadingOrders = true
-        val all = try { apiAdminFetchPendingServices(token) } catch (_: Throwable) { emptyList() }
-        val flt = all.filter {
-            val t = (it.title ?: "").lowercase()
-            if (selectedCat == "ببجي") (t.contains("ببجي") || t.contains("pubg") || t.contains("uc"))
-            else (t.contains("لودو") || t.contains("ludo"))
-        }
-        orders.clear(); orders.addAll(flt)
-        loadingOrders = false
-    }
+    val pkgs: List<PkgSpec> = if (selectedCat == "ببجي") listOf(
+        PkgSpec("pkg.pubg.60",   "60 شدة",    60,    2.0),
+        PkgSpec("pkg.pubg.325",  "325 شدة",   325,   9.0),
+        PkgSpec("pkg.pubg.660",  "660 شدة",   660,   15.0),
+        PkgSpec("pkg.pubg.1800", "1800 شدة",  1800,  40.0),
+        PkgSpec("pkg.pubg.3850", "3850 شدة",  3850,  55.0),
+        PkgSpec("pkg.pubg.8100", "8100 شدة",  8100,  100.0),
+        PkgSpec("pkg.pubg.16200","16200 شدة", 16200, 185.0)
+    ) else listOf(
+        // Diamonds
+        PkgSpec("pkg.ludo.diamonds.810",     "810 الماسة",       810,     5.0),
+        PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
+        PkgSpec("pkg.ludo.diamonds.5080",    "5080 الماسة",      5080,    20.0),
+        PkgSpec("pkg.ludo.diamonds.12750",   "12750 الماسة",     12750,   35.0),
+        PkgSpec("pkg.ludo.diamonds.27200",   "27200 الماسة",     27200,   85.0),
+        PkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
+        PkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
+        PkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),
+        // Gold
+        PkgSpec("pkg.ludo.gold.66680",       "66680 ذهب",        66680,   5.0),
+        PkgSpec("pkg.ludo.gold.219500",      "219500 ذهب",       219500,  10.0),
+        PkgSpec("pkg.ludo.gold.1443000",     "1443000 ذهب",      1443000, 20.0),
+        PkgSpec("pkg.ludo.gold.3627000",     "3627000 ذهب",      3627000, 35.0),
+        PkgSpec("pkg.ludo.gold.9830000",     "9830000 ذهب",      9830000, 85.0),
+        PkgSpec("pkg.ludo.gold.24835000",    "24835000 ذهب",     24835000,165.0),
+        PkgSpec("pkg.ludo.gold.74550000",    "74550000 ذهب",     74550000,475.0),
+        PkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",    124550000,800.0)
+    )
 
-    if (loadingOrders) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            CircularProgressIndicator(color = Accent)
-        }
-    } else if (orders.isEmpty()) {
-        Text("لا توجد طلبات حالياً", color = Dim)
-    } else {
-        LazyColumn {
-            items(orders) { o ->
-                var qtyTxt by remember { mutableStateOf(TextFieldValue(o.quantity.toString())) }
-                var priceTxt by remember { mutableStateOf(TextFieldValue(o.price.toString())) }
-                ElevatedCard(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("#${o.id} • ${o.title}", fontWeight = FontWeight.SemiBold, color = OnBg)
-                        Spacer(Modifier.height(4.dp))
-                        Text("الكمية: ${o.quantity} • السعر الحالي: ${o.price}", color = Dim, fontSize = 12.sp)
-                        Spacer(Modifier.height(8.dp))
+    LazyColumn {
+        items(pkgs) { p ->
+            val ov = overrides[p.key]
+            val curPrice = ov?.pricePerK ?: p.defPrice
+            val curQty   = if (ov != null && ov.minQty > 0) ov.minQty else p.defQty
 
-                        // كمية الطلب
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = qtyTxt,
-                                onValueChange = { v -> qtyTxt = v },
-                                label = { Text("الكمية الجديدة") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Button(onClick = {
+            var open by remember { mutableStateOf(false) }
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(p.title, fontWeight = FontWeight.SemiBold, color = OnBg)
+                    Spacer(Modifier.height(4.dp))
+                    Text("الكمية الحالية: $curQty  •  السعر الحالي: ${"%.2f".format(curPrice)}", color = Dim, fontSize = 12.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Row {
+                        TextButton(onClick = { open = true }) { Text("تعديل") }
+                        Spacer(Modifier.width(6.dp))
+                        if (ov != null) {
+                            TextButton(onClick = {
                                 scope.launch {
-                                    val q = qtyTxt.text.toIntOrNull() ?: 0
-                                    val ok = apiAdminSetOrderQty(token, o.id, q, reprice = false)
-                                    if (ok) { snack = "تم حفظ الكمية للطلب #${o.id}"; refreshOrders++ } else snack = "فشل الحفظ"
+                                    val ok = apiAdminClearPricing(token, p.key)
+                                    if (ok) { snack = "تم حذف التعديل"; refreshKey++ } else snack = "فشل الحذف"
                                 }
-                            }) { Text("حفظ الكمية") }
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-
-                        // سعر الطلب
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedTextField(
-                                value = priceTxt,
-                                onValueChange = { v -> priceTxt = v },
-                                label = { Text("السعر المباشر (لهذا الطلب)") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Button(onClick = {
-                                scope.launch {
-                                    val p = priceTxt.text.toDoubleOrNull() ?: 0.0
-                                    val ok = apiAdminSetOrderPrice(token, o.id, p)
-                                    if (ok) { snack = "تم حفظ السعر للطلب #${o.id}"; refreshOrders++ } else snack = "فشل الحفظ"
-                                }
-                            }) { Text("حفظ السعر") }
+                            }) { Text("حذف التعديل") }
                         }
                     }
                 }
+            }
+
+            if (open) {
+                var priceTxt by remember { mutableStateOf(TextFieldValue(curPrice.toString())) }
+                var qtyTxt   by remember { mutableStateOf(TextFieldValue(curQty.toString())) }
+                AlertDialog(
+                    onDismissRequest = { open = false },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            scope.launch {
+                                val newPrice = priceTxt.text.toDoubleOrNull() ?: 0.0
+                                val newQty   = qtyTxt.text.toIntOrNull() ?: 0
+                                val ok = apiAdminSetPricing(
+                                    token = token,
+                                    uiKey = p.key,
+                                    pricePerK = newPrice,
+                                    minQty = newQty,
+                                    maxQty = newQty,
+                                    mode = "package"
+                                )
+                                if (ok) { snack = "تم الحفظ"; open = false; refreshKey++ } else snack = "فشل الحفظ"
+                            }
+                        }) { Text("حفظ") }
+                    },
+                    dismissButton = { TextButton(onClick = { open = false }) { Text("إلغاء") } },
+                    title = { Text("تعديل: ${p.title}") },
+                    text  = {
+                        Column {
+                            OutlinedTextField(value = priceTxt, onValueChange = { priceTxt = it }, label = { Text("السعر") }, singleLine = true)
+                            Spacer(Modifier.height(6.dp))
+                            OutlinedTextField(value = qtyTxt, onValueChange = { qtyTxt = it }, label = { Text("الكمية") }, singleLine = true)
+                        }
+                    }
+                )
             }
         }
     }
@@ -645,29 +661,6 @@ private val servicesCatalog = listOf(
     ServiceDef("رفع سكور البث",     14662, 100, 1_000_000, 2.0, "رفع سكور تيكتوك"),
     ServiceDef("اعضاء قنوات تلي",   955656, 100, 1_000_000, 3.0, "خدمات التليجرام"),
     ServiceDef("اعضاء كروبات تلي",  644656, 100, 1_000_000, 3.0, "خدمات التليجرام"),
-    ServiceDef("ببجي 60 شدة",    900060, 60, 60, 2.0, "قسم شحن شدات ببجي"),
-    ServiceDef("ببجي 325 شدة",   900325, 325, 325, 9.0, "قسم شحن شدات ببجي"),
-    ServiceDef("ببجي 660 شدة",   900660, 660, 660, 15.0, "قسم شحن شدات ببجي"),
-    ServiceDef("ببجي 1800 شدة",  901800, 1800, 1800, 40.0, "قسم شحن شدات ببجي"),
-    ServiceDef("ببجي 3850 شدة",  903850, 3850, 3850, 55.0, "قسم شحن شدات ببجي"),
-    ServiceDef("ببجي 8100 شدة",  908100, 8100, 8100, 100.0, "قسم شحن شدات ببجي"),
-    ServiceDef("ببجي 16200 شدة", 916200, 16200, 16200, 185.0, "قسم شحن شدات ببجي"),
-    ServiceDef("لودو 810 الماسة",      910810,   810,    810,    5.0,   "قسم خدمات الودو"),
-    ServiceDef("لودو 2280 الماسة",     912280,   2280,   2280,   10.0,  "قسم خدمات الودو"),
-    ServiceDef("لودو 5080 الماسة",     915080,   5080,   5080,   20.0,  "قسم خدمات الودو"),
-    ServiceDef("لودو 12750 الماسة",    9127500,  12750,  12750,  35.0,  "قسم خدمات الودو"),
-    ServiceDef("لودو 27200 الماسة",    9127200,  27200,  27200,  85.0,  "قسم خدمات الودو"),
-    ServiceDef("لودو 54900 الماسة",    9154900,  54900,  54900,  165.0, "قسم خدمات الودو"),
-    ServiceDef("لودو 164800 الماسة",   9164800,  164800, 164800, 475.0, "قسم خدمات الودو"),
-    ServiceDef("لودو 275400 الماسة",   9275400,  275400, 275400, 800.0, "قسم خدمات الودو"),
-    ServiceDef("لودو 66680 ذهب",       966680,   66680,  66680,  5.0,   "قسم خدمات الودو"),
-    ServiceDef("لودو 219500 ذهب",      9219500,  219500, 219500, 10.0,  "قسم خدمات الودو"),
-    ServiceDef("لودو 1443000 ذهب",     91443000, 1443000,1443000,20.0,  "قسم خدمات الودو"),
-    ServiceDef("لودو 3627000 ذهب",     93627000, 3627000,3627000,35.0,  "قسم خدمات الودو"),
-    ServiceDef("لودو 9830000 ذهب",     99830000, 9830000,9830000,85.0,  "قسم خدمات الودو"),
-    ServiceDef("لودو 24835000 ذهب",    924835000,24835000,24835000,165.0,"قسم خدمات الودو"),
-    ServiceDef("لودو 74550000 ذهب",    974550000,74550000,74550000,475.0,"قسم خدمات الودو"),
-    ServiceDef("لودو 124550000 ذهب",   9124550000,124550000,124550000,800.0,"قسم خدمات الودو"),
 )
 private val serviceCategories = listOf(
     "قسم المتابعين",

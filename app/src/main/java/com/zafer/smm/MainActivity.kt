@@ -1214,7 +1214,7 @@ private fun AmountGrid(
                     val price = String.format(java.util.Locale.getDefault(), "%.2f", priceOf(usd))
                     ElevatedCard(
                         modifier = Modifier
-                            .weight(1f)
+                            Modifier.weight(1f)
                             .padding(4.dp)
                             .clickable { onSelect(usd, priceOf(usd)) },
                         colors = CardDefaults.elevatedCardColors(
@@ -1325,7 +1325,7 @@ fun PackageGrid(
                 pair.forEach { opt ->
                     ElevatedCard(
                         modifier = Modifier
-                            .weight(1f)
+                            Modifier.weight(1f)
                             .padding(4.dp)
                             .clickable { onSelect(opt) },
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
@@ -1890,7 +1890,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                         ElevatedButton(
                             onClick = { if (!needToken()) current = key },
                             modifier = Modifier
-                                .weight(1f)
+                                Modifier.weight(1f)
                                 .padding(4.dp),
                             colors = ButtonDefaults.elevatedButtonColors(
                                 containerColor = Accent.copy(alpha = 0.18f),

@@ -325,7 +325,7 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
                 "لايكات تيكتوك"     -> hasAll(k, "لايكات", "تيكتوك")
                 "متابعين تيكتوك"    -> hasAll(k, "متابعين", "تيكتوك")
                 "مشاهدات بث تيكتوك" -> hasAll(k, "مشاهدات", "بث", "تيكتوك")
-                "رفع سكور تيكتوك"   -> hasAll(k, "رفع", "سكور", "تيكتوك") || hasAll(k, "رفع", "سكور", "بث")
+                "رفع سكور تيكتوك"   -> hasAll(k, "رفع", "سكور", "تيكتوك") || hasAll(k, "رفع", "سكور", "بث") || hasAll(k, "رفع", "سكور", "بث")
                 "مشاهدات انستغرام"  -> hasAll(k, "مشاهدات", "انستغرام")
                 "لايكات انستغرام"    -> hasAll(k, "لايكات", "انستغرام")
                 "متابعين انستغرام"   -> hasAll(k, "متابعين", "انستغرام")
@@ -1055,6 +1055,18 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
         else -> emptyList()
     }
 
+
+    // Overlay live pricing on top of catalog using produceState (no try/catch around composables)
+    val keys = remember(inCat, selectedCategory) { inCat.map { it.uiKey } }
+    val effectiveMap by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keys) {
+        value = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+    }
+    val listToShow = remember(inCat, effectiveMap) {
+        inCat.map { s ->
+            val ov = effectiveMap[s.uiKey]
+            if (ov != null) s.copy(min = ov.minQty, max = ov.maxQty, pricePerK = ov.pricePerK) else s
+        }
+    }
     if (inCat.isNotEmpty()) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1331,33 +1343,28 @@ val ludoGoldPackages = listOf(
 private fun extractDigits(s: String): String = s.filter { it.isDigit() }
 
 @Composable
-private fun rememberPackagesWithOverrides(
+private fun packagesWithOverrides(
     base: List<PackageOption>,
     keyPrefix: String,
     unit: String
 ): List<PackageOption> {
-    var eff by remember { mutableStateOf(base) }
-    LaunchedEffect(base) {
+    val result by produceState(initialValue = base, base) {
         val keys = base.mapNotNull { opt ->
-            val qty = extractDigits(opt.label)
+            val qty = opt.label.filter { it.isDigit() }
             if (qty.isEmpty()) null else "$keyPrefix$qty"
         }
-        try {
-            val map = apiPublicPricingBulk(keys)
-            eff = base.map { opt ->
-                val qtyStr = extractDigits(opt.label)
-                val k = if (qtyStr.isEmpty()) "" else "$keyPrefix$qtyStr"
-                val ov = map[k]
-                val newQty = ov?.minQty?.takeIf { it > 0 } ?: qtyStr.toIntOrNull() ?: 0
-                val newPrice = ov?.pricePerK ?: opt.priceUsd.toDouble()
-                val newLabel = if (newQty > 0) "$newQty $unit" else opt.label
-                PackageOption(newLabel, kotlin.math.round(newPrice).toInt())
-            }
-        } catch (_: Throwable) {
-            // ignore, keep base
+        val map = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+        value = base.map { opt ->
+            val qtyStr = opt.label.filter { it.isDigit() }
+            val k = if (qtyStr.isEmpty()) "" else "$keyPrefix$qtyStr"
+            val ov = map[k]
+            val newQty = ov?.minQty?.takeIf { it > 0 } ?: qtyStr.toIntOrNull() ?: 0
+            val newPrice = ov?.pricePerK ?: opt.priceUsd.toDouble()
+            val newLabel = if (newQty > 0) "$newQty $unit" else opt.label
+            PackageOption(newLabel, kotlin.math.round(newPrice).toInt())
         }
     }
-    return eff
+    return result
 }
 
 fun PackageGrid(
@@ -1577,7 +1584,7 @@ fun ConfirmPackageIdDialog(
                 PackageGrid(
                     title = "شحن شدات ببجي",
                     subtitle = "اختر الباقة",
-                    packages = rememberPackagesWithOverrides(pubgPackages, "pkg.pubg.", "شدة"),
+                    packages = packagesWithOverrides(pubgPackages, "pkg.pubg.", "شدة"),
                     onSelect = { opt ->
                         pendingPkgLabel = opt.label
                         pendingPkgPrice = opt.priceUsd
@@ -1589,7 +1596,7 @@ fun ConfirmPackageIdDialog(
                 PackageGrid(
                     title = "شراء الماسات لودو",
                     subtitle = "اختر الباقة",
-                    packages = rememberPackagesWithOverrides(ludoDiamondsPackages, "pkg.ludo.diamonds.", "الماسة"),
+                    packages = packagesWithOverrides(ludoDiamondsPackages, "pkg.ludo.diamonds.", "الماسة"),
                     onSelect = { opt ->
                         pendingPkgLabel = opt.label
                         pendingPkgPrice = opt.priceUsd
@@ -1601,7 +1608,7 @@ fun ConfirmPackageIdDialog(
                 PackageGrid(
                     title = "شراء ذهب لودو",
                     subtitle = "اختر الباقة",
-                    packages = rememberPackagesWithOverrides(ludoGoldPackages, "pkg.ludo.gold.", "ذهب"),
+                    packages = packagesWithOverrides(ludoGoldPackages, "pkg.ludo.gold.", "ذهب"),
                     onSelect = { opt ->
                         pendingPkgLabel = opt.label
                         pendingPkgPrice = opt.priceUsd

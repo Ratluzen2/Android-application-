@@ -280,12 +280,11 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
     var snack by remember { mutableStateOf<String?>(null) }
 
     val cats = listOf(
+        
         "مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
-        "مشاهدات انستغرام", "لايكات انستغرام", "متابعين انستغرام", "مشاهدات بث انستا",
-        "خدمات التليجرام"
-    ,
+        "مشاهدات انستغرام", "لايكات انستغرام", "متابعين انستغرام", "مشاهدات بث انستا", "خدمات التليجرام",
         "ببجي", "لودو"
-)
+    )
 
     fun servicesFor(cat: String): List<ServiceDef> {
         fun hasAll(key: String, vararg words: String) = words.all { key.contains(it) }
@@ -301,7 +300,7 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
                 "لايكات انستغرام"    -> hasAll(k, "لايكات", "انستغرام")
                 "متابعين انستغرام"   -> hasAll(k, "متابعين", "انستغرام")
                 "مشاهدات بث انستا"   -> hasAll(k, "مشاهدات", "بث", "انستا")
-                "خدمات التليجرام"    -> k.contains("تيليجرام") || k.contains("التليجرام")
+                "خدمات التليجرام"    -> k.contains("تيليجرام") || k.contains("التليجرام") || k.contains("تلي")
                 else -> false
             }
         }
@@ -323,29 +322,7 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
             Text("تغيير الأسعار والكميات", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
         }
         
-// بطاقات سريعة لتسعير عام لببجي/لودو
-Row(Modifier.fillMaxWidth()) {
-    GlobalPricingCard(
-        title = "ببجي (سعر عام)",
-        key = "cat.pubg",
-        token = token!!,
-        overrides = overrides,
-        onSaved = { refreshKey++ },
-        onSnack = { msg -> snack = msg }
-    )
-    GlobalPricingCard(
-        title = "لودو (سعر عام)",
-        key = "cat.ludo",
-        token = token!!,
-        overrides = overrides,
-        onSaved = { refreshKey++ },
-        onSnack = { msg -> snack = msg }
-    )
-}
-Spacer(Modifier.height(6.dp))
-Spacer(Modifier.height(10.dp))
-
-        if (loading) { CircularProgressIndicator(color = Accent); return@Column }
+if (loading) { CircularProgressIndicator(color = Accent); return@Column }
         snack?.let { s -> Snackbar(Modifier.fillMaxWidth()) { Text(s) }; LaunchedEffect(s) { kotlinx.coroutines.delay(2000); snack = null } }
         err?.let { e -> Text("تعذر جلب البيانات: $e", color = Bad); return@Column }
 
@@ -1883,7 +1860,6 @@ private fun isApiOrder(o: OrderItem): Boolean {
                 "فحص رصيد API"             to "provider_balance",
                             "تغيير رقم خدمات API" to "edit_svc_ids",
                 "تغيير الأسعار والكميات" to "edit_pricing",
-                "تعديل طلبات ببجي/لودو" to "edit_pubg_ludo",
 )
             buttons.chunked(2).forEach { row ->
                 Row(Modifier.fillMaxWidth()) {
@@ -1914,11 +1890,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
     onBack = { current = null }
 )
 
-                "edit_pubg_ludo" -> PubgLudoOrdersEditorScreen(
-                    token = token!!,
-                    onBack = { current = null }
-                )
-"pending_services" -> AdminPendingGenericList(
+                "pending_services" -> AdminPendingGenericList(
                     title = "طلبات خدمات API المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingServices,
@@ -2211,9 +2183,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
         "مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
         "مشاهدات انستغرام", "لايكات انستغرام", "متابعين انستغرام", "مشاهدات بث انستا",
         "خدمات التليجرام"
-    ,
-        "ببجي", "لودو"
-)
+    )
 
     fun servicesFor(cat: String): List<ServiceDef> {
         fun hasAll(key: String, vararg words: String) = words.all { key.contains(it) }
@@ -3088,171 +3058,6 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
     return c in 200..299
 }
 
-
-/* =========================
-   مُحرّر طلبات ببجي/لودو (سعر/كمية لكل طلب)
-   ========================= */
-private suspend fun apiAdminFetchPendingBasic(token: String, fetchUrl: String): List<PendingSvcItem> {
-    val (code, txt) = httpGet(fetchUrl, headers = mapOf("x-admin-password" to token))
-    if (code !in 200..299 || txt == null) return emptyList()
-    return try {
-        val out = mutableListOf<PendingSvcItem>()
-        val trimmed = txt.trim()
-        val arr: JSONArray = if (trimmed.startsWith("[")) {
-            JSONArray(trimmed)
-        } else {
-            val obj = JSONObject(trimmed)
-            when {
-                obj.has("list") -> obj.optJSONArray("list") ?: JSONArray()
-                obj.has("data") -> obj.optJSONArray("data") ?: JSONArray()
-                else -> JSONArray()
-            }
-        }
-        for (i in 0 until arr.length()) {
-            val it = arr.optJSONObject(i) ?: continue
-            val idAny = it.opt("id")
-            val id = when (idAny) {
-                is Int -> idAny.toLong()
-                is Long -> idAny
-                is String -> idAny.toLongOrNull() ?: -1L
-                else -> it.optLong("order_id", -1L)
-            }
-            val title = it.optString("title",
-                it.optString("name",
-                    it.optString("label","")))
-            val qty = if (it.has("quantity")) it.optInt("quantity", 0) else it.optInt("qty", 0)
-            val price = when {
-                it.has("price") -> it.optDouble("price", 0.0)
-                it.has("usd") -> it.optDouble("usd", 0.0)
-                else -> 0.0
-            }
-            if (id > 0 && title.isNotBlank()) out += PendingSvcItem(id, title, qty, price)
-        }
-        out
-    } catch (_: Exception) { emptyList() }
-}
-
-@Composable
-private fun PubgLudoOrdersEditorScreen(
-    token: String,
-    onBack: () -> Unit
-) {
-    val scope = rememberCoroutineScope()
-    var tab by remember { mutableStateOf("PUBG") } // or "LUDO"
-    var orders by remember { mutableStateOf(listOf<PendingSvcItem>()) }
-    var loading by remember { mutableStateOf(true) }
-    var refreshKey by remember { mutableStateOf(0) }
-    var snack by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(tab, refreshKey) {
-        loading = true
-        val fetchUrl = if (tab == "PUBG") AdminEndpoints.pendingPubg else AdminEndpoints.pendingLudo
-        orders = try { apiAdminFetchPendingBasic(token, fetchUrl) } catch (_: Throwable) { emptyList() }
-        loading = false
-    }
-
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text("تعديل طلبات ببجي/لودو", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-        }
-        Spacer(Modifier.height(10.dp))
-
-        // تبويب بسيط
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val isPubg = tab == "PUBG"
-            OutlinedButton(
-                onClick = { tab = "PUBG" },
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = if (isPubg) OnBg else Dim)
-            ) { Text("طلبات ببجي") }
-            val isLudo = tab == "LUDO"
-            OutlinedButton(
-                onClick = { tab = "LUDO" },
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = if (isLudo) OnBg else Dim)
-            ) { Text("طلبات لودو") }
-        }
-        Spacer(Modifier.height(10.dp))
-
-        when {
-            loading -> Text("يتم التحميل", color = Dim)
-            orders.isEmpty() -> Text("لا توجد طلبات حالياً", color = Dim)
-            else -> LazyColumn {
-                items(orders) { o ->
-                    var qtyTxt by remember { mutableStateOf(TextFieldValue(if (o.quantity > 0) o.quantity.toString() else "")) }
-                    var priceTxt by remember { mutableStateOf(TextFieldValue(if (o.price > 0.0) o.price.toString() else "")) }
-
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
-                    ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text("#${o.id} • ${o.title}", fontWeight = FontWeight.SemiBold, color = OnBg)
-                            Spacer(Modifier.height(4.dp))
-                            Text("الكمية الحالية: ${o.quantity} • السعر الحالي: ${o.price}", color = Dim, fontSize = 12.sp)
-                            Spacer(Modifier.height(8.dp))
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                OutlinedTextField(
-                                    value = qtyTxt,
-                                    onValueChange = { v -> qtyTxt = v },
-                                    label = { Text("الكمية الجديدة") },
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Button(onClick = {
-                                    scope.launch {
-                                        val q = qtyTxt.text.toIntOrNull() ?: 0
-                                        val ok = apiAdminSetOrderQty(token, o.id, q, reprice = false)
-                                        snack = if (ok) "تم حفظ الكمية للطلب #${o.id}" else "فشل الحفظ"
-                                        if (ok) refreshKey++
-                                    }
-                                }) { Text("حفظ الكمية") }
-                            }
-
-                            Spacer(Modifier.height(8.dp))
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                OutlinedTextField(
-                                    value = priceTxt,
-                                    onValueChange = { v -> priceTxt = v },
-                                    label = { Text("السعر المباشر (لهذا الطلب)") },
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Button(onClick = {
-                                    scope.launch {
-                                        val p = priceTxt.text.toDoubleOrNull() ?: 0.0
-                                        val ok = apiAdminSetOrderPrice(token, o.id, p)
-                                        snack = if (ok) "تم حفظ السعر للطلب #${o.id}" else "فشل الحفظ"
-                                        if (ok) refreshKey++
-                                    }
-                                }) { Text("حفظ السعر") }
-                            }
-
-                            Spacer(Modifier.height(6.dp))
-                            TextButton(onClick = {
-                                scope.launch {
-                                    val ok = apiAdminClearOrderPrice(token, o.id)
-                                    snack = if (ok) "تم حذف السعر الخاص للطلب #${o.id}" else "فشل حذف السعر"
-                                    if (ok) refreshKey++
-                                }
-                            }) { Text("حذف السعر الخاص") }
-                        }
-                    }
-                }
-            }
-        }
-
-        snack?.let {
-            Spacer(Modifier.height(10.dp))
-            Text(it, color = OnBg)
-            LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack = null }
-        }
-    }
-}
 /* =========================
    الإعدادات + دخول المالك
    ========================= */

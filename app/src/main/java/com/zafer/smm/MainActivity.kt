@@ -3,6 +3,7 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
+import androidx.compose.runtime.mutableStateListOf
 
 import android.content.Context
 import android.os.Bundle
@@ -366,7 +367,7 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
         loadingOrders = true
         val all = try { apiAdminFetchPendingServices(token) } catch (_: Throwable) { emptyList() }
         val flt = all.filter { it.title.contains(if (selectedCat=="ببجي") "ببجي" else "لودو") || it.title.contains(if (selectedCat=="ببجي") "pubg" else "ludo", true) }
-        orders = flt
+        orders.clear(); orders.addAll(flt)
         loadingOrders = false
     }
 

@@ -6,6 +6,7 @@ package com.zafer.smm
 
 import android.content.Context
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -2271,7 +2272,12 @@ private fun loadOrCreateUid(ctx: Context): String {
     val sp = prefs(ctx)
     val existing = sp.getString("uid", null)
     if (existing != null) return existing
-    val fresh = "U" + (100000..999999).random(Random(System.currentTimeMillis()))
+
+    // Stable device-based UID derived from ANDROID_ID (persists across app reinstalls / clearing data)
+    val androidId = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: ""
+    val base = if (androidId.isNotBlank()) androidId.uppercase(Locale.getDefault()) else "R" + (100000..999999).random(Random(System.currentTimeMillis()))
+    // Keep it compact and prefixed to avoid exposing raw device id
+    val fresh = "U" + base.take(16)
     sp.edit().putString("uid", fresh).apply()
     return fresh
 }

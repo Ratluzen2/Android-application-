@@ -3,6 +3,11 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Column
@@ -221,7 +226,8 @@ private suspend fun apiAdminClearOrderPrice(token: String, orderId: Long): Boole
     val (code, _) = httpPost(AdminEndpoints.orderClearPrice, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
-Admin Pricing Overrides API
+/* =========================
+   Admin Pricing Overrides API
    ========================= */
 data class PricingOverride(val pricePerK: Double, val minQty: Int, val maxQty: Int, val mode: String = "per_k")
 
@@ -362,16 +368,21 @@ Spacer(Modifier.height(10.dp))
                 Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
 
 
+
 /* PUBG/Ludo Orders Editor */
 if (selectedCat == "ببجي" || selectedCat == "لودو") {
-    var orders by remember { mutableStateOf<List<PendingSvcItem>>(emptyList()) }
+    val orders = remember { mutableStateListOf<PendingSvcItem>() }
     var loadingOrders by remember { mutableStateOf(true) }
     var refreshOrders by remember { mutableStateOf(0) }
 
     LaunchedEffect(selectedCat, refreshOrders) {
         loadingOrders = true
         val all = try { apiAdminFetchPendingServices(token) } catch (_: Throwable) { emptyList() }
-        val flt = all.filter { item.title.contains(if (selectedCat=="ببجي") "ببجي" else "لودو") || item.title.contains(if (selectedCat=="ببجي") "pubg" else "ludo", true) }
+        val flt = all.filter {
+            val t = (it.title ?: "").lowercase()
+            if (selectedCat == "ببجي") (t.contains("ببجي") || t.contains("pubg") || t.contains("uc"))
+            else (t.contains("لودو") || t.contains("ludo"))
+        }
         orders.clear(); orders.addAll(flt)
         loadingOrders = false
     }
@@ -385,6 +396,7 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
     } else {
         LazyColumn {
             items(orders) { o ->
+                var qtyTxt by remember { mutableStateOf(TextFieldValue(o.quantity.toString())) }
                 var priceTxt by remember { mutableStateOf(TextFieldValue(o.price.toString())) }
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
@@ -395,6 +407,29 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                         Spacer(Modifier.height(4.dp))
                         Text("الكمية: ${o.quantity} • السعر الحالي: ${o.price}", color = Dim, fontSize = 12.sp)
                         Spacer(Modifier.height(8.dp))
+
+                        // كمية الطلب
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = qtyTxt,
+                                onValueChange = { v -> qtyTxt = v },
+                                label = { Text("الكمية الجديدة") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Button(onClick = {
+                                scope.launch {
+                                    val q = qtyTxt.text.toIntOrNull() ?: 0
+                                    val ok = apiAdminSetOrderQty(token, o.id, q, reprice = false)
+                                    if (ok) { snack = "تم حفظ الكمية للطلب #${o.id}"; refreshOrders++ } else snack = "فشل الحفظ"
+                                }
+                            }) { Text("حفظ الكمية") }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+
+                        // سعر الطلب
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             OutlinedTextField(
                                 value = priceTxt,
@@ -410,7 +445,7 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                                     val ok = apiAdminSetOrderPrice(token, o.id, p)
                                     if (ok) { snack = "تم حفظ السعر للطلب #${o.id}"; refreshOrders++ } else snack = "فشل الحفظ"
                                 }
-                            }) { Text("حفظ") }
+                            }) { Text("حفظ السعر") }
                         }
                     }
                 }
@@ -419,6 +454,7 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
     }
     return@Column
 }
+
             }
             Spacer(Modifier.height(10.dp))
 
@@ -504,10 +540,10 @@ private fun GlobalPricingCard(
     val ov = overrides[key]
 
     ElevatedCard(
-        modifier = Modifier
-            .weight(1f)
-            .padding(4.dp)
-            .clickable { open = true },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(4.dp)
+                .clickable { open = true },
         colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
     ) {
         Text(title, Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold)

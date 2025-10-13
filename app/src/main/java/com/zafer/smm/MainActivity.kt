@@ -75,6 +75,8 @@ import com.google.firebase.messaging.RemoteMessage
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.android.gms.tasks.Task
 import androidx.lifecycle.lifecycleScope
+import androidx.work.*
+import java.util.concurrent.TimeUnit
 /* =========================
    Notifications (system-level)
    ========================= */
@@ -773,6 +775,7 @@ class MainActivity : ComponentActivity() {
         
         AppNotifier.ensureChannel(this)
         AppNotifier.requestPermissionIfNeeded(this)
+        OrderDoneCheckWorker.schedule(this)
         // === FCM token — خطوة 1 (تشغيلياً من داخل الملف الرئيسي) ===
         // يحصّل توكن FCM ويطبعه في اللوغ ويرسله لسيرفرك لربطه مع UID المستخدم
         try {
@@ -846,6 +849,41 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
         }
     }
 
+
+    // ✅ مراقبة تغيّر حالة الطلبات إلى Done أثناء فتح التطبيق (تنبيه فوري داخل النظام)
+    LaunchedEffect(uid) {
+        // نحفظ أول مسح حتى لا نرسل إشعارات قديمة
+        var initialized = false
+        var lastMap = loadOrderStatusMap(ctx)
+        while (true) {
+            try {
+                val current = (apiGetMyOrders(uid) ?: emptyList())
+                val newMap = lastMap.toMutableMap()
+                if (initialized) {
+                    current.forEach { o ->
+                        val prev = lastMap[o.id]
+                        val cur = o.status.name
+                        if (cur == "Done" && prev != "Done") {
+                            // أرسل إشعار نظام + خزّنه في مركز الإشعارات
+                            AppNotifier.notifyNow(ctx, "تم اكتمال الطلب", "تم تنفيذ ${o.title} بنجاح.")
+                            val nn = AppNotice("اكتمال الطلب", "تم تنفيذ ${o.title} بنجاح.", forOwner = false)
+                            notices = notices + nn
+                            saveNotices(ctx, notices)
+                        }
+                        newMap[o.id] = cur
+                    }
+                    saveOrderStatusMap(ctx, newMap)
+                } else {
+                    // أول مرة: فقط نبني الخريطة بدون تنبيهات
+                    current.forEach { o -> newMap[o.id] = o.status.name }
+                    saveOrderStatusMap(ctx, newMap)
+                    initialized = true
+                }
+                lastMap = newMap
+            } catch (_: Exception) { /* ignore */ }
+            delay(10_000)
+        }
+    }
     // Auto hide toast بعد 2 ثواني
     LaunchedEffect(toast) {
         if (toast != null) {
@@ -3291,6 +3329,90 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
                 }
             }
         )
+    }
+}
+
+
+/* =========================
+   حفظ/قراءة حالة الطلبات عبر SharedPreferences
+   ========================= */
+private fun loadOrderStatusMap(ctx: Context): Map<String, String> {
+    val raw = prefs(ctx).getString("order_status_map", "{}") ?: "{}"
+    return try {
+        val out = mutableMapOf<String, String>()
+        val o = JSONObject(raw)
+        val it = o.keys()
+        while (it.hasNext()) {
+            val k = it.next()
+            out[k] = o.optString(k, "")
+        }
+        out
+    } catch (_: Exception) { emptyMap() }
+}
+private fun saveOrderStatusMap(ctx: Context, map: Map<String, String>) {
+    val o = JSONObject()
+    map.forEach { (k, v) -> o.put(k, v) }
+    prefs(ctx).edit().putString("order_status_map", o.toString()).apply()
+}
+
+/* =========================
+   ربط FCM مع UID على السيرفر
+   ========================= */
+private suspend fun apiUpdateFcmToken(uid: String, token: String): Boolean {
+    val (code, _) = httpPost("/api/users/fcm_token", JSONObject().put("uid", uid).put("fcm", token))
+    return code in 200..299
+}
+
+/* =========================
+   عامل خلفي لفحص اكتمال الطلبات (WorkManager)
+   ========================= */
+class OrderDoneCheckWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
+    override suspend fun doWork(): Result {
+        val ctx = applicationContext
+        return try {
+            val uid = loadOrCreateUid(ctx)
+            val orders = apiGetMyOrders(uid) ?: emptyList()
+            val prev = loadOrderStatusMap(ctx)
+            val newMap = prev.toMutableMap()
+            var changed = false
+
+            orders.forEach { o ->
+                val prevStatus = prev[o.id]
+                val cur = o.status.name
+                if (cur == "Done" && prevStatus != "Done") {
+                    AppNotifier.notifyNow(ctx, "تم اكتمال الطلب", "تم تنفيذ ${o.title} بنجاح.")
+                    val nn = AppNotice("اكتمال الطلب", "تم تنفيذ ${o.title} بنجاح.", forOwner = false)
+                    val existing = loadNotices(ctx)
+                    saveNotices(ctx, existing + nn)
+                    changed = true
+                }
+                newMap[o.id] = cur
+            }
+            saveOrderStatusMap(ctx, newMap)
+            Result.success()
+        } catch (t: Throwable) {
+            Result.retry()
+        }
+    }
+
+    companion object {
+        fun schedule(context: Context) {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+            val req = PeriodicWorkRequestBuilder<OrderDoneCheckWorker>(15, TimeUnit.MINUTES)
+                .setConstraints(constraints)
+                .build()
+            WorkManager.getInstance(context.applicationContext)
+                .enqueueUniquePeriodicWork(
+                    "order_done_checker",
+                    ExistingPeriodicWorkPolicy.UPDATE,
+                    req
+                )
+            // تشغيل فحص فوري لمرة واحدة عند الإقلاع
+            val once = OneTimeWorkRequestBuilder<OrderDoneCheckWorker>().setConstraints(constraints).build()
+            WorkManager.getInstance(context.applicationContext).enqueue(once)
+        }
     }
 }
 

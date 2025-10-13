@@ -78,9 +78,6 @@ import androidx.lifecycle.lifecycleScope
 /* =========================
    Notifications (system-level)
    ========================= */
-import android.app.AlertDialog
-import android.content.ClipboardManager
-import android.content.ClipData
 object AppNotifier {
     private const val CHANNEL_ID = "zafer_main_high"
     private const val CHANNEL_NAME = "App Alerts"
@@ -133,7 +130,6 @@ object AppNotifier {
     }
 }
 
-
 @Composable
 private fun NoticeBody(text: String) {
     val clip = LocalClipboardManager.current
@@ -155,7 +151,6 @@ private fun NoticeBody(text: String) {
         }
     }
 }
-
 
 /* =========================
    إعدادات الخادم
@@ -204,7 +199,6 @@ private object AdminEndpoints {
     const val orderClearPrice = "/api/admin/pricing/order/clear"
     const val orderSetQty = "/api/admin/pricing/order/set_qty"
 }
-
 
 /* =========================
    Admin Service ID Overrides API
@@ -284,8 +278,6 @@ private suspend fun apiAdminSetOrderPrice(token: String, orderId: Long, price: D
     val (code, _) = httpPost(AdminEndpoints.orderSetPrice, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
-
-
 
 private suspend fun apiAdminSetOrderQty(token: String, orderId: Long, quantity: Int, reprice: Boolean = false): Boolean {
     val body = JSONObject().put("order_id", orderId).put("quantity", quantity).put("reprice", reprice)
@@ -369,8 +361,6 @@ private suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, Public
     } catch (_: Exception) { emptyMap() }
 }
 
-
-
 @Composable
 private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -446,8 +436,6 @@ if (loading) { CircularProgressIndicator(color = Accent); return@Column }
                 IconButton(onClick = { selectedCat = null }) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
                 Spacer(Modifier.width(6.dp))
                 Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
-
-
 
 /* PUBG/Ludo Orders Editor */
 if (selectedCat == "ببجي" || selectedCat == "لودو") {
@@ -623,7 +611,6 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
     }
 }
 
-
 @Composable
 private fun GlobalPricingCard(
     title: String,
@@ -794,42 +781,7 @@ class MainActivity : ComponentActivity() {
                     val token = task.result
                     android.util.Log.i("FCM", "Device FCM token: $token")
                     
-                        // === عرض/نسخ/مشاركة التوكن (للDebug) ===
-                        try {
-                            // 1) Toast سريع
-                            android.widget.Toast.makeText(this, "FCM: $token", android.widget.Toast.LENGTH_LONG).show()
-
-                            // 2) إشعار (يُفضّل أثناء التطوير فقط)
-                            if ((applicationContext.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
-                                AppNotifier.notifyNow(this, "FCM Token", token)
-                            }
-
-                            // 3) نسخ إلى الحافظة
-                            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            cm.setPrimaryClip(ClipData.newPlainText("FCM Token", token))
-
-                            // 4) نافذة تعرض التوكن مع خيارات نسخ/مشاركة
-                            AlertDialog.Builder(this)
-                                .setTitle("FCM Token")
-                                .setMessage(token)
-                                .setPositiveButton("نسخ") { d, _ ->
-                                    val c = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    c.setPrimaryClip(ClipData.newPlainText("FCM Token", token))
-                                    android.widget.Toast.makeText(this, "تم النسخ", android.widget.Toast.LENGTH_SHORT).show()
-                                    d.dismiss()
-                                }
-                                .setNeutralButton("مشاركة") { d, _ ->
-                                    val i = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_TEXT, token)
-                                    }
-                                    startActivity(Intent.createChooser(i, "مشاركة التوكن"))
-                                }
-                                .setNegativeButton("إغلاق", null)
-                                .show()
-                        } catch (_: Exception) { /* تجاهل أي خطأ واجه UI */ }
-
-// TODO: أرسل التوكن إلى باكندك (استبدل هذه الدالة بشفرتك الفعلية):
+                        // TODO: أرسل التوكن إلى باكندك (استبدل هذه الدالة بشفرتك الفعلية):
                     // scope.launch { apiUpdateFcmToken(loadOrCreateUid(this), token) }
                 } else {
                     android.util.Log.w("FCM", "Failed to get FCM token", task.exception)
@@ -1182,7 +1134,6 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
         else -> emptyList()
     }
 
-
     // Overlay live pricing on top of catalog using produceState (no try/catch around composables)
     val keys = remember(inCat, selectedCategory) { inCat.map { it.uiKey } }
     val effectiveMap by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keys) {
@@ -1329,7 +1280,6 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
     )
 }
 
-
 /* =========================
    Amount Picker (iTunes & Phone Cards)
    ========================= */
@@ -1424,11 +1374,9 @@ private fun ConfirmAmountDialog(
         }
     )
 
-
 }
 
 /* الأقسام اليدوية (ايتونز/هاتف/ببجي/لودو) */
-
 
 /* =========================
    Package Picker (PUBG / Ludo)
@@ -1597,8 +1545,6 @@ fun ConfirmPackageIdDialog(
         }
     )
 }
-
-
 
 @Composable private fun ManualSectionsScreen(
     title: String,
@@ -2099,7 +2045,6 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     onBack = { current = null }
                 )
 
-
 "edit_pricing" -> PricingEditorScreen(
     token = token!!,
     onBack = { current = null }
@@ -2383,7 +2328,6 @@ Row {
     }
 }
 
-
 @Composable
 private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -2553,9 +2497,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
         }
     }
 }
-
-
-
 
 /* =========================
    شاشة الكروت المعلّقة (المالك)
@@ -2940,8 +2881,6 @@ private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
     prefs(ctx).edit().putString("notices_json", arr.toString()).apply()
 }
 
-
-
 /* تتبع آخر وقت قراءة الإشعارات لكل وضع (مستخدم/مالك) */
 private fun lastSeenKey(forOwner: Boolean) = if (forOwner) "last_seen_owner" else "last_seen_user"
 private fun loadLastSeen(ctx: Context, forOwner: Boolean): Long =
@@ -3111,7 +3050,6 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
     } catch (_: Exception) { null }
 }
 
-
 /* ===== إشعارات المستخدم من الخادم ===== */
 private fun noticeKey(n: AppNotice) = n.title + "|" + n.body + "|" + n.ts
 
@@ -3159,7 +3097,6 @@ private suspend fun apiFetchNotificationsByUid(uid: String, limit: Int = 50): Li
     }
     return null
 }
-
 
 /* دخول المالك */
 private suspend fun apiAdminLogin(password: String): String? {

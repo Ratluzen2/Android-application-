@@ -793,8 +793,15 @@ class MainActivity : ComponentActivity() {
                     val token = task.result
                     android.util.Log.i("FCM", "Device FCM token: $token")
                     
-                        // TODO: أرسل التوكن إلى باكندك (استبدل هذه الدالة بشفرتك الفعلية):
-                    // scope.launch { apiUpdateFcmToken(loadOrCreateUid(this), token) }
+                        val uid = loadOrCreateUid(this)
+                    lifecycleScope.launch {
+                        try {
+                            val ok = apiUpdateFcmToken(uid, token)
+                            android.util.Log.i("FCM", "token sent to backend: $ok")
+                        } catch (e: Exception) {
+                            android.util.Log.w("FCM", "send token failed: ${e.message}")
+                        }
+                    }
                 } else {
                     android.util.Log.w("FCM", "Failed to get FCM token", task.exception)
                 }

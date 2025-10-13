@@ -782,15 +782,7 @@ class MainActivity : ComponentActivity() {
         
         AppNotifier.ensureChannel(this)
         AppNotifier.requestPermissionIfNeeded(this)
-
-                kotlin.runCatching {
-            val sp = getSharedPreferences("app_prefs", MODE_PRIVATE)
-            if (!sp.getBoolean("did_test_once", false)) {
-                sp.edit().putBoolean("did_test_once", true).apply()
-                }, 1500)
-            }
-        }
-    enableEdgeToEdge()
+        enableEdgeToEdge()
         setContent { AppTheme { AppRoot() } }
     }
 }

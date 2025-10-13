@@ -1366,7 +1366,7 @@ private fun packagesWithOverrides(
     }
     return result
 }
-
+@Composable
 fun PackageGrid(
     title: String,
     subtitle: String,

@@ -800,7 +800,7 @@ class MainActivity : ComponentActivity() {
                             android.widget.Toast.makeText(this, "FCM: $token", android.widget.Toast.LENGTH_LONG).show()
 
                             // 2) إشعار (يُفضّل أثناء التطوير فقط)
-                            if (BuildConfig.DEBUG) {
+                            if ((applicationContext.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
                                 AppNotifier.notifyNow(this, "FCM Token", token)
                             }
 

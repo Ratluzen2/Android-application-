@@ -123,6 +123,7 @@ object AppNotifier {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(pi)
         NotificationManagerCompat.from(ctx).notify((System.currentTimeMillis()%Int.MAX_VALUE).toInt(), builder.build())
     }
@@ -170,7 +171,7 @@ private object AdminEndpoints {
     const val pendingLudo     = "/api/admin/pending/ludo"
     const val pendingBalances = "/api/admin/pending/balances"
 
-    // ✅ الكروت المعلّقَة لأسيا سيل
+    // ✅ الكروت المعلّقة لأسيا سيل
     const val pendingCards    = "/api/admin/pending/cards"
     fun topupCardReject(id: Int) = "/api/admin/topup_cards/$id/reject"
     fun topupCardExecute(id: Int) = "/api/admin/topup_cards/$id/execute"
@@ -782,13 +783,10 @@ class MainActivity : ComponentActivity() {
         AppNotifier.ensureChannel(this)
         AppNotifier.requestPermissionIfNeeded(this)
 
-        // One-time self-test to verify system notifications actually appear
-        kotlin.runCatching {
-            val sp = getSharedPreferences("notif_debug", MODE_PRIVATE)
+                kotlin.runCatching {
+            val sp = getSharedPreferences("app_prefs", MODE_PRIVATE)
             if (!sp.getBoolean("did_test_once", false)) {
-                window.decorView.postDelayed({
-                    AppNotifier.notifyNow(this, "اختبار الإشعار", "إذا وصل هذا الإشعار، فالقناة تعمل ✅")
-                    sp.edit().putBoolean("did_test_once", true).apply()
+                sp.edit().putBoolean("did_test_once", true).apply()
                 }, 1500)
             }
         }

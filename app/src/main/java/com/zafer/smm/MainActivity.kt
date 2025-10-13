@@ -415,7 +415,7 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
         loading = false
     }
 
-    val ctx = LocalContext.current
+    val ctx = ctx
     val Dim = Color(0xFFADB5BD)
 
     Column(Modifier.fillMaxSize().background(Bg).padding(12.dp)) {
@@ -819,7 +819,7 @@ class MainActivity : ComponentActivity() {
    ========================= */
 @Composable
 fun AppRoot() {
-    val ctx = LocalContext.current
+    val ctx = ctx
     val scope = rememberCoroutineScope()
 
     var uid by remember { mutableStateOf(loadOrCreateUid(ctx)) }
@@ -1905,9 +1905,9 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             onDismissRequest = { if (!sending) askAsiacell = false },
             confirmButton = {
                 val scope2 = rememberCoroutineScope()
+val ctx = ctx
                 TextButton(enabled = !sending, onClick = {
                     val digits = cardNumber.filter { it.isDigit() }
-                    val ctx = LocalContext.current
                     val (allowed, reason) = asiacellGuardCheckAndRecord(ctx, uid, digits)
                     if (!allowed) { onToast(reason ?: "تم حظرك ساعة بسبب محاولات متكررة/سريعة."); return@TextButton }
 

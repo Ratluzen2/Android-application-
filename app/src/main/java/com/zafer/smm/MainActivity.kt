@@ -61,112 +61,71 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.random.Random
+
+/* =========================
+   Notifications (system-level)
+   ========================= */
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.Notification
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.compose.runtime.LaunchedEffect
 
-// == Notification Helpers ==
-private const val CHANNEL_USER = "notices_user"
-private const val CHANNEL_OWNER = "notices_owner"
+object AppNotifier {
+    private const val CHANNEL_ID = "zafer_main_high"
+    private const val CHANNEL_NAME = "App Alerts"
+    private const val CHANNEL_DESC = "User orders, balance updates, and general alerts"
 
-private fun Context.ensureNoticeChannels() {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val user = NotificationChannel(
-            CHANNEL_USER, "إشعارات المستخدم", NotificationManager.IMPORTANCE_HIGH
-        ).apply { description = "إشعارات حساب المستخدم" }
-
-// == Notice Details Helpers ==
-/** يحاول قراءة أي حقل نصي محتمل من كائن الإشعار (data class أو Map) بلا اعتماد على أسماء ثابتة. */
-private fun tryGetStringField(obj: Any?, name: String): String? {
-    if (obj == null) return null
-    (obj as? Map<*, *>)?.let { m ->
-        (m[name] as? String)?.let { return it }
+    fun ensureChannel(ctx: android.content.Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val ch = NotificationChannel(
+                CHANNEL_ID,
+                CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = CHANNEL_DESC
+                enableVibration(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            }
+            val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.createNotificationChannel(ch)
+        }
     }
-    return runCatching {
-        val f = obj.javaClass.getDeclaredField(name)
-        f.isAccessible = true
-        f.get(obj) as? String
-    }.getOrNull()
-}
 
-/** يبني نصًا تفصيليًا متوافقًا مع ما يظهر داخل أيقونة الإشعارات داخل التطبيق. */
-private fun noticeDetails(n: Any): String {
-    val parts = mutableListOf<String>()
-    fun add(name: String) {
-        val v = tryGetStringField(n, name)
-        if (!v.isNullOrBlank()) parts += v
+    fun requestPermissionIfNeeded(activity: androidx.activity.ComponentActivity) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9911)
+            }
+        }
     }
-    // الحقول الأساسية المحتملة
-    add("label"); add("message"); add("body"); add("text"); add("desc"); add("description")
 
-    // الحقول الإضافية الشائعة
-    fun addPair(title: String, key: String) {
-        tryGetStringField(n, key)?.takeIf { it.isNotBlank() }?.let { parts += "$title: " + it }
+    fun notifyNow(ctx: android.content.Context, title: String, body: String) {
+        ensureChannel(ctx)
+        val tapIntent = Intent(ctx, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        val pi = PendingIntent.getActivity(
+            ctx, (System.currentTimeMillis()%10000).toInt(), tapIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val builder = NotificationCompat.Builder(ctx, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_notify_chat) // uses system icon to avoid resource issues
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pi)
+        NotificationManagerCompat.from(ctx).notify((System.currentTimeMillis()%Int.MAX_VALUE).toInt(), builder.build())
     }
-    addPair("رقم الطلب", "orderId")
-    addPair("الخدمة", "serviceName")
-    addPair("الكمية", "quantity")
-    addPair("السعر", "price")
-    addPair("ID اللعبة", "gameId")
-
-    if (parts.isEmpty()) return ""
-    if (parts.size == 1) return parts.first()
-    val first = parts.take(2).joinToString(" • ")
-    val rest = parts.drop(2).joinToString(separator = "\n")
-    return if (rest.isBlank()) first else first + "\n" + rest
-}
-
-        val owner = NotificationChannel(
-            CHANNEL_OWNER, "إشعارات المالك", NotificationManager.IMPORTANCE_HIGH
-        ).apply { description = "إشعارات لوحة تحكم المالك" }
-        nm.createNotificationChannel(user)
-        nm.createNotificationChannel(owner)
-    }
-}
-
-private fun Context.pushSystemNotice(
-    title: String,
-    message: String,
-    forOwner: Boolean,
-    requestCode: Int = ((System.currentTimeMillis() % Int.MAX_VALUE).toInt())
-) {
-    val openIntent = Intent(this, MainActivity::class.java).apply {
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        putExtra("from_notification", true)
-    }
-    val flags = (if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0) or
-            PendingIntent.FLAG_UPDATE_CURRENT
-    val pi = PendingIntent.getActivity(this, requestCode, openIntent, flags)
-
-    val channel = if (forOwner) CHANNEL_OWNER else CHANNEL_USER
-    val notif = NotificationCompat.Builder(this, channel)
-        .setSmallIcon(android.R.drawable.ic_dialog_info)
-        .setContentTitle(if (title.isBlank()) if (forOwner) "تنبيه للمالك" else "إشعار جديد" else title)
-        .setContentText(if (message.isBlank()) "لديك تحديث جديد" else message)
-        .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-        .setAutoCancel(true)
-        .setPriority(NotificationCompat.PRIORITY_HIGH)
-        .setContentIntent(pi)
-        .build()
-
-    NotificationManagerCompat.from(this).notify(requestCode, notif)
-}
-
-private fun Context.prefs() = getSharedPreferences("app", Context.MODE_PRIVATE)
-
-private fun Context.getLastNotifiedTs(forOwner: Boolean): Long =
-    prefs().getLong(if (forOwner) "lastNotified_owner" else "lastNotified_user", 0L)
-
-private fun Context.setLastNotifiedTs(forOwner: Boolean, ts: Long) {
-    prefs().edit()
-        .putLong(if (forOwner) "lastNotified_owner" else "lastNotified_user", ts)
-        .apply()
 }
 
 
@@ -819,7 +778,10 @@ private val serviceCategories = listOf(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        
+        AppNotifier.ensureChannel(this)
+        AppNotifier.requestPermissionIfNeeded(this)
+enableEdgeToEdge()
         setContent { AppTheme { AppRoot() } }
     }
 }
@@ -869,66 +831,6 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
             if (merged.size != before) {
                 notices = merged
                 saveNotices(ctx, notices)
-
-            // Push system notifications for any new items
-            val lastUserN = ctx.getLastNotifiedTs(false)
-            val lastOwnerN = ctx.getLastNotifiedTs(true)
-            var maxUserN = lastUserN
-            var maxOwnerN = lastOwnerN
-            val newOnes = merged.filter { it.ts > if (it.forOwner) lastOwnerN else lastUserN }
-            newOnes.forEach { n ->
-                val msg = noticeDetails(n).ifBlank { "لديك إشعار جديد" }
-
-// == System Notification helper independent of existing app APIs ==
-private fun Context.pushSystemNoticeSystemChannel(
-    title: String,
-    message: String,
-    forOwner: Boolean,
-    requestCode: Int
-) {
-    val channelId = if (forOwner) "owner_alerts" else "user_alerts"
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        val name = if (forOwner) "تنبيهات المالك" else "إشعارات المستخدم"
-        val importance = NotificationManager.IMPORTANCE_DEFAULT
-        val channel = NotificationChannel(channelId, name, importance)
-        val nm = getSystemService(NotificationManager::class.java)
-        if (nm.getNotificationChannel(channelId) == null) {
-            nm.createNotificationChannel(channel)
-        }
-    }
-    val n = NotificationCompat.Builder(this, channelId)
-        .setSmallIcon(android.R.drawable.ic_dialog_info)
-        .setContentTitle(title)
-        .setContentText(message.take(48))
-        .setStyle(NotificationCompat.BigTextStyle().bigText(message))
-        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-        .setAutoCancel(true)
-        .build()
-    NotificationManagerCompat.from(this).notify(requestCode, n)
-}
-
-
-                ctx.pushSystemNoticeSystemChannel(
-                    title = n.title ?: if (n.forOwner) "تنبيه للمالك" else "إشعار جديد",
-                    message = msg,
-                    forOwner = n.forOwner,
-                    requestCode = (n.ts % Int.MAX_VALUE).toInt()
-                )
-                if (n.forOwner) {
-                    if (n.ts > maxOwnerN) maxOwnerN = n.ts
-                } else {
-                    if (n.ts > maxUserN) maxUserN = n.ts
-                }
-                ctx.pushSystemNoticeSystemChannel(
-                    title = n.title ?: if (n.forOwner) "تنبيه للمالك" else "إشعار جديد",
-                    message = msg,
-                    forOwner = n.forOwner,
-                    requestCode = (n.ts % Int.MAX_VALUE).toInt()
-                )
-                if (n.forOwner) { if (n.ts > maxOwnerN) maxOwnerN = n.ts } else { if (n.ts > maxUserN) maxUserN = n.ts }
-            }
-            if (maxUserN != lastUserN) ctx.setLastNotifiedTs(false, maxUserN)
-            if (maxOwnerN != lastOwnerN) ctx.setLastNotifiedTs(true, maxOwnerN)
                 noticeTick++
             }
             delay(10_000)
@@ -963,40 +865,18 @@ private fun Context.pushSystemNoticeSystemChannel(
             Tab.SERVICES -> ServicesScreen(
                 uid = uid,
                 onAddNotice = {
-
                     notices = notices + it
                     saveNotices(ctx, notices)
-                }
-                    ctx.pushSystemNoticeSystemChannel(
-                        title = n.title ?: if (n.forOwner) "تنبيه للمالك" else "إشعار جديد",
-                        message = msg,
-                        forOwner = n.forOwner,
-                        requestCode = ((n.ts % Int.MAX_VALUE).toInt())
-                    )
-                    val lastN = ctx.getLastNotifiedTs(n.forOwner)
-                    if (n.ts > lastN) ctx.setLastNotifiedTs(n.forOwner, n.ts)
-        
-},
+                },
                 onToast = { toast = it }
             )
             Tab.WALLET -> WalletScreen(
                 uid = uid,
                 noticeTick = noticeTick,
                 onAddNotice = {
-
                     notices = notices + it
                     saveNotices(ctx, notices)
-                }
-                    ctx.pushSystemNoticeSystemChannel(
-                        title = n.title ?: if (n.forOwner) "تنبيه للمالك" else "إشعار جديد",
-                        message = msg,
-                        forOwner = n.forOwner,
-                        requestCode = ((n.ts % Int.MAX_VALUE).toInt())
-                    )
-                    val lastN = ctx.getLastNotifiedTs(n.forOwner)
-                    if (n.ts > lastN) ctx.setLastNotifiedTs(n.forOwner, n.ts)
-        
-},
+                },
                 onToast = { toast = it }
             )
             Tab.ORDERS -> OrdersScreen(uid = uid)

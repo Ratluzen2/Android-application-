@@ -71,6 +71,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.runtime.Composable
 /* =========================
    Notifications (system-level)
    ========================= */
@@ -126,6 +130,7 @@ object AppNotifier {
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun NoticeBody(text: String) {
     val clip = LocalClipboardManager.current
@@ -357,6 +362,7 @@ private suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, Public
     } catch (_: Exception) { emptyMap() }
 }
 
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -607,6 +613,7 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun GlobalPricingCard(
     title: String,
@@ -681,7 +688,9 @@ private val Good     = Color(0xFF4CAF50)
 private val Bad      = Color(0xFFE53935)
 private val Dim      = Color(0xFFAAB3BB)
 
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 fun AppTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
@@ -794,6 +803,7 @@ class MainActivity : ComponentActivity() {
 /* =========================
    Root
    ========================= */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AppRoot() {
     val ctx = LocalContext.current
@@ -964,11 +974,13 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
 /* =========================
    شاشات عامة
    ========================= */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun HomeScreen() {
     Box(Modifier.fillMaxSize().background(Bg), contentAlignment = Alignment.Center) {
         Text("مرحبًا بك 👋", color = OnBg, fontSize = 18.sp)
     }
 }
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun SupportScreen() {
     val uri = LocalUriHandler.current
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -987,6 +999,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
         )
     }
 }
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun ContactCard(
     title: String, subtitle: String, actionText: String,
     onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector
@@ -1013,6 +1026,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
 /* =========================
    الشريط العلوي يمين — (عمودي)
    ========================= */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun TopRightBar(
     online: Boolean?, unread: Int,
     onOpenNotices: () -> Unit, onOpenSettings: () -> Unit,
@@ -1056,6 +1070,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
 }
 
 /* مركز الإشعارات */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun NoticeCenterDialog(
     notices: List<AppNotice>, onClear: () -> Unit, onDismiss: () -> Unit
 ) {
@@ -1085,6 +1100,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
 /* =========================
    تبويب الخدمات + الطلب اليدوي
    ========================= */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun ServicesScreen(
     uid: String,
     onAddNotice: (AppNotice) -> Unit,
@@ -1196,6 +1212,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun ServiceOrderDialog(
     uid: String, service: ServiceDef,
     onDismiss: () -> Unit,
@@ -1299,6 +1316,7 @@ private fun priceForKorek(usd: Int): Double {
     return steps * 7.0
 }
 
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun AmountGrid(
     title: String,
@@ -1346,6 +1364,7 @@ private fun AmountGrid(
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun ConfirmAmountDialog(
     sectionTitle: String,
@@ -1409,10 +1428,12 @@ val ludoGoldPackages = listOf(
     PackageOption("124550000 ذهب", 800)
 )
 
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 /* ===== Helpers for PUBG/Ludo package overrides ===== */
 private fun extractDigits(s: String): String = s.filter { it.isDigit() }
 
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun packagesWithOverrides(
     base: List<PackageOption>,
@@ -1437,6 +1458,7 @@ private fun packagesWithOverrides(
     }
     return result
 }
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PackageGrid(
     title: String,
@@ -1479,6 +1501,7 @@ fun PackageGrid(
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ConfirmPackageDialog(
     sectionTitle: String,
@@ -1504,6 +1527,7 @@ fun ConfirmPackageDialog(
     )
 }
 
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ConfirmPackageIdDialog(
     sectionTitle: String,
@@ -1542,6 +1566,7 @@ fun ConfirmPackageIdDialog(
     )
 }
 
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun ManualSectionsScreen(
     title: String,
     uid: String,
@@ -1782,6 +1807,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     }
 
 }
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun WalletScreen(
     uid: String,
     noticeTick: Int = 0,
@@ -1894,6 +1920,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
 /* =========================
    تبويب طلباتي
    ========================= */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun OrdersScreen(uid: String) {
     var orders by remember { mutableStateOf<List<OrderItem>?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -1977,6 +2004,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
 /* =========================
    لوحة تحكم المالك
    ========================= */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun OwnerPanel(
     token: String?,
     onNeedLogin: () -> Unit,
@@ -2125,6 +2153,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
 }
 
 /** قائمة عامة للمعلّقات مع مُرشِّح OrderItem + خيار “تنفيذ بكود” */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun AdminPendingGenericList(
     title: String,
     token: String,
@@ -2324,6 +2353,7 @@ Row {
     }
 }
 
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -2497,6 +2527,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 /* =========================
    شاشة الكروت المعلّقة (المالك)
    ========================= */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun AdminPendingCardsScreen(
     token: String,
     onBack: () -> Unit
@@ -2626,6 +2657,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
    ========================= */
 
 /** إضافة/خصم رصيد — تنفذ الطلب بنفسها داخل Coroutine */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun TopupDeductScreen(
     title: String,
     token: String,
@@ -2676,6 +2708,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 }
 
 /** عدد المستخدمين */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun UsersCountScreen(
     token: String,
     onBack: () -> Unit
@@ -2708,6 +2741,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 }
 
 /** أرصدة المستخدمين */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun UsersBalancesScreen(
     token: String,
     onBack: () -> Unit
@@ -2759,6 +2793,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 }
 
 /** فحص رصيد المزود */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun ProviderBalanceScreen(
     token: String,
     onBack: () -> Unit
@@ -2802,6 +2837,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 /* =========================
    شريط سفلي
    ========================= */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun BottomNavBar(current: Tab, onChange: (Tab) -> Unit, modifier: Modifier = Modifier) {
     NavigationBar(modifier = modifier.fillMaxWidth(), containerColor = Surface1) {
         NavItem(current == Tab.HOME, { onChange(Tab.HOME) }, Icons.Filled.Home, "الرئيسية")
@@ -2811,6 +2847,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
         NavItem(current == Tab.SUPPORT, { onChange(Tab.SUPPORT) }, Icons.Filled.ChatBubble, "الدعم")
     }
 }
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun RowScope.NavItem(
     selected: Boolean, onClick: () -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector, label: String
@@ -3209,6 +3246,7 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
 /* =========================
    الإعدادات + دخول المالك
    ========================= */
+@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun SettingsDialog(
     uid: String,
     ownerMode: Boolean,

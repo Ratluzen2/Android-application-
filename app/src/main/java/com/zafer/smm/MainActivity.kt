@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.mutableStateListOf
-
 import android.content.Context
 import android.os.Bundle
 import android.provider.Settings
@@ -39,7 +38,6 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
-
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -61,10 +59,6 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.random.Random
-
-/* =========================
-   Notifications (system-level)
-   ========================= */
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -76,7 +70,14 @@ import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-
+import com.google.firebase.messaging.FirebaseMessagingService
+import com.google.firebase.messaging.RemoteMessage
+import com.google.firebase.messaging.FirebaseMessaging
+import com.google.android.gms.tasks.Task
+import androidx.lifecycle.lifecycleScope
+/* =========================
+   Notifications (system-level)
+   ========================= */
 object AppNotifier {
     private const val CHANNEL_ID = "zafer_main_high"
     private const val CHANNEL_NAME = "App Alerts"
@@ -785,7 +786,7 @@ class MainActivity : ComponentActivity() {
         // === FCM token — خطوة 1 (تشغيلياً من داخل الملف الرئيسي) ===
         // يحصّل توكن FCM ويطبعه في اللوغ ويرسله لسيرفرك لربطه مع UID المستخدم
         try {
-            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task: com.google.android.gms.tasks.Task<String> ->
                 if (task.isSuccessful) {
                     val token = task.result
                     android.util.Log.i("FCM", "Device FCM token: $token")
@@ -3320,9 +3321,6 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
 /* =========================
    FCM Service (same file)
    ========================= */
-import com.google.firebase.messaging.FirebaseMessagingService
-import com.google.firebase.messaging.RemoteMessage
-
 class MyFirebaseService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)

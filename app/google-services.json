@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "123456789012",
-    "project_id": "zafer-smm-app",
-    "storage_bucket": "zafer-smm-app.appspot.com"
+    "project_number": "1014506938171",
+    "project_id": "ratluzen-smm-backend",
+    "storage_bucket": "ratluzen-smm-backend.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789012:android:abcdef1234567890",
+        "mobilesdk_app_id": "1:1014506938171:android:de6a7e053abb679fc1e11e",
         "android_client_info": {
           "package_name": "com.zafer.smm"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyA-EXAMPLE1234567890abcdef"
+          "current_key": "AIzaSyCmi0kZlkjc5radt_Qgcj1BupABlqn2NbA"
         }
       ],
       "services": {

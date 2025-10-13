@@ -3,9 +3,14 @@ buildscript {
         google()
         mavenCentral()
     }
+    dependencies {
+        // Google Services Gradle plugin (required for google-services.json processing)
+        classpath 'com.google.gms:google-services:4.4.2'
+    }
 }
 
 plugins {
     id 'com.android.application' version '8.4.1' apply false
     id 'org.jetbrains.kotlin.android' version '1.9.24' apply false
+    // لا تضف google-services هنا في الجذر؛ هذا يضاف في app/build.gradle (تم إضافته مسبقًا)
 }

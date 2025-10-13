@@ -1,3 +1,8 @@
+@file:OptIn(
+    androidx.compose.material.ExperimentalMaterialApi::class,
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class
+)
 package com.zafer.smm
 import android.Manifest
 import android.app.Notification

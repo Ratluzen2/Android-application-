@@ -20,7 +20,7 @@
 
         <!-- خدمة FCM لاستقبال الإشعارات حتى لو التطبيق مُغلق -->
         <service
-            android:name=".push.MyFirebaseService"
+            android:name=".MyFirebaseService"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />

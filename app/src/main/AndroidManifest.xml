@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- إنترنت -->
+    
+    <!-- إذن إشعارات Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+<!-- إنترنت -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- (اختياري) لإشعار دائم عند تشغيل خدمة أمامية -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
 
     <application
         android:allowBackup="true"

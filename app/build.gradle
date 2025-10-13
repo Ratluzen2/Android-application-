@@ -1,6 +1,7 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    id 'com.google.gms.google-services'
 }
 
 android {
@@ -49,6 +50,8 @@ android {
 }
 
 dependencies {
+    // Firebase BOM لتثبيت إصدارات متوافقة
+    implementation platform('com.google.firebase:firebase-bom:33.4.0')
     // Compose BOM
     implementation platform('androidx.compose:compose-bom:2024.06.00')
     androidTestImplementation platform('androidx.compose:compose-bom:2024.06.00')
@@ -83,6 +86,9 @@ dependencies {
     implementation 'com.squareup.retrofit2:converter-gson:2.11.0'
     implementation 'com.google.code.gson:gson:2.11.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
+
+    // إشعارات Firebase Cloud Messaging (FCM)
+    implementation 'com.google.firebase:firebase-messaging'
 
     // DataStore لحفظ جلسة المالك
     implementation 'androidx.datastore:datastore-preferences:1.1.1'

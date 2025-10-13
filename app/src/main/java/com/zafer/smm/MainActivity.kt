@@ -878,7 +878,37 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
             val newOnes = merged.filter { it.ts > if (it.forOwner) lastOwnerN else lastUserN }
             newOnes.forEach { n ->
                 val msg = noticeDetails(n).ifBlank { "لديك إشعار جديد" }
-                ctx.pushSystemNotice(
+
+// == System Notification helper independent of existing app APIs ==
+private fun Context.pushSystemNoticeSystemChannel(
+    title: String,
+    message: String,
+    forOwner: Boolean,
+    requestCode: Int
+) {
+    val channelId = if (forOwner) "owner_alerts" else "user_alerts"
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val name = if (forOwner) "تنبيهات المالك" else "إشعارات المستخدم"
+        val importance = NotificationManager.IMPORTANCE_DEFAULT
+        val channel = NotificationChannel(channelId, name, importance)
+        val nm = getSystemService(NotificationManager::class.java)
+        if (nm.getNotificationChannel(channelId) == null) {
+            nm.createNotificationChannel(channel)
+        }
+    }
+    val n = NotificationCompat.Builder(this, channelId)
+        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setContentTitle(title)
+        .setContentText(message.take(48))
+        .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        .setAutoCancel(true)
+        .build()
+    NotificationManagerCompat.from(this).notify(requestCode, n)
+}
+
+
+                ctx.pushSystemNoticeSystemChannel(
                     title = n.title ?: if (n.forOwner) "تنبيه للمالك" else "إشعار جديد",
                     message = msg,
                     forOwner = n.forOwner,
@@ -889,7 +919,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
                 } else {
                     if (n.ts > maxUserN) maxUserN = n.ts
                 }
-                ctx.pushSystemNotice(
+                ctx.pushSystemNoticeSystemChannel(
                     title = n.title ?: if (n.forOwner) "تنبيه للمالك" else "إشعار جديد",
                     message = msg,
                     forOwner = n.forOwner,
@@ -937,7 +967,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
                     notices = notices + it
                     saveNotices(ctx, notices)
                 }
-                    ctx.pushSystemNotice(
+                    ctx.pushSystemNoticeSystemChannel(
                         title = n.title ?: if (n.forOwner) "تنبيه للمالك" else "إشعار جديد",
                         message = msg,
                         forOwner = n.forOwner,
@@ -957,7 +987,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
                     notices = notices + it
                     saveNotices(ctx, notices)
                 }
-                    ctx.pushSystemNotice(
+                    ctx.pushSystemNoticeSystemChannel(
                         title = n.title ?: if (n.forOwner) "تنبيه للمالك" else "إشعار جديد",
                         message = msg,
                         forOwner = n.forOwner,

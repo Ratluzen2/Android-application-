@@ -1,23 +1,4 @@
 package com.zafer.smm
-
-
-// ---- Local shim for ExperimentalMaterialApi (remove when material dependency is added) ----
-import kotlin.annotation.AnnotationRetention
-import kotlin.annotation.AnnotationTarget
-import kotlin.RequiresOptIn
-
-@RequiresOptIn(level = RequiresOptIn.Level.Warning)
-@Retention(AnnotationRetention.BINARY)
-@Target(
-    AnnotationTarget.CLASS,
-    AnnotationTarget.FUNCTION,
-    AnnotationTarget.PROPERTY,
-    AnnotationTarget.TYPEALIAS,
-    AnnotationTarget.CONSTRUCTOR
-)
-annotation class ExperimentalMaterialApi
-// ---- End shim ----
-
 import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
@@ -90,9 +71,24 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import androidx.compose.material.ExperimentalMaterialApi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.runtime.Composable
+
+// ---- Local shim for ExperimentalMaterialApi (remove when material dependency is added) ----
+@kotlin.RequiresOptIn(level = kotlin.RequiresOptIn.Level.WARNING)
+@kotlin.annotation.Retention(kotlin.annotation.AnnotationRetention.BINARY)
+@kotlin.annotation.Target(
+    kotlin.annotation.AnnotationTarget.CLASS,
+    kotlin.annotation.AnnotationTarget.FUNCTION,
+    kotlin.annotation.AnnotationTarget.PROPERTY,
+    kotlin.annotation.AnnotationTarget.TYPEALIAS,
+    kotlin.annotation.AnnotationTarget.CONSTRUCTOR
+)
+annotation class ExperimentalMaterialApi
+// ---- End shim ----
+
 /* =========================
    Notifications (system-level)
    ========================= */

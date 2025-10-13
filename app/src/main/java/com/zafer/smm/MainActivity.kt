@@ -1,13 +1,17 @@
+
+@file:Suppress("UnusedImport", "SpellCheckingInspection")
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.zafer.smm
-import android.Manifest
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.mutableStateListOf
 import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
@@ -16,27 +20,17 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,50 +38,43 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.ActivityCompat
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.lifecycle.lifecycleScope
-import com.google.android.gms.tasks.Task
-import com.google.firebase.messaging.FirebaseMessaging
-import com.google.firebase.messaging.FirebaseMessagingService
-import com.google.firebase.messaging.RemoteMessage
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import kotlin.math.ceil
-import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.runtime.Composable
-
-// ---- Local shim for ExperimentalMaterialApi (remove when material dependency is added) ----
-@kotlin.RequiresOptIn(level = kotlin.RequiresOptIn.Level.WARNING)
-@kotlin.annotation.Retention(kotlin.annotation.AnnotationRetention.BINARY)
-@kotlin.annotation.Target(
-    kotlin.annotation.AnnotationTarget.CLASS,
-    kotlin.annotation.AnnotationTarget.FUNCTION,
-    kotlin.annotation.AnnotationTarget.PROPERTY,
-    kotlin.annotation.AnnotationTarget.TYPEALIAS,
-    kotlin.annotation.AnnotationTarget.CONSTRUCTOR
-)
-annotation class ExperimentalMaterialApi
-// ---- End shim ----
-
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URLEncoder
+import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.ceil
+import kotlin.random.Random
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.Notification
+import android.app.PendingIntent
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import com.google.firebase.messaging.FirebaseMessagingService
+import com.google.firebase.messaging.RemoteMessage
+import com.google.firebase.messaging.FirebaseMessaging
+import com.google.android.gms.tasks.Task
+import androidx.lifecycle.lifecycleScope
 /* =========================
    Notifications (system-level)
    ========================= */
@@ -143,7 +130,6 @@ object AppNotifier {
     }
 }
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun NoticeBody(text: String) {
     val clip = LocalClipboardManager.current
@@ -375,7 +361,6 @@ private suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, Public
     } catch (_: Exception) { emptyMap() }
 }
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -626,7 +611,6 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
     }
 }
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun GlobalPricingCard(
     title: String,
@@ -701,9 +685,7 @@ private val Good     = Color(0xFF4CAF50)
 private val Bad      = Color(0xFFE53935)
 private val Dim      = Color(0xFFAAB3BB)
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 fun AppTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
@@ -816,7 +798,6 @@ class MainActivity : ComponentActivity() {
 /* =========================
    Root
    ========================= */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AppRoot() {
     val ctx = LocalContext.current
@@ -987,13 +968,11 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
 /* =========================
    شاشات عامة
    ========================= */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun HomeScreen() {
     Box(Modifier.fillMaxSize().background(Bg), contentAlignment = Alignment.Center) {
         Text("مرحبًا بك 👋", color = OnBg, fontSize = 18.sp)
     }
 }
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun SupportScreen() {
     val uri = LocalUriHandler.current
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -1012,7 +991,6 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
         )
     }
 }
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun ContactCard(
     title: String, subtitle: String, actionText: String,
     onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector
@@ -1039,7 +1017,6 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
 /* =========================
    الشريط العلوي يمين — (عمودي)
    ========================= */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun TopRightBar(
     online: Boolean?, unread: Int,
     onOpenNotices: () -> Unit, onOpenSettings: () -> Unit,
@@ -1083,7 +1060,6 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
 }
 
 /* مركز الإشعارات */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun NoticeCenterDialog(
     notices: List<AppNotice>, onClear: () -> Unit, onDismiss: () -> Unit
 ) {
@@ -1113,7 +1089,6 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
 /* =========================
    تبويب الخدمات + الطلب اليدوي
    ========================= */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun ServicesScreen(
     uid: String,
     onAddNotice: (AppNotice) -> Unit,
@@ -1225,7 +1200,6 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
     }
 }
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun ServiceOrderDialog(
     uid: String, service: ServiceDef,
     onDismiss: () -> Unit,
@@ -1329,7 +1303,6 @@ private fun priceForKorek(usd: Int): Double {
     return steps * 7.0
 }
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun AmountGrid(
     title: String,
@@ -1377,7 +1350,6 @@ private fun AmountGrid(
     }
 }
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun ConfirmAmountDialog(
     sectionTitle: String,
@@ -1441,12 +1413,10 @@ val ludoGoldPackages = listOf(
     PackageOption("124550000 ذهب", 800)
 )
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 /* ===== Helpers for PUBG/Ludo package overrides ===== */
 private fun extractDigits(s: String): String = s.filter { it.isDigit() }
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun packagesWithOverrides(
     base: List<PackageOption>,
@@ -1471,7 +1441,6 @@ private fun packagesWithOverrides(
     }
     return result
 }
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PackageGrid(
     title: String,
@@ -1514,7 +1483,6 @@ fun PackageGrid(
     }
 }
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ConfirmPackageDialog(
     sectionTitle: String,
@@ -1540,7 +1508,6 @@ fun ConfirmPackageDialog(
     )
 }
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ConfirmPackageIdDialog(
     sectionTitle: String,
@@ -1579,7 +1546,6 @@ fun ConfirmPackageIdDialog(
     )
 }
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun ManualSectionsScreen(
     title: String,
     uid: String,
@@ -1820,7 +1786,6 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     }
 
 }
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun WalletScreen(
     uid: String,
     noticeTick: Int = 0,
@@ -1933,7 +1898,6 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
 /* =========================
    تبويب طلباتي
    ========================= */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun OrdersScreen(uid: String) {
     var orders by remember { mutableStateOf<List<OrderItem>?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -2017,7 +1981,6 @@ private fun isApiOrder(o: OrderItem): Boolean {
 /* =========================
    لوحة تحكم المالك
    ========================= */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun OwnerPanel(
     token: String?,
     onNeedLogin: () -> Unit,
@@ -2166,7 +2129,6 @@ private fun isApiOrder(o: OrderItem): Boolean {
 }
 
 /** قائمة عامة للمعلّقات مع مُرشِّح OrderItem + خيار “تنفيذ بكود” */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun AdminPendingGenericList(
     title: String,
     token: String,
@@ -2366,7 +2328,6 @@ Row {
     }
 }
 
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -2540,7 +2501,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 /* =========================
    شاشة الكروت المعلّقة (المالك)
    ========================= */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun AdminPendingCardsScreen(
     token: String,
     onBack: () -> Unit
@@ -2670,7 +2630,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
    ========================= */
 
 /** إضافة/خصم رصيد — تنفذ الطلب بنفسها داخل Coroutine */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun TopupDeductScreen(
     title: String,
     token: String,
@@ -2721,7 +2680,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 }
 
 /** عدد المستخدمين */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun UsersCountScreen(
     token: String,
     onBack: () -> Unit
@@ -2754,7 +2712,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 }
 
 /** أرصدة المستخدمين */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun UsersBalancesScreen(
     token: String,
     onBack: () -> Unit
@@ -2806,7 +2763,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 }
 
 /** فحص رصيد المزود */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun ProviderBalanceScreen(
     token: String,
     onBack: () -> Unit
@@ -2850,7 +2806,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 /* =========================
    شريط سفلي
    ========================= */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun BottomNavBar(current: Tab, onChange: (Tab) -> Unit, modifier: Modifier = Modifier) {
     NavigationBar(modifier = modifier.fillMaxWidth(), containerColor = Surface1) {
         NavItem(current == Tab.HOME, { onChange(Tab.HOME) }, Icons.Filled.Home, "الرئيسية")
@@ -2860,7 +2815,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
         NavItem(current == Tab.SUPPORT, { onChange(Tab.SUPPORT) }, Icons.Filled.ChatBubble, "الدعم")
     }
 }
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun RowScope.NavItem(
     selected: Boolean, onClick: () -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector, label: String
@@ -3259,7 +3213,6 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
 /* =========================
    الإعدادات + دخول المالك
    ========================= */
-@OptIn(ExperimentalMaterialApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun SettingsDialog(
     uid: String,
     ownerMode: Boolean,

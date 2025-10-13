@@ -878,8 +878,17 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
             val newOnes = merged.filter { it.ts > if (it.forOwner) lastOwnerN else lastUserN }
             newOnes.forEach { n ->
                 val msg = noticeDetails(n).ifBlank { "لديك إشعار جديد" }
-                    n.message?.let { append(it) }
-                }.ifBlank { "لديك إشعار جديد" }
+                ctx.pushSystemNotice(
+                    title = n.title ?: if (n.forOwner) "تنبيه للمالك" else "إشعار جديد",
+                    message = msg,
+                    forOwner = n.forOwner,
+                    requestCode = (n.ts % Int.MAX_VALUE).toInt()
+                )
+                if (n.forOwner) {
+                    if (n.ts > maxOwnerN) maxOwnerN = n.ts
+                } else {
+                    if (n.ts > maxUserN) maxUserN = n.ts
+                }
                 ctx.pushSystemNotice(
                     title = n.title ?: if (n.forOwner) "تنبيه للمالك" else "إشعار جديد",
                     message = msg,
@@ -924,18 +933,40 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
             Tab.SERVICES -> ServicesScreen(
                 uid = uid,
                 onAddNotice = {
+
                     notices = notices + it
                     saveNotices(ctx, notices)
-                },
+                }
+                    ctx.pushSystemNotice(
+                        title = n.title ?: if (n.forOwner) "تنبيه للمالك" else "إشعار جديد",
+                        message = msg,
+                        forOwner = n.forOwner,
+                        requestCode = ((n.ts % Int.MAX_VALUE).toInt())
+                    )
+                    val lastN = ctx.getLastNotifiedTs(n.forOwner)
+                    if (n.ts > lastN) ctx.setLastNotifiedTs(n.forOwner, n.ts)
+        
+},
                 onToast = { toast = it }
             )
             Tab.WALLET -> WalletScreen(
                 uid = uid,
                 noticeTick = noticeTick,
                 onAddNotice = {
+
                     notices = notices + it
                     saveNotices(ctx, notices)
-                },
+                }
+                    ctx.pushSystemNotice(
+                        title = n.title ?: if (n.forOwner) "تنبيه للمالك" else "إشعار جديد",
+                        message = msg,
+                        forOwner = n.forOwner,
+                        requestCode = ((n.ts % Int.MAX_VALUE).toInt())
+                    )
+                    val lastN = ctx.getLastNotifiedTs(n.forOwner)
+                    if (n.ts > lastN) ctx.setLastNotifiedTs(n.forOwner, n.ts)
+        
+},
                 onToast = { toast = it }
             )
             Tab.ORDERS -> OrdersScreen(uid = uid)

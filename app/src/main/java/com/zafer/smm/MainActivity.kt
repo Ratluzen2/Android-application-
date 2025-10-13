@@ -75,8 +75,6 @@ import com.google.firebase.messaging.RemoteMessage
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.android.gms.tasks.Task
 import androidx.lifecycle.lifecycleScope
-
-import java.util.concurrent.TimeUnit
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.Constraints
@@ -86,6 +84,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ListenableWorker
+import java.util.concurrent.TimeUnit
+import android.graphics.Color
+import android.graphics.BitmapFactory
 /* =========================
    Notifications (system-level)
    ========================= */
@@ -861,7 +862,6 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
 
     // ✅ مراقبة تغيّر حالة الطلبات إلى Done أثناء فتح التطبيق (تنبيه فوري داخل النظام)
     LaunchedEffect(uid) {
-        // نحفظ أول مسح حتى لا نرسل إشعارات قديمة
         var initialized = false
         var lastMap = loadOrderStatusMap(ctx)
         while (true) {
@@ -873,7 +873,6 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
                         val prev = lastMap[o.id]
                         val cur = o.status.name
                         if (cur == "Done" && prev != "Done") {
-                            // أرسل إشعار نظام + خزّنه في مركز الإشعارات
                             AppNotifier.notifyNow(ctx, "تم اكتمال الطلب", "تم تنفيذ ${o.title} بنجاح.")
                             val nn = AppNotice("اكتمال الطلب", "تم تنفيذ ${o.title} بنجاح.", forOwner = false)
                             notices = notices + nn
@@ -883,7 +882,6 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
                     }
                     saveOrderStatusMap(ctx, newMap)
                 } else {
-                    // أول مرة: فقط نبني الخريطة بدون تنبيهات
                     current.forEach { o -> newMap[o.id] = o.status.name }
                     saveOrderStatusMap(ctx, newMap)
                     initialized = true
@@ -3416,7 +3414,6 @@ class OrderDoneCheckWorker(appContext: Context, params: WorkerParameters) : Coro
                     ExistingPeriodicWorkPolicy.UPDATE,
                     req
                 )
-            // فحص فوري لمرة واحدة عند الإقلاع
             val once = OneTimeWorkRequestBuilder<OrderDoneCheckWorker>().setConstraints(constraints).build()
             WorkManager.getInstance(context.applicationContext).enqueue(once)
         }

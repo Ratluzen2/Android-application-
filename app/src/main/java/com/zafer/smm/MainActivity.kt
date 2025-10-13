@@ -1907,6 +1907,10 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                 val scope2 = rememberCoroutineScope()
                 TextButton(enabled = !sending, onClick = {
                     val digits = cardNumber.filter { it.isDigit() }
+                    val ctx = LocalContext.current
+                    val (allowed, reason) = asiacellGuardCheckAndRecord(ctx, uid, digits)
+                    if (!allowed) { onToast(reason ?: "تم حظرك ساعة بسبب محاولات متكررة/سريعة."); return@TextButton }
+
                     if (digits.length != 14 && digits.length != 16) return@TextButton
                     sending = true
                     scope2.launch {
@@ -3034,6 +3038,61 @@ private suspend fun apiCreateProviderOrder(
         .put("price", price)
     val (code, txt) = httpPost("/api/orders/create/provider", body)
     return code in 200..299 && (txt?.contains("ok", ignoreCase = true) == true)
+}
+
+// =========================
+// Asiacell local anti-abuse guard (duplicate & rapid submissions)
+// - Ban 1 hour if the SAME card is submitted more than twice within 1 hour
+// - Ban 1 hour if 5 cards (any numbers) are submitted within 60 seconds
+// =========================
+private fun asiacellGuardCheckAndRecord(ctx: android.content.Context, uid: String, cardDigits: String): Pair<Boolean, String?> {
+    val prefs = ctx.getSharedPreferences("asiacell_guard", android.content.Context.MODE_PRIVATE)
+    val now = System.currentTimeMillis()
+    val banUntil = prefs.getLong("ban_until", 0L)
+    if (now < banUntil) {
+        val remainMin = ((banUntil - now) / 60000L).coerceAtLeast(1L)
+        return Pair(false, "محظور مؤقتًا لمدة ${remainMin} دقيقة بسبب محاولات غير طبيعية. حاول لاحقًا.")
+    }
+
+    // --- Duplicate (same card) within 1 hour ---
+    val dupKey = "dup_${cardDigits}_count"
+    val dupTsKey = "dup_${cardDigits}_ts"
+    var dupCount = prefs.getInt(dupKey, 0)
+    var dupTs = prefs.getLong(dupTsKey, 0L)
+    // Reset window if older than 1 hour
+    if (now - dupTs > 3600_000L) {
+        dupCount = 0
+        dupTs = now
+    }
+
+    // --- Rapid submissions window (any cards) ---
+    val recentRaw = prefs.getString("recent_ts", "") ?: ""
+    val parts = recentRaw.split(",").filter { it.isNotBlank() }
+    val recent = parts.mapNotNull { it.toLongOrNull() }.filter { ts -> now - ts <= 60_000L }.toMutableList()
+
+    // Threshold pre-checks (do NOT include current yet)
+    val wouldBeDup = (dupCount + 1) > 2  // more than twice => 3rd time triggers ban
+    val wouldBeRapid = (recent.size + 1) >= 5  // 5 within <=60s triggers ban
+
+    if (wouldBeDup || wouldBeRapid) {
+        // set 1-hour ban
+        prefs.edit()
+            .putLong("ban_until", now + 3600_000L)
+            .putString("ban_reason", if (wouldBeDup) "duplicate_card" else "rapid_fire")
+            .apply()
+        return Pair(false, "تم حظرك ساعة بسبب ${if (wouldBeDup) "تكرار نفس الكارت أكثر من مرتين" else "إرسال عدة كارتات بسرعة"}")
+    }
+
+    // Record current attempt (since allowed)
+    recent += now
+    val recentStr = recent.joinToString(",")
+    prefs.edit()
+        .putString("recent_ts", recentStr)
+        .putInt(dupKey, dupCount + 1)
+        .putLong(dupTsKey, if (dupCount == 0) now else dupTs) // keep start of window
+        .apply()
+
+    return Pair(true, null)
 }
 
 /* أسيا سيل */

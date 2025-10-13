@@ -61,6 +61,71 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.random.Random
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Intent
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+
+// == Notification Helpers ==
+private const val CHANNEL_USER = "notices_user"
+private const val CHANNEL_OWNER = "notices_owner"
+
+private fun Context.ensureNoticeChannels() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val user = NotificationChannel(
+            CHANNEL_USER, "إشعارات المستخدم", NotificationManager.IMPORTANCE_HIGH
+        ).apply { description = "إشعارات حساب المستخدم" }
+        val owner = NotificationChannel(
+            CHANNEL_OWNER, "إشعارات المالك", NotificationManager.IMPORTANCE_HIGH
+        ).apply { description = "إشعارات لوحة تحكم المالك" }
+        nm.createNotificationChannel(user)
+        nm.createNotificationChannel(owner)
+    }
+}
+
+private fun Context.pushSystemNotice(
+    title: String,
+    message: String,
+    forOwner: Boolean,
+    requestCode: Int = ((System.currentTimeMillis() % Int.MAX_VALUE).toInt())
+) {
+    val openIntent = Intent(this, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        putExtra("from_notification", true)
+    }
+    val flags = (if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0) or
+            PendingIntent.FLAG_UPDATE_CURRENT
+    val pi = PendingIntent.getActivity(this, requestCode, openIntent, flags)
+
+    val channel = if (forOwner) CHANNEL_OWNER else CHANNEL_USER
+    val notif = NotificationCompat.Builder(this, channel)
+        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setContentTitle(if (title.isBlank()) if (forOwner) "تنبيه للمالك" else "إشعار جديد" else title)
+        .setContentText(if (message.isBlank()) "لديك تحديث جديد" else message)
+        .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+        .setAutoCancel(true)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setContentIntent(pi)
+        .build()
+
+    NotificationManagerCompat.from(this).notify(requestCode, notif)
+}
+
+private fun Context.prefs() = getSharedPreferences("app", Context.MODE_PRIVATE)
+
+private fun Context.getLastNotifiedTs(forOwner: Boolean): Long =
+    prefs().getLong(if (forOwner) "lastNotified_owner" else "lastNotified_user", 0L)
+
+private fun Context.setLastNotifiedTs(forOwner: Boolean, ts: Long) {
+    prefs().edit()
+        .putLong(if (forOwner) "lastNotified_owner" else "lastNotified_user", ts)
+        .apply()
+}
+
 
 @Composable
 private fun NoticeBody(text: String) {
@@ -761,6 +826,28 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
             if (merged.size != before) {
                 notices = merged
                 saveNotices(ctx, notices)
+
+            // Push system notifications for any new items
+            val lastUserN = ctx.getLastNotifiedTs(false)
+            val lastOwnerN = ctx.getLastNotifiedTs(true)
+            var maxUserN = lastUserN
+            var maxOwnerN = lastOwnerN
+            val newOnes = merged.filter { it.ts > if (it.forOwner) lastOwnerN else lastUserN }
+            newOnes.forEach { n ->
+                val msg = buildString {
+                    n.label?.let { append(it).append(" • ") }
+                    n.message?.let { append(it) }
+                }.ifBlank { "لديك إشعار جديد" }
+                ctx.pushSystemNotice(
+                    title = n.title ?: if (n.forOwner) "تنبيه للمالك" else "إشعار جديد",
+                    message = msg,
+                    forOwner = n.forOwner,
+                    requestCode = (n.ts % Int.MAX_VALUE).toInt()
+                )
+                if (n.forOwner) { if (n.ts > maxOwnerN) maxOwnerN = n.ts } else { if (n.ts > maxUserN) maxUserN = n.ts }
+            }
+            if (maxUserN != lastUserN) ctx.setLastNotifiedTs(false, maxUserN)
+            if (maxOwnerN != lastOwnerN) ctx.setLastNotifiedTs(true, maxOwnerN)
                 noticeTick++
             }
             delay(10_000)

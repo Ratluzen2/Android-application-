@@ -782,6 +782,22 @@ class MainActivity : ComponentActivity() {
         
         AppNotifier.ensureChannel(this)
         AppNotifier.requestPermissionIfNeeded(this)
+        // === FCM token — خطوة 1 (تشغيلياً من داخل الملف الرئيسي) ===
+        // يحصّل توكن FCM ويطبعه في اللوغ ويرسله لسيرفرك لربطه مع UID المستخدم
+        try {
+            FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val token = task.result
+                    android.util.Log.i("FCM", "Device FCM token: $token")
+                    // TODO: أرسل التوكن إلى باكندك (استبدل هذه الدالة بشفرتك الفعلية):
+                    // scope.launch { apiUpdateFcmToken(loadOrCreateUid(this), token) }
+                } else {
+                    android.util.Log.w("FCM", "Failed to get FCM token", task.exception)
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("FCM", "Exception while getting token", e)
+        }
         enableEdgeToEdge()
         setContent { AppTheme { AppRoot() } }
     }

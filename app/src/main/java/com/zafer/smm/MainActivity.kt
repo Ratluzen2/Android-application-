@@ -68,6 +68,7 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.compose.runtime.LaunchedEffect
 
 // == Notification Helpers ==
 private const val CHANNEL_USER = "notices_user"
@@ -79,6 +80,48 @@ private fun Context.ensureNoticeChannels() {
         val user = NotificationChannel(
             CHANNEL_USER, "إشعارات المستخدم", NotificationManager.IMPORTANCE_HIGH
         ).apply { description = "إشعارات حساب المستخدم" }
+
+// == Notice Details Helpers ==
+/** يحاول قراءة أي حقل نصي محتمل من كائن الإشعار (data class أو Map) بلا اعتماد على أسماء ثابتة. */
+private fun tryGetStringField(obj: Any?, name: String): String? {
+    if (obj == null) return null
+    (obj as? Map<*, *>)?.let { m ->
+        (m[name] as? String)?.let { return it }
+    }
+    return runCatching {
+        val f = obj.javaClass.getDeclaredField(name)
+        f.isAccessible = true
+        f.get(obj) as? String
+    }.getOrNull()
+}
+
+/** يبني نصًا تفصيليًا متوافقًا مع ما يظهر داخل أيقونة الإشعارات داخل التطبيق. */
+private fun noticeDetails(n: Any): String {
+    val parts = mutableListOf<String>()
+    fun add(name: String) {
+        val v = tryGetStringField(n, name)
+        if (!v.isNullOrBlank()) parts += v
+    }
+    // الحقول الأساسية المحتملة
+    add("label"); add("message"); add("body"); add("text"); add("desc"); add("description")
+
+    // الحقول الإضافية الشائعة
+    fun addPair(title: String, key: String) {
+        tryGetStringField(n, key)?.takeIf { it.isNotBlank() }?.let { parts += "$title: " + it }
+    }
+    addPair("رقم الطلب", "orderId")
+    addPair("الخدمة", "serviceName")
+    addPair("الكمية", "quantity")
+    addPair("السعر", "price")
+    addPair("ID اللعبة", "gameId")
+
+    if (parts.isEmpty()) return ""
+    if (parts.size == 1) return parts.first()
+    val first = parts.take(2).joinToString(" • ")
+    val rest = parts.drop(2).joinToString(separator = "\n")
+    return if (rest.isBlank()) first else first + "\n" + rest
+}
+
         val owner = NotificationChannel(
             CHANNEL_OWNER, "إشعارات المالك", NotificationManager.IMPORTANCE_HIGH
         ).apply { description = "إشعارات لوحة تحكم المالك" }
@@ -834,8 +877,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
             var maxOwnerN = lastOwnerN
             val newOnes = merged.filter { it.ts > if (it.forOwner) lastOwnerN else lastUserN }
             newOnes.forEach { n ->
-                val msg = buildString {
-                    n.label?.let { append(it).append(" • ") }
+                val msg = noticeDetails(n).ifBlank { "لديك إشعار جديد" }
                     n.message?.let { append(it) }
                 }.ifBlank { "لديك إشعار جديد" }
                 ctx.pushSystemNotice(

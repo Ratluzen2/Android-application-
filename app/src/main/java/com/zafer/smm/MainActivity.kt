@@ -3374,7 +3374,6 @@ class OrderDoneCheckWorker(appContext: Context, params: WorkerParameters) : Coro
             val orders = apiGetMyOrders(uid) ?: emptyList()
             val prev = loadOrderStatusMap(ctx)
             val newMap = prev.toMutableMap()
-            var changed = false
 
             orders.forEach { o ->
                 val prevStatus = prev[o.id]
@@ -3384,13 +3383,12 @@ class OrderDoneCheckWorker(appContext: Context, params: WorkerParameters) : Coro
                     val nn = AppNotice("اكتمال الطلب", "تم تنفيذ ${o.title} بنجاح.", forOwner = false)
                     val existing = loadNotices(ctx)
                     saveNotices(ctx, existing + nn)
-                    changed = true
                 }
                 newMap[o.id] = cur
             }
             saveOrderStatusMap(ctx, newMap)
             Result.success()
-        } catch (t: Throwable) {
+        } catch (_: Throwable) {
             Result.retry()
         }
     }
@@ -3409,7 +3407,7 @@ class OrderDoneCheckWorker(appContext: Context, params: WorkerParameters) : Coro
                     ExistingPeriodicWorkPolicy.UPDATE,
                     req
                 )
-            // تشغيل فحص فوري لمرة واحدة عند الإقلاع
+            // فحص فوري لمرة واحدة عند الإقلاع
             val once = OneTimeWorkRequestBuilder<OrderDoneCheckWorker>().setConstraints(constraints).build()
             WorkManager.getInstance(context.applicationContext).enqueue(once)
         }

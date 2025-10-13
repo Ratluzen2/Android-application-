@@ -75,8 +75,17 @@ import com.google.firebase.messaging.RemoteMessage
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.android.gms.tasks.Task
 import androidx.lifecycle.lifecycleScope
-import androidx.work.*
+
 import java.util.concurrent.TimeUnit
+import androidx.work.CoroutineWorker
+import androidx.work.WorkerParameters
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ListenableWorker
 /* =========================
    Notifications (system-level)
    ========================= */
@@ -3367,7 +3376,7 @@ private suspend fun apiUpdateFcmToken(uid: String, token: String): Boolean {
    عامل خلفي لفحص اكتمال الطلبات (WorkManager)
    ========================= */
 class OrderDoneCheckWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
-    override suspend fun doWork(): Result {
+    override suspend fun doWork(): ListenableWorker.Result {
         val ctx = applicationContext
         return try {
             val uid = loadOrCreateUid(ctx)
@@ -3387,9 +3396,9 @@ class OrderDoneCheckWorker(appContext: Context, params: WorkerParameters) : Coro
                 newMap[o.id] = cur
             }
             saveOrderStatusMap(ctx, newMap)
-            Result.success()
+            ListenableWorker.Result.success()
         } catch (_: Throwable) {
-            Result.retry()
+            ListenableWorker.Result.retry()
         }
     }
 

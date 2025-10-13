@@ -78,6 +78,9 @@ import androidx.lifecycle.lifecycleScope
 /* =========================
    Notifications (system-level)
    ========================= */
+import android.app.AlertDialog
+import android.content.ClipboardManager
+import android.content.ClipData
 object AppNotifier {
     private const val CHANNEL_ID = "zafer_main_high"
     private const val CHANNEL_NAME = "App Alerts"
@@ -790,7 +793,43 @@ class MainActivity : ComponentActivity() {
                 if (task.isSuccessful) {
                     val token = task.result
                     android.util.Log.i("FCM", "Device FCM token: $token")
-                    // TODO: أرسل التوكن إلى باكندك (استبدل هذه الدالة بشفرتك الفعلية):
+                    
+                        // === عرض/نسخ/مشاركة التوكن (للDebug) ===
+                        try {
+                            // 1) Toast سريع
+                            android.widget.Toast.makeText(this, "FCM: $token", android.widget.Toast.LENGTH_LONG).show()
+
+                            // 2) إشعار (يُفضّل أثناء التطوير فقط)
+                            if (BuildConfig.DEBUG) {
+                                AppNotifier.notifyNow(this, "FCM Token", token)
+                            }
+
+                            // 3) نسخ إلى الحافظة
+                            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            cm.setPrimaryClip(ClipData.newPlainText("FCM Token", token))
+
+                            // 4) نافذة تعرض التوكن مع خيارات نسخ/مشاركة
+                            AlertDialog.Builder(this)
+                                .setTitle("FCM Token")
+                                .setMessage(token)
+                                .setPositiveButton("نسخ") { d, _ ->
+                                    val c = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    c.setPrimaryClip(ClipData.newPlainText("FCM Token", token))
+                                    android.widget.Toast.makeText(this, "تم النسخ", android.widget.Toast.LENGTH_SHORT).show()
+                                    d.dismiss()
+                                }
+                                .setNeutralButton("مشاركة") { d, _ ->
+                                    val i = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, token)
+                                    }
+                                    startActivity(Intent.createChooser(i, "مشاركة التوكن"))
+                                }
+                                .setNegativeButton("إغلاق", null)
+                                .show()
+                        } catch (_: Exception) { /* تجاهل أي خطأ واجه UI */ }
+
+// TODO: أرسل التوكن إلى باكندك (استبدل هذه الدالة بشفرتك الفعلية):
                     // scope.launch { apiUpdateFcmToken(loadOrCreateUid(this), token) }
                 } else {
                     android.util.Log.w("FCM", "Failed to get FCM token", task.exception)

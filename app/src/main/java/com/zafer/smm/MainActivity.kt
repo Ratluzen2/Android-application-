@@ -94,7 +94,7 @@ object AppNotifier {
     private const val CHANNEL_NAME = "App Alerts"
     private const val CHANNEL_DESC = "User orders, balance updates, and general alerts"
 
-    fun ensureChannel(ctx: android.content.Context) {
+    fun ensureChannel(LocalContext.current: android.content.Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val ch = NotificationChannel(
                 CHANNEL_ID,
@@ -105,7 +105,7 @@ object AppNotifier {
                 enableVibration(true)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
-            val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as NotificationManager
+            val nm = LocalContext.current.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.createNotificationChannel(ch)
         }
     }
@@ -119,16 +119,16 @@ object AppNotifier {
         }
     }
 
-    fun notifyNow(ctx: android.content.Context, title: String, body: String) {
-        ensureChannel(ctx)
-        val tapIntent = Intent(ctx, MainActivity::class.java).apply {
+    fun notifyNow(LocalContext.current: android.content.Context, title: String, body: String) {
+        ensureChannel(LocalContext.current)
+        val tapIntent = Intent(LocalContext.current, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         val pi = PendingIntent.getActivity(
-            ctx, (System.currentTimeMillis()%10000).toInt(), tapIntent,
+            LocalContext.current, (System.currentTimeMillis()%10000).toInt(), tapIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val builder = NotificationCompat.Builder(ctx, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(LocalContext.current, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_chat) // uses system icon to avoid resource issues
             .setContentTitle(title)
             .setContentText(body)
@@ -137,7 +137,7 @@ object AppNotifier {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setContentIntent(pi)
-        NotificationManagerCompat.from(ctx).notify((System.currentTimeMillis()%Int.MAX_VALUE).toInt(), builder.build())
+        NotificationManagerCompat.from(LocalContext.current).notify((System.currentTimeMillis()%Int.MAX_VALUE).toInt(), builder.build())
     }
 }
 
@@ -415,7 +415,7 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
         loading = false
     }
 
-    val ctx = ctx
+    val LocalContext.current = LocalContext.current
     val Dim = Color(0xFFADB5BD)
 
     Column(Modifier.fillMaxSize().background(Bg).padding(12.dp)) {
@@ -819,23 +819,23 @@ class MainActivity : ComponentActivity() {
    ========================= */
 @Composable
 fun AppRoot() {
-    val ctx = ctx
+    val LocalContext.current = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var uid by remember { mutableStateOf(loadOrCreateUid(ctx)) }
-    var ownerMode by remember { mutableStateOf(loadOwnerMode(ctx)) }
-    var ownerToken by remember { mutableStateOf(loadOwnerToken(ctx)) }
+    var uid by remember { mutableStateOf(loadOrCreateUid(LocalContext.current)) }
+    var ownerMode by remember { mutableStateOf(loadOwnerMode(LocalContext.current)) }
+    var ownerToken by remember { mutableStateOf(loadOwnerToken(LocalContext.current)) }
 
     var online by remember { mutableStateOf<Boolean?>(null) }
     var toast by remember { mutableStateOf<String?>(null) }
     var showSettings by remember { mutableStateOf(false) }
 
-    var notices by remember { mutableStateOf(loadNotices(ctx)) }
+    var notices by remember { mutableStateOf(loadNotices(LocalContext.current)) }
     var noticeTick by remember { mutableStateOf(0) }
     var showNoticeCenter by remember { mutableStateOf(false) }
 
-    var lastSeenUser by remember { mutableStateOf(loadLastSeen(ctx, false)) }
-    var lastSeenOwner by remember { mutableStateOf(loadLastSeen(ctx, true)) }
+    var lastSeenUser by remember { mutableStateOf(loadLastSeen(LocalContext.current, false)) }
+    var lastSeenOwner by remember { mutableStateOf(loadLastSeen(LocalContext.current, true)) }
 
     val unreadUser = notices.count { !it.forOwner && it.ts > lastSeenUser }
     val unreadOwner = notices.count { it.forOwner && it.ts > lastSeenOwner }
@@ -858,7 +858,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
             val merged = mergeNotices(notices.filter { !it.forOwner }, remote) + notices.filter { it.forOwner }
             if (merged.size != before) {
                 notices = merged
-                saveNotices(ctx, notices)
+                saveNotices(LocalContext.current, notices)
                 noticeTick++
             }
             delay(10_000)
@@ -870,7 +870,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
     LaunchedEffect(uid) {
         // نحفظ أول مسح حتى لا نرسل إشعارات قديمة
         var initialized = false
-        var lastMap = loadOrderStatusMap(ctx)
+        var lastMap = loadOrderStatusMap(LocalContext.current)
         while (true) {
             try {
                 val current = (apiGetMyOrders(uid) ?: emptyList())
@@ -881,18 +881,18 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
                         val cur = o.status.name
                         if (cur == "Done" && prev != "Done") {
                             // أرسل إشعار نظام + خزّنه في مركز الإشعارات
-                            AppNotifier.notifyNow(ctx, "تم اكتمال الطلب", "تم تنفيذ ${o.title} بنجاح.")
+                            AppNotifier.notifyNow(LocalContext.current, "تم اكتمال الطلب", "تم تنفيذ ${o.title} بنجاح.")
                             val nn = AppNotice("اكتمال الطلب", "تم تنفيذ ${o.title} بنجاح.", forOwner = false)
                             notices = notices + nn
-                            saveNotices(ctx, notices)
+                            saveNotices(LocalContext.current, notices)
                         }
                         newMap[o.id] = cur
                     }
-                    saveOrderStatusMap(ctx, newMap)
+                    saveOrderStatusMap(LocalContext.current, newMap)
                 } else {
                     // أول مرة: فقط نبني الخريطة بدون تنبيهات
                     current.forEach { o -> newMap[o.id] = o.status.name }
-                    saveOrderStatusMap(ctx, newMap)
+                    saveOrderStatusMap(LocalContext.current, newMap)
                     initialized = true
                 }
                 lastMap = newMap
@@ -929,7 +929,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
                 uid = uid,
                 onAddNotice = {
                     notices = notices + it
-                    saveNotices(ctx, notices)
+                    saveNotices(LocalContext.current, notices)
                 },
                 onToast = { toast = it }
             )
@@ -938,7 +938,7 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
                 noticeTick = noticeTick,
                 onAddNotice = {
                     notices = notices + it
-                    saveNotices(ctx, notices)
+                    saveNotices(LocalContext.current, notices)
                 },
                 onToast = { toast = it }
             )
@@ -985,14 +985,14 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
             onOwnerLogin = { token ->
                 ownerToken = token
                 ownerMode = true
-                saveOwnerMode(ctx, true)
-                saveOwnerToken(ctx, token)
+                saveOwnerMode(LocalContext.current, true)
+                saveOwnerToken(LocalContext.current, token)
             },
             onOwnerLogout = {
                 ownerToken = null
                 ownerMode = false
-                saveOwnerMode(ctx, false)
-                saveOwnerToken(ctx, null)
+                saveOwnerMode(LocalContext.current, false)
+                saveOwnerToken(LocalContext.current, null)
             },
             onDismiss = { showSettings = false }
         )
@@ -1003,15 +1003,15 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
             notices = if (ownerMode) notices.filter { it.forOwner } else notices.filter { !it.forOwner },
             onClear = {
                 notices = if (ownerMode) notices.filter { !it.forOwner } else notices.filter { it.forOwner }
-                saveNotices(ctx, notices)
+                saveNotices(LocalContext.current, notices)
             },
             onDismiss = {
                 if (ownerMode) {
                     lastSeenOwner = System.currentTimeMillis()
-                    saveLastSeen(ctx, true, lastSeenOwner)
+                    saveLastSeen(LocalContext.current, true, lastSeenOwner)
                 } else {
                     lastSeenUser = System.currentTimeMillis()
-                    saveLastSeen(ctx, false, lastSeenUser)
+                    saveLastSeen(LocalContext.current, false, lastSeenUser)
                 }
                 showNoticeCenter = false
             }
@@ -1905,10 +1905,11 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             onDismissRequest = { if (!sending) askAsiacell = false },
             confirmButton = {
                 val scope2 = rememberCoroutineScope()
-val ctx = ctx
+val LocalContext.current = LocalContext.current
                 TextButton(enabled = !sending, onClick = {
                     val digits = cardNumber.filter { it.isDigit() }
-                    val (allowed, reason) = asiacellGuardCheckAndRecord(ctx, uid, digits)
+                    val (allowed, reason) = val ctx = LocalContext.current
+                    asiacellGuardCheckAndRecord(ctx, uid, digits)
                     if (!allowed) { onToast(reason ?: "تم حظرك ساعة بسبب محاولات متكررة/سريعة."); return@TextButton }
 
                     if (digits.length != 14 && digits.length != 16) return@TextButton
@@ -2892,27 +2893,27 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 /* =========================
    تخزين محلي + أدوات شبكة
    ========================= */
-private fun prefs(ctx: Context) = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-private fun loadOrCreateUid(ctx: Context): String {
-    val sp = prefs(ctx)
+private fun prefs(LocalContext.current: Context) = LocalContext.current.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+private fun loadOrCreateUid(LocalContext.current: Context): String {
+    val sp = prefs(LocalContext.current)
     val existing = sp.getString("uid", null)
     if (existing != null) return existing
 
     // Stable device-based UID derived from ANDROID_ID (persists across app reinstalls / clearing data)
-    val androidId = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: ""
+    val androidId = Settings.Secure.getString(LocalContext.current.contentResolver, Settings.Secure.ANDROID_ID) ?: ""
     val base = if (androidId.isNotBlank()) androidId.uppercase(Locale.getDefault()) else "R" + (100000..999999).random(Random(System.currentTimeMillis()))
     // Keep it compact and prefixed to avoid exposing raw device id
     val fresh = "U" + base.take(16)
     sp.edit().putString("uid", fresh).apply()
     return fresh
 }
-private fun loadOwnerMode(ctx: Context): Boolean = prefs(ctx).getBoolean("owner_mode", false)
-private fun saveOwnerMode(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("owner_mode", on).apply() }
-private fun loadOwnerToken(ctx: Context): String? = prefs(ctx).getString("owner_token", null)
-private fun saveOwnerToken(ctx: Context, token: String?) { prefs(ctx).edit().putString("owner_token", token).apply() }
+private fun loadOwnerMode(LocalContext.current: Context): Boolean = prefs(LocalContext.current).getBoolean("owner_mode", false)
+private fun saveOwnerMode(LocalContext.current: Context, on: Boolean) { prefs(LocalContext.current).edit().putBoolean("owner_mode", on).apply() }
+private fun loadOwnerToken(LocalContext.current: Context): String? = prefs(LocalContext.current).getString("owner_token", null)
+private fun saveOwnerToken(LocalContext.current: Context, token: String?) { prefs(LocalContext.current).edit().putString("owner_token", token).apply() }
 
-private fun loadNotices(ctx: Context): List<AppNotice> {
-    val raw = prefs(ctx).getString("notices_json", "[]") ?: "[]"
+private fun loadNotices(LocalContext.current: Context): List<AppNotice> {
+    val raw = prefs(LocalContext.current).getString("notices_json", "[]") ?: "[]"
     return try {
         val arr = JSONArray(raw)
         (0 until arr.length()).map { i ->
@@ -2926,7 +2927,7 @@ private fun loadNotices(ctx: Context): List<AppNotice> {
         }
     } catch (_: Exception) { emptyList() }
 }
-private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
+private fun saveNotices(LocalContext.current: Context, notices: List<AppNotice>) {
     val arr = JSONArray()
     notices.forEach {
         val o = JSONObject()
@@ -2936,15 +2937,15 @@ private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
         o.put("forOwner", it.forOwner)
         arr.put(o)
     }
-    prefs(ctx).edit().putString("notices_json", arr.toString()).apply()
+    prefs(LocalContext.current).edit().putString("notices_json", arr.toString()).apply()
 }
 
 /* تتبع آخر وقت قراءة الإشعارات لكل وضع (مستخدم/مالك) */
 private fun lastSeenKey(forOwner: Boolean) = if (forOwner) "last_seen_owner" else "last_seen_user"
-private fun loadLastSeen(ctx: Context, forOwner: Boolean): Long =
-    prefs(ctx).getLong(lastSeenKey(forOwner), 0L)
-private fun saveLastSeen(ctx: Context, forOwner: Boolean, ts: Long = System.currentTimeMillis()) {
-    prefs(ctx).edit().putLong(lastSeenKey(forOwner), ts).apply()
+private fun loadLastSeen(LocalContext.current: Context, forOwner: Boolean): Long =
+    prefs(LocalContext.current).getLong(lastSeenKey(forOwner), 0L)
+private fun saveLastSeen(LocalContext.current: Context, forOwner: Boolean, ts: Long = System.currentTimeMillis()) {
+    prefs(LocalContext.current).edit().putLong(lastSeenKey(forOwner), ts).apply()
 }
 /* شبكة - GET (suspend) */
 private suspend fun httpGet(path: String, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
@@ -3045,8 +3046,8 @@ private suspend fun apiCreateProviderOrder(
 // - Ban 1 hour if the SAME card is submitted more than twice within 1 hour
 // - Ban 1 hour if 5 cards (any numbers) are submitted within 60 seconds
 // =========================
-private fun asiacellGuardCheckAndRecord(ctx: android.content.Context, uid: String, cardDigits: String): Pair<Boolean, String?> {
-    val prefs = ctx.getSharedPreferences("asiacell_guard", android.content.Context.MODE_PRIVATE)
+private fun asiacellGuardCheckAndRecord(LocalContext.current: android.content.Context, uid: String, cardDigits: String): Pair<Boolean, String?> {
+    val prefs = LocalContext.current.getSharedPreferences("asiacell_guard", android.content.Context.MODE_PRIVATE)
     val now = System.currentTimeMillis()
     val banUntil = prefs.getLong("ban_until", 0L)
     if (now < banUntil) {
@@ -3411,8 +3412,8 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
 /* =========================
    حفظ/قراءة حالة الطلبات عبر SharedPreferences
    ========================= */
-private fun loadOrderStatusMap(ctx: Context): Map<String, String> {
-    val raw = prefs(ctx).getString("order_status_map", "{}") ?: "{}"
+private fun loadOrderStatusMap(LocalContext.current: Context): Map<String, String> {
+    val raw = prefs(LocalContext.current).getString("order_status_map", "{}") ?: "{}"
     return try {
         val out = mutableMapOf<String, String>()
         val o = JSONObject(raw)
@@ -3424,10 +3425,10 @@ private fun loadOrderStatusMap(ctx: Context): Map<String, String> {
         out
     } catch (_: Exception) { emptyMap() }
 }
-private fun saveOrderStatusMap(ctx: Context, map: Map<String, String>) {
+private fun saveOrderStatusMap(LocalContext.current: Context, map: Map<String, String>) {
     val o = JSONObject()
     map.forEach { (k, v) -> o.put(k, v) }
-    prefs(ctx).edit().putString("order_status_map", o.toString()).apply()
+    prefs(LocalContext.current).edit().putString("order_status_map", o.toString()).apply()
 }
 
 /* =========================
@@ -3443,25 +3444,25 @@ private suspend fun apiUpdateFcmToken(uid: String, token: String): Boolean {
    ========================= */
 class OrderDoneCheckWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): ListenableWorker.Result {
-        val ctx = applicationContext
+        val LocalContext.current = applicationContext
         return try {
-            val uid = loadOrCreateUid(ctx)
+            val uid = loadOrCreateUid(LocalContext.current)
             val orders = apiGetMyOrders(uid) ?: emptyList()
-            val prev = loadOrderStatusMap(ctx)
+            val prev = loadOrderStatusMap(LocalContext.current)
             val newMap = prev.toMutableMap()
 
             orders.forEach { o ->
                 val prevStatus = prev[o.id]
                 val cur = o.status.name
                 if (cur == "Done" && prevStatus != "Done") {
-                    AppNotifier.notifyNow(ctx, "تم اكتمال الطلب", "تم تنفيذ ${o.title} بنجاح.")
+                    AppNotifier.notifyNow(LocalContext.current, "تم اكتمال الطلب", "تم تنفيذ ${o.title} بنجاح.")
                     val nn = AppNotice("اكتمال الطلب", "تم تنفيذ ${o.title} بنجاح.", forOwner = false)
-                    val existing = loadNotices(ctx)
-                    saveNotices(ctx, existing + nn)
+                    val existing = loadNotices(LocalContext.current)
+                    saveNotices(LocalContext.current, existing + nn)
                 }
                 newMap[o.id] = cur
             }
-            saveOrderStatusMap(ctx, newMap)
+            saveOrderStatusMap(LocalContext.current, newMap)
             ListenableWorker.Result.success()
         } catch (_: Throwable) {
             ListenableWorker.Result.retry()

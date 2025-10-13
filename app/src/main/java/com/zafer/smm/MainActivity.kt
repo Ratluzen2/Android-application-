@@ -3428,23 +3428,4 @@ class OrderDoneCheckWorker(appContext: Context, params: WorkerParameters) : Coro
             WorkManager.getInstance(context.applicationContext).enqueue(once)
         }
     }
-
-// --- Added for Android 13+ notification permission ---
-private val requestNotifPermission = registerForActivityResult(
-    androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-) { _ -> }
-
-private fun maybeRequestPostNotifications() {
-    if (android.os.Build.VERSION.SDK_INT >= 33) {
-        if (androidx.core.content.ContextCompat.checkSelfPermission(
-                this,
-                android.Manifest.permission.POST_NOTIFICATIONS
-            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            requestNotifPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
 }
-
-}
-

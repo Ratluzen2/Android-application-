@@ -100,9 +100,9 @@ object AppNotifier {
 
     fun requestPermissionIfNeeded(activity: androidx.activity.ComponentActivity) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS)
+            if (ActivityCompat.checkSelfPermission(activity, "android.permission.POST_NOTIFICATIONS")
                 != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(activity, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9911)
+                ActivityCompat.requestPermissions(activity, arrayOf("android.permission.POST_NOTIFICATIONS"), 9911)
             }
         }
     }
@@ -781,7 +781,18 @@ class MainActivity : ComponentActivity() {
         
         AppNotifier.ensureChannel(this)
         AppNotifier.requestPermissionIfNeeded(this)
-enableEdgeToEdge()
+
+        // One-time self-test to verify system notifications actually appear
+        kotlin.runCatching {
+            val sp = getSharedPreferences("notif_debug", MODE_PRIVATE)
+            if (!sp.getBoolean("did_test_once", false)) {
+                window.decorView.postDelayed({
+                    AppNotifier.notifyNow(this, "اختبار الإشعار", "إذا وصل هذا الإشعار، فالقناة تعمل ✅")
+                    sp.edit().putBoolean("did_test_once", true).apply()
+                }, 1500)
+            }
+        }
+    enableEdgeToEdge()
         setContent { AppTheme { AppRoot() } }
     }
 }

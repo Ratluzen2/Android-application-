@@ -3436,11 +3436,33 @@ class OrderDoneCheckWorker(appContext: Context, params: WorkerParameters) : Coro
 class MyFirebaseService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)
-        // TODO: أرسل التوكن لسيرفرك لربطه بحساب المستخدم/UID
-        // ApiClient.updateFcmToken(loadOrCreateUid(applicationContext), token)
+        try {
+            // استخدم نفس منطق UID في هذا الملف، وأرسل التوكن إلى الخادم
+            val uid = loadOrCreateUid(applicationContext)
+            Thread {
+                try {
+                    val body = org.json.JSONObject()
+                        .put("uid", uid)
+                        .put("fcm", token)
+                    httpPostBlocking("/api/users/fcm_token", body)
+                } catch (_: Throwable) { }
+            }.start()
+        } catch (_: Throwable) { }
     }
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
+        val title = remoteMessage.notification?.title
+            ?: remoteMessage.data["title"]
+            ?: "إشعار"
+        val body = remoteMessage.notification?.body
+            ?: remoteMessage.data["body"]
+            ?: remoteMessage.data["message"]
+            ?: "لديك تحديث جديد"
+
+        AppNotifier.ensureChannel(applicationContext)
+        AppNotifier.notifyNow(applicationContext, title, body)
+    }
+}override fun onMessageReceived(remoteMessage: RemoteMessage) {
         val title = remoteMessage.notification?.title
             ?: remoteMessage.data["title"]
             ?: "إشعار"

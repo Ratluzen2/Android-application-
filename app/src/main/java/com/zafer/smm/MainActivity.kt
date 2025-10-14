@@ -780,8 +780,7 @@ private val serviceCategories = listOf(
    ========================= */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-                OwnerNotificationsPoller.start(this)
-super.onCreate(savedInstanceState)
+        super.onCreate(savedInstanceState)
         
         AppNotifier.ensureChannel(this)
         AppNotifier.requestPermissionIfNeeded(this)

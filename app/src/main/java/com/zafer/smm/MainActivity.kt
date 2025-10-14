@@ -31,6 +31,7 @@ import androidx.compose.material3.*
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -801,7 +802,7 @@ class MainActivity : ComponentActivity() {
                     android.util.Log.i("FCM", "Device FCM token: $token")
                     
                         val uid = loadOrCreateUid(this)
-                    scope.launch {
+                    lifecycleScope.launch {
                         try {
                             val ok = apiUpdateFcmToken(uid, token)
                             android.util.Log.i("FCM", "token sent to backend: $ok")
@@ -838,7 +839,6 @@ fun AppRoot() {
     var showSettings by remember { mutableStateOf(false) }
 
     var notices by remember { mutableStateOf(loadNotices(ctx)) }
-var noticeTick by remember { mutableStateOf(0) }
 
 // ✅ التزامن مع إشعارات FCM المخزّنة محليًا (لتحديث الجرس داخل التطبيق فورًا)
 LaunchedEffect(Unit) {
@@ -885,7 +885,7 @@ LaunchedEffect(ownerMode) {
 
     // فحص الصحة + تسجيل UID
     LaunchedEffect(Unit) {
-        scope.launch { tryUpsertUid(uid) }
+        tryUpsertUid(uid)
         while (true) {
             online = pingHealth()
             delay(15_000)

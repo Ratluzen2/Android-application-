@@ -42,6 +42,25 @@ def put_conn(conn: psycopg2.extensions.connection) -> None:
 # Logging
 # =========================
 logger = logging.getLogger("smm")
+
+
+def _fcm_config_status():
+    mode = None
+    details = {}
+    sa_json = (GOOGLE_APPLICATION_CREDENTIALS_JSON or "").strip()
+    if sa_json:
+        mode = "v1_service_account"
+        try:
+            info = json.loads(sa_json)
+            details["project_id"] = info.get("project_id") or (FCM_PROJECT_ID or None)
+        except Exception as e:
+            details["service_account_json_error"] = str(e)
+    elif FCM_SERVER_KEY:
+        mode = "legacy_server_key"
+        details["key_present"] = True
+    else:
+        mode = "not_configured"
+    return {"mode": mode, **details}
 logging.basicConfig(level=logging.INFO)
 
 
@@ -142,6 +161,10 @@ def _fcm_send_legacy(fcm_token: str, title: str, body: str, order_id: Optional[i
 
 def _fcm_send_push(fcm_token: Optional[str], title: str, body: str, order_id: Optional[int], extra_data: Optional[dict] = None):
     if not fcm_token:
+        return
+    _cfg = _fcm_config_status()
+    if _cfg.get('mode') == 'not_configured':
+        logger.warning("FCM not configured: set GOOGLE_APPLICATION_CREDENTIALS_JSON or FCM_SERVER_KEY")
         return
     # Prefer v1 via Service Account JSON stored in env
     sa_json = (GOOGLE_APPLICATION_CREDENTIALS_JSON or "").strip()
@@ -1963,7 +1986,10 @@ def admin_set_service_id(
                 VALUES(%s,%s)
                 ON CONFLICT (ui_key) DO UPDATE SET service_id=EXCLUDED.service_id, created_at=now()
             """, (body.ui_key, int(body.service_id)))
-        return {"ok": True}
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM public.owner_fcm_tokens")
+            c = cur.fetchone()[0]
+        return {"ok": True, "owner_tokens": int(c)}
     finally:
         put_conn(conn)
 
@@ -1981,7 +2007,10 @@ def admin_clear_service_id(
         with conn, conn.cursor() as cur:
             _ensure_overrides_table(cur)
             cur.execute("DELETE FROM public.service_id_overrides WHERE ui_key=%s", (body.ui_key,))
-        return {"ok": True}
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM public.owner_fcm_tokens")
+            c = cur.fetchone()[0]
+        return {"ok": True, "owner_tokens": int(c)}
     finally:
         put_conn(conn)
 
@@ -2051,7 +2080,10 @@ def admin_set_pricing(
                 VALUES(%s,%s,%s,%s,COALESCE(%s,'per_k'), now())
                 ON CONFLICT (ui_key) DO UPDATE SET price_per_k=EXCLUDED.price_per_k, min_qty=EXCLUDED.min_qty, max_qty=EXCLUDED.max_qty, mode=COALESCE(EXCLUDED.mode,'per_k'), updated_at=now()
             """, (body.ui_key, Decimal(body.price_per_k), int(body.min_qty), int(body.max_qty), (body.mode or 'per_k')))
-        return {"ok": True}
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM public.owner_fcm_tokens")
+            c = cur.fetchone()[0]
+        return {"ok": True, "owner_tokens": int(c)}
     finally:
         put_conn(conn)
 
@@ -2070,7 +2102,10 @@ def admin_clear_pricing(
             _ensure_pricing_table(cur)
             _ensure_pricing_mode_column(cur)
             cur.execute("DELETE FROM public.service_pricing_overrides WHERE ui_key=%s", (body.ui_key,))
-        return {"ok": True}
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM public.owner_fcm_tokens")
+            c = cur.fetchone()[0]
+        return {"ok": True, "owner_tokens": int(c)}
     finally:
         put_conn(conn)
 
@@ -2178,7 +2213,10 @@ def admin_set_order_pricing(
             """, (oid, Decimal(body.price)))
             # reflect immediately on orders.price for UI consistency
             cur.execute("UPDATE public.orders SET price=%s WHERE id=%s", (Decimal(body.price), oid))
-        return {"ok": True}
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM public.owner_fcm_tokens")
+            c = cur.fetchone()[0]
+        return {"ok": True, "owner_tokens": int(c)}
     finally:
         put_conn(conn)
 
@@ -2196,7 +2234,10 @@ def admin_clear_order_pricing(
         with conn, conn.cursor() as cur:
             _ensure_order_pricing_table(cur)
             cur.execute("DELETE FROM public.order_pricing_overrides WHERE order_id=%s", (int(body.order_id),))
-        return {"ok": True}
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM public.owner_fcm_tokens")
+            c = cur.fetchone()[0]
+        return {"ok": True, "owner_tokens": int(c)}
     finally:
         put_conn(conn)
 
@@ -2258,7 +2299,10 @@ def admin_set_order_quantity(
                         eff_price = float(Decimal(body.quantity) * Decimal(ppk) / Decimal(1000))
                         cur.execute("UPDATE public.orders SET price=%s WHERE id=%s", (Decimal(eff_price), oid))
 
-        return {"ok": True}
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM public.owner_fcm_tokens")
+            c = cur.fetchone()[0]
+        return {"ok": True, "owner_tokens": int(c)}
     finally:
         put_conn(conn)
 
@@ -2398,7 +2442,10 @@ def api_admin_fcm_register(body: OwnerFcmIn, x_admin_password: str = Header(None
     try:
         with conn, conn.cursor() as cur:
             cur.execute("INSERT INTO public.owner_fcm_tokens(token) VALUES(%s) ON CONFLICT (token) DO NOTHING", (token,))
-        return {"ok": True}
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM public.owner_fcm_tokens")
+            c = cur.fetchone()[0]
+        return {"ok": True, "owner_tokens": int(c)}
     finally:
         put_conn(conn)
 
@@ -2413,7 +2460,10 @@ def api_admin_fcm_unregister(body: OwnerFcmIn, x_admin_password: str = Header(No
     try:
         with conn, conn.cursor() as cur:
             cur.execute("DELETE FROM public.owner_fcm_tokens WHERE token=%s", (token,))
-        return {"ok": True}
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM public.owner_fcm_tokens")
+            c = cur.fetchone()[0]
+        return {"ok": True, "owner_tokens": int(c)}
     finally:
         put_conn(conn)
 
@@ -2447,6 +2497,23 @@ def api_admin_fcm_test(body: OwnerFcmTestIn, x_admin_password: str = Header(None
         except Exception as ex:
             logger.warning("owner test push failed: %s", ex)
     return {"ok": True, "sent": sent}
+
+
+@app.get("/api/admin/fcm/debug")
+def api_admin_fcm_debug(x_admin_password: str = Header(None), password: Optional[str] = None):
+    pw = _pick_admin_password(x_admin_password, password, None)
+    _require_admin(pw or "")
+    cfg = _fcm_config_status()
+    conn = get_conn()
+    count = 0
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM public.owner_fcm_tokens")
+            r = cur.fetchone()
+            count = (r[0] if r else 0) or 0
+    finally:
+        put_conn(conn)
+    return {"ok": True, "owner_tokens": count, "fcm": cfg}
 def api_admin_fcm_list(x_admin_password: str = Header(None), password: Optional[str] = None):
     pw = _pick_admin_password(x_admin_password, password, None)
     _require_admin(pw or "")

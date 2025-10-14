@@ -247,8 +247,6 @@ private suspend fun apiAdminListSvcOverrides(token: String): Map<String, Long> {
     } catch (_: Exception) { emptyMap() }
 }
 
-
-
 private suspend fun apiAdminRegisterOwnerFcm(token: String, fcm: String): Boolean {
     val body = org.json.JSONObject().put("fcm", fcm)
     val (code, _) = httpPost("/api/admin/fcm/register", body, headers = mapOf("x-admin-password" to token))
@@ -840,6 +838,8 @@ fun AppRoot() {
 
     var notices by remember { mutableStateOf(loadNotices(ctx)) }
 
+    
+
 // ✅ التزامن مع إشعارات FCM المخزّنة محليًا (لتحديث الجرس داخل التطبيق فورًا)
 LaunchedEffect(Unit) {
     while (true) {
@@ -854,7 +854,7 @@ LaunchedEffect(Unit) {
     }
 }
 
-    var noticeTick by remember { mutableStateOf(0) }
+    
     var showNoticeCenter by remember { mutableStateOf(false) }
 
     var lastSeenUser by remember { mutableStateOf(loadLastSeen(ctx, false)) }
@@ -882,7 +882,6 @@ LaunchedEffect(ownerMode) {
     }
 }
 
-
     // فحص الصحة + تسجيل UID
     LaunchedEffect(Unit) {
         tryUpsertUid(uid)
@@ -906,7 +905,6 @@ LaunchedEffect(ownerMode) {
             delay(10_000)
         }
     }
-
 
     // ✅ مراقبة تغيّر حالة الطلبات إلى Done أثناء فتح التطبيق (تنبيه فوري داخل النظام)
     LaunchedEffect(uid) {
@@ -3389,7 +3387,6 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
         )
     }
 }
-
 
 /* =========================
    حفظ/قراءة حالة الطلبات عبر SharedPreferences

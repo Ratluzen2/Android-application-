@@ -31,7 +31,6 @@ import androidx.compose.material3.*
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.runtime.*
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -247,39 +246,6 @@ private suspend fun apiAdminListSvcOverrides(token: String): Map<String, Long> {
     } catch (_: Exception) { emptyMap() }
 }
 
-
-
-private suspend fun apiAdminListOwnerNotices(token: String, afterTs: Long? = null, limit: Int = 100): List<AppNotice> {
-    val path = buildString {
-        append("/api/admin/notices/list")
-        val q = mutableListOf<String>()
-        if (afterTs != null && afterTs > 0) q += "after_ts=$afterTs"
-        if (limit != 100) q += "limit=$limit"
-        if (q.isNotEmpty()) append("?${q.joinToString("&")}")
-    }
-    val headers = mapOf("x-admin-password" to token)
-    val (_, body) = httpGet(path, headers = headers)
-    if (body.isNullOrBlank()) return emptyList()
-    val json = org.json.JSONObject(body)
-    if (!json.optBoolean("ok", false)) return emptyList()
-    val arr = json.optJSONArray("items") ?: return emptyList()
-    val out = mutableListOf<AppNotice>()
-
-    for (i in 0 until arr.length()) {
-        val o = arr.getJSONObject(i)
-        val title = o.optString("title", "")
-        val bodyTxt = o.optString("body", "")
-        val ts = o.optLong("ts", System.currentTimeMillis())
-        val orderId = if (o.has("order_id") && !o.isNull("order_id")) o.optInt("order_id") else null
-        out += AppNotice(title = title, body = bodyTxt, ts = ts, forOwner = true)
-    }
-    return out
-}
-private suspend fun apiAdminRegisterOwnerFcm(token: String, fcm: String): Boolean {
-    val body = org.json.JSONObject().put("fcm", fcm)
-    val (code, _) = httpPost("/api/admin/fcm/register", body, headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
 private suspend fun apiAdminSetSvcOverride(token: String, uiKey: String, id: Long): Boolean {
     val body = JSONObject().put("ui_key", uiKey).put("service_id", id)
     val (code, _) = httpPost(AdminEndpoints.svcIdSet, body, headers = mapOf("x-admin-password" to token))
@@ -814,7 +780,8 @@ private val serviceCategories = listOf(
    ========================= */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+                OwnerNotificationsPoller.start(this)
+super.onCreate(savedInstanceState)
         
         AppNotifier.ensureChannel(this)
         AppNotifier.requestPermissionIfNeeded(this)
@@ -865,25 +832,7 @@ fun AppRoot() {
     var showSettings by remember { mutableStateOf(false) }
 
     var notices by remember { mutableStateOf(loadNotices(ctx)) }
-
-    
-
     var noticeTick by remember { mutableStateOf(0) }
-// ✅ التزامن مع إشعارات FCM المخزّنة محليًا (لتحديث الجرس داخل التطبيق فورًا)
-LaunchedEffect(Unit) {
-    while (true) {
-        try {
-            val disk = loadNotices(ctx)
-            if (disk.size != notices.size) {
-                notices = disk
-                noticeTick++
-            }
-        } catch (_: Exception) { }
-        kotlinx.coroutines.delay(5_000)
-    }
-}
-
-    
     var showNoticeCenter by remember { mutableStateOf(false) }
 
     var lastSeenUser by remember { mutableStateOf(loadLastSeen(ctx, false)) }
@@ -893,48 +842,9 @@ LaunchedEffect(Unit) {
     val unreadOwner = notices.count { it.forOwner && it.ts > lastSeenOwner }
 var currentTab by remember { mutableStateOf(Tab.HOME) }
 
-// ✅ عند تفعيل وضع المالك، سجّل توكن FCM كمالك في الخادم
-LaunchedEffect(ownerMode) {
-    if (ownerMode) {
-        try {
-            com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnCompleteListener { tk ->
-                if (tk.isSuccessful) {
-                    val tkn = tk.result
-                    scope.launch {
-                        try {
-                            apiAdminRegisterOwnerFcm(ownerToken ?: "2000", tkn)
-                        } catch (_: Exception) { }
-                    }
-                }
-            }
-        } catch (_: Exception) { }
-    }
-}
-
-
-// ✅ مزامنة إشعارات المالك من الخادم (ليظهر الجرس حتى لو لم يصل FCM)
-LaunchedEffect(ownerMode, ownerToken) {
-    if (ownerMode && !ownerToken.isNullOrBlank()) {
-        var lastTs = notices.filter { it.forOwner }.maxOfOrNull { it.ts } ?: 0L
-        while (ownerMode) {
-            try {
-                val fresh = apiAdminListOwnerNotices(ownerToken!!, afterTs = lastTs)
-                if (fresh.isNotEmpty()) {
-                    val merged = (notices + fresh).distinctBy { it.ts to it.title to it.body }
-                    notices = merged.sortedBy { it.ts }
-                    saveNotices(ctx, notices)
-                    lastTs = notices.filter { it.forOwner }.maxOfOrNull { it.ts } ?: lastTs
-                    noticeTick++
-                }
-            } catch (_: Exception) { }
-            kotlinx.coroutines.delay(5_000)
-        }
-    }
-}
-
     // فحص الصحة + تسجيل UID
     LaunchedEffect(Unit) {
-        tryUpsertUid(uid)
+        scope.launch { tryUpsertUid(uid) }
         while (true) {
             online = pingHealth()
             delay(15_000)
@@ -955,6 +865,7 @@ LaunchedEffect(ownerMode, ownerToken) {
             delay(10_000)
         }
     }
+
 
     // ✅ مراقبة تغيّر حالة الطلبات إلى Done أثناء فتح التطبيق (تنبيه فوري داخل النظام)
     LaunchedEffect(uid) {
@@ -3437,6 +3348,7 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
         )
     }
 }
+
 
 /* =========================
    حفظ/قراءة حالة الطلبات عبر SharedPreferences

@@ -840,6 +840,7 @@ fun AppRoot() {
 
     
 
+    var noticeTick by remember { mutableStateOf(0) }
 // ✅ التزامن مع إشعارات FCM المخزّنة محليًا (لتحديث الجرس داخل التطبيق فورًا)
 LaunchedEffect(Unit) {
     while (true) {

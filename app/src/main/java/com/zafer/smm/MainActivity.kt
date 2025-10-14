@@ -801,7 +801,7 @@ class MainActivity : ComponentActivity() {
                     android.util.Log.i("FCM", "Device FCM token: $token")
                     
                         val uid = loadOrCreateUid(this)
-                    lifecycleScope.launch {
+                    scope.launch {
                         try {
                             val ok = apiUpdateFcmToken(uid, token)
                             android.util.Log.i("FCM", "token sent to backend: $ok")
@@ -838,6 +838,7 @@ fun AppRoot() {
     var showSettings by remember { mutableStateOf(false) }
 
     var notices by remember { mutableStateOf(loadNotices(ctx)) }
+var noticeTick by remember { mutableStateOf(0) }
 
 // ✅ التزامن مع إشعارات FCM المخزّنة محليًا (لتحديث الجرس داخل التطبيق فورًا)
 LaunchedEffect(Unit) {
@@ -870,7 +871,7 @@ LaunchedEffect(ownerMode) {
             com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnCompleteListener { tk ->
                 if (tk.isSuccessful) {
                     val tkn = tk.result
-                    lifecycleScope.launch {
+                    scope.launch {
                         try {
                             apiAdminRegisterOwnerFcm(ownerToken ?: "2000", tkn)
                         } catch (_: Exception) { }

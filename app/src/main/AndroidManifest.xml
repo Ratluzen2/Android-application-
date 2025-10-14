@@ -1,45 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.zafer.smm">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Required for Android 13+ runtime notification permission -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE" />
+    
+    <!-- إذن إشعارات Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+<!-- إنترنت -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- (اختياري) لإشعار دائم عند تشغيل خدمة أمامية -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
 
     <application
-        android:name=".App"
         android:allowBackup="true"
-        android:label="@string/app_name"
+        android:label="خدمات راتلوزن"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="true"
-        android:theme="@style/Theme.App">
+        android:theme="@style/Theme.Smm.NoActionBar">
 
-        <!-- Firebase Messaging service -->
+        <!-- خدمة FCM لاستقبال الإشعارات حتى لو التطبيق مُغلق -->
         <service
-            android:name=".push.MyFirebaseService"
+            android:name=".MyFirebaseService"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
 
-        <!-- (Optional) receiver if you want to react to token refresh broadcasts -->
-        <receiver
-            android:name=".push.PushEventsReceiver"
-            android:exported="false" />
-
-        <!-- Default activity declaration should already exist in your project -->
-        <!--
-        <activity android:name=".MainActivity"
+        <activity
+            android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        -->
+
     </application>
 </manifest>

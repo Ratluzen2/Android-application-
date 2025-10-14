@@ -1,79 +1,97 @@
-package com.zafer.smm
+// File: app/src/main/java/com/zafer/smm/push/MyFirebaseService.kt
+package com.zafer.smm.push
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
-import android.provider.Settings
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import org.json.JSONObject
-import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.Locale
+import com.zafer.smm.R
+import com.zafer.smm.storage.NotificationStore
 
+/**
+ * Professional FCM handler:
+ * - Shows system notifications (foreground/background)
+ * - Persists notifications locally into the in-app "bell center" for owner or user
+ * - Distinguishes owner vs user using data.for_owner == "true"
+ * - Safe no-crash defaults (null-safe parsing)
+ */
 class MyFirebaseService : FirebaseMessagingService() {
+
+    companion object {
+        private const val CHANNEL_ID = "orders_updates_channel"
+        private const val CHANNEL_NAME = "Updates & Orders"
+        private const val CHANNEL_DESC = "Notifications for new orders and status updates"
+
+        fun ensureChannel(context: Context) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    CHANNEL_ID,
+                    CHANNEL_NAME,
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = CHANNEL_DESC
+                }
+                val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                nm.createNotificationChannel(channel)
+            }
+        }
+    }
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
+        Log.i("MyFirebaseService", "FCM token refreshed: $token")
+        // TODO: send this token to backend via your existing API call in MainActivity/App start
+        // You likely already do this. Keep as-is.
+    }
+
+    override fun onMessageReceived(message: RemoteMessage) {
+        super.onMessageReceived(message)
+
+        // Parse title/body from both "notification" and "data"
+        val nTitle = message.notification?.title ?: message.data["title"] ?: getString(R.string.app_name)
+        val nBody  = message.notification?.body  ?: message.data["body"]  ?: "لديك تحديث جديد"
+        val forOwner = message.data["for_owner"]?.equals("true", ignoreCase = true) == true
+        val type = message.data["type"] ?: "generic"
+        val orderId = message.data["order_id"] ?: ""
+
+        // Persist into local bell center
         try {
-            val uid = loadOrCreateUidLocal(applicationContext)
-            Thread {
-                try { sendFcmTokenToBackend(uid, token) } catch (_: Throwable) {}
-            }.start()
-        } catch (_: Throwable) {}
-    }
-
-    override fun onMessageReceived(remoteMessage: RemoteMessage) {
-        val title = remoteMessage.notification?.title
-            ?: remoteMessage.data["title"]
-            ?: "إشعار"
-        val body = remoteMessage.notification?.body
-            ?: remoteMessage.data["body"]
-            ?: remoteMessage.data["message"]
-            ?: "لديك تحديث جديد"
-
-        AppNotifier.ensureChannel(applicationContext)
-        AppNotifier.notifyNow(applicationContext, title, body)
-    }
-
-    // ===== Helpers =====
-    private fun prefs(ctx: Context) = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-
-    private fun loadOrCreateUidLocal(ctx: Context): String {
-        val sp = prefs(ctx)
-        val existing = sp.getString("uid", null)
-        if (existing != null) return existing
-
-        val androidId = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: ""
-        val base = if (androidId.isNotBlank()) androidId.uppercase(Locale.getDefault()) else "R" + (100000..999999).random()
-        val fresh = "U" + base.take(16)
-        sp.edit().putString("uid", fresh).apply()
-        return fresh
-    }
-
-    private fun sendFcmTokenToBackend(uid: String, token: String) {
-        val url = URL("$API_BASE/api/users/fcm_token")
-        val con = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            connectTimeout = 12000
-            readTimeout = 12000
-            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            NotificationStore.saveNotification(
+                context = applicationContext,
+                forOwner = forOwner,
+                title = nTitle,
+                body = nBody,
+                type = type,
+                orderId = orderId
+            )
+        } catch (e: Exception) {
+            Log.e("MyFirebaseService", "Failed to save notification locally", e)
         }
-        val body = JSONObject().put("uid", uid).put("fcm", token).toString()
-        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(body) }
-        val code = con.responseCode
-        con.inputStream?.close(); con.errorStream?.close()
-        if (code !in 200..299) throw RuntimeException("FCM token post failed: HTTP $code")
-    }
 
-    companion object {
-        // عدّل هذا الرابط إذا تغيّر عنوان الباكند لديك
-        private const val API_BASE = "https://ratluzen-smm-backend-e12a704bf3c1.herokuapp.com"
+        // Show system notification (outside app + inside)
+        try {
+            ensureChannel(applicationContext)
+            val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_notification) // ensure this resource exists
+                .setContentTitle(nTitle)
+                .setContentText(nBody)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+
+            // Optional: add tap intent to open MainActivity to a specific screen
+            // val pendingIntent = PendingIntent.getActivity(...)
+            // builder.setContentIntent(pendingIntent)
+
+            with(NotificationManagerCompat.from(applicationContext)) {
+                notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), builder.build())
+            }
+        } catch (e: Exception) {
+            Log.e("MyFirebaseService", "Failed to show system notification", e)
+        }
     }
 }

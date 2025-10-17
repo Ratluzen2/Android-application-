@@ -896,7 +896,6 @@ LaunchedEffect(ownerMode, ownerToken) {
         }
     }
 }
-    }
 
 
     // ✅ مراقبة تغيّر حالة الطلبات إلى Done أثناء فتح التطبيق (تنبيه فوري داخل النظام)
@@ -3208,6 +3207,73 @@ private suspend fun apiFetchNotificationsByUid(uid: String, limit: Int = 50): Li
     }
     return null
 }
+
+/* =========================
+   Admin Owner Notifications + FCM
+   ========================= */
+private suspend fun apiAdminSetFcmToken(token: String, fcm: String): Boolean {
+    val body = JSONObject().put("fcm", fcm)
+    val (code, _) = httpPost(AdminEndpoints.adminFcmToken, body, headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
+
+private suspend fun apiFetchOwnerNotifications(
+    token: String,
+    status: String = "unread",
+    limit: Int = 50
+): List<AppNotice>? {
+    val path = AdminEndpoints.adminNotices + "?status=" + status + "&limit=" + limit
+    val (code, txt) = httpGet(path, headers = mapOf("x-admin-password" to token))
+    if (code !in 200..299 || txt == null) return null
+    val out = mutableListOf<AppNotice>()
+    try {
+        val trimmed = txt.trim()
+        if (trimmed.startsWith("[")) {
+            val arr = JSONArray(trimmed)
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val id = if (o.has("id")) o.optLong("id") else null
+                val title = o.optString("title", "تنبيه")
+                val body = o.optString("body", "")
+                val ts = when {
+                    o.has("ts") -> o.optLong("ts")
+                    o.has("created_at") -> System.currentTimeMillis() // حافظ على بساطة التحويل
+                    else -> System.currentTimeMillis()
+                }
+                out += AppNotice(title = title, body = body, ts = ts, forOwner = true, serverId = id)
+            }
+        } else {
+            val root = JSONObject(trimmed)
+            // يدعم الحقل "list" أو "notifications"
+            val arr = when {
+                root.has("list") -> root.optJSONArray("list")
+                root.has("notifications") -> root.optJSONArray("notifications")
+                else -> JSONArray()
+            }
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val id = if (o.has("id")) o.optLong("id") else null
+                val title = o.optString("title", "تنبيه")
+                val body = o.optString("body", "")
+                val ts = when {
+                    o.has("ts") -> o.optLong("ts")
+                    o.has("created_at") -> System.currentTimeMillis()
+                    else -> System.currentTimeMillis()
+                }
+                out += AppNotice(title = title, body = body, ts = ts, forOwner = true, serverId = id)
+            }
+        }
+    } catch (_: Exception) {
+        return null
+    }
+    return out
+}
+
+private suspend fun apiAdminMarkNotificationRead(token: String, id: Long): Boolean {
+    val (code, _) = httpPost(AdminEndpoints.adminNoticeRead(id), JSONObject(), headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
+
 
 /* دخول المالك */
 private suspend fun apiAdminLogin(password: String): String? {

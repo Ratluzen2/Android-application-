@@ -209,6 +209,11 @@ private object AdminEndpoints {
     const val orderSetPrice = "/api/admin/pricing/order/set"
     const val orderClearPrice = "/api/admin/pricing/order/clear"
     const val orderSetQty = "/api/admin/pricing/order/set_qty"
+
+    // Admin notifications & FCM
+    const val adminFcmToken = "/api/admin/fcm_token"
+    const val adminNotices  = "/api/admin/notifications"
+    fun adminNoticeRead(id: Long) = "/api/admin/notifications/$id/read"
 }
 
 /* =========================
@@ -719,7 +724,8 @@ data class AppNotice(
     val title: String,
     val body: String,
     val ts: Long = System.currentTimeMillis(),
-    val forOwner: Boolean = false
+    val forOwner: Boolean = false,
+    val serverId: Long? = null
 )
 data class ServiceDef(
     val uiKey: String,
@@ -864,6 +870,25 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
             delay(10_000)
         }
     }
+    // ✅ جلب إشعارات المالك من الخادم وتحديث الجرس (عند تفعيل وضع المالك)
+    LaunchedEffect(ownerMode, ownerToken) {
+        while (ownerMode && ownerToken != null) {
+            try {
+                val remote = apiFetchOwnerNotifications(ownerToken!!, 50) ?: emptyList()
+                if (remote.isNotEmpty()) {
+                    val before = notices.size
+                    val merged = mergeNotices(notices.filter { it.forOwner } , remote) + notices.filter { !it.forOwner }
+                    if (merged.size != before) {
+                        notices = merged
+                        saveNotices(ctx, notices)
+                        noticeTick++
+                    }
+                }
+            } catch (_: Exception) { /* ignore */ }
+            delay(10_000)
+        }
+    }
+
 
 
     // ✅ مراقبة تغيّر حالة الطلبات إلى Done أثناء فتح التطبيق (تنبيه فوري داخل النظام)
@@ -987,7 +1012,13 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
                 ownerMode = true
                 saveOwnerMode(ctx, true)
                 saveOwnerToken(ctx, token)
-            },
+            
+                try {
+                    FirebaseMessaging.getInstance().token.addOnSuccessListener { fcm ->
+                        scope.launch { try { apiAdminSetFcmToken(token, fcm) } catch (_: Exception) {} }
+                    }
+                } catch (_: Exception) {}
+},
             onOwnerLogout = {
                 ownerToken = null
                 ownerMode = false
@@ -1009,6 +1040,13 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
                 if (ownerMode) {
                     lastSeenOwner = System.currentTimeMillis()
                     saveLastSeen(ctx, true, lastSeenOwner)
+                    // تعليم كمقروء في الخادم
+                    if (ownerToken != null) {
+                        val toMark = notices.filter { it.forOwner && it.serverId != null && it.ts <= lastSeenOwner }
+                        scope.launch {
+                            toMark.forEach { n -> try { apiAdminMarkNotificationRead(ownerToken!!, n.serverId!!) } catch (_: Exception) {} }
+                        }
+                    }
                 } else {
                     lastSeenUser = System.currentTimeMillis()
                     saveLastSeen(ctx, false, lastSeenUser)
@@ -2917,7 +2955,8 @@ private fun loadNotices(ctx: Context): List<AppNotice> {
                 title = o.optString("title"),
                 body = o.optString("body"),
                 ts = o.optLong("ts"),
-                forOwner = o.optBoolean("forOwner")
+                forOwner = o.optBoolean("forOwner"),
+                serverId = if (o.has("sid")) o.optLong("sid") else null
             )
         }
     } catch (_: Exception) { emptyList() }
@@ -2930,6 +2969,7 @@ private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
         o.put("body", it.body)
         o.put("ts", it.ts)
         o.put("forOwner", it.forOwner)
+        if (it.serverId != null) o.put("sid", it.serverId)
         arr.put(o)
     }
     prefs(ctx).edit().putString("notices_json", arr.toString()).apply()
@@ -3114,6 +3154,35 @@ private fun mergeNotices(local: List<AppNotice>, incoming: List<AppNotice>): Lis
 }
 
 private suspend fun apiFetchNotificationsByUid(uid: String, limit: Int = 50): List<AppNotice>? {
+private suspend fun apiFetchOwnerNotifications(token: String, limit: Int = 50): List<AppNotice>? {
+    val (code, txt) = httpGet(AdminEndpoints.adminNotices + "?status=unread&limit=$limit", headers = mapOf("x-admin-password" to token))
+    if (code in 200..299 && txt != null) {
+        try {
+            val arr = org.json.JSONArray(txt.trim())
+            val out = mutableListOf<AppNotice>()
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                val id = o.optLong("id")
+                val title = o.optString("title","إشعار")
+                val body = o.optString("body","")
+                val tsMs = o.optLong("ts", System.currentTimeMillis())
+                out += AppNotice(title = title, body = body, ts = tsMs, forOwner = true, serverId = if (id>0) id else null)
+            }
+            return out
+        } catch (_: Exception) { /* ignore */ }
+    }
+    return null
+}
+private suspend fun apiAdminSetFcmToken(token: String, fcm: String): Boolean {
+    val body = JSONObject().put("fcm", fcm)
+    val (code, _) = httpPost(AdminEndpoints.adminFcmToken, body, headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
+private suspend fun apiAdminMarkNotificationRead(token: String, id: Long): Boolean {
+    val (code, _) = httpPost(AdminEndpoints.adminNoticeRead(id), JSONObject(), headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
+
     // 1) try by-uid
     val (code1, txt1) = httpGet("/api/user/by-uid/$uid/notifications?status=unread&limit=$limit")
     if (code1 in 200..299 && txt1 != null) {

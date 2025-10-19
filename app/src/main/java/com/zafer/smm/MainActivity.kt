@@ -789,48 +789,34 @@ class MainActivity : ComponentActivity() {
         // === FCM token — خطوة 1 (تشغيلياً من داخل الملف الرئيسي) ===
         // يحصّل توكن FCM ويطبعه في اللوغ ويرسله لسيرفرك لربطه مع UID المستخدم
         try {
-            FirebaseMessaging.getInstance().token.addOnCompleteListener { task: com.google.android.gms.tasks.Task<String> ->
-                if (task.isSuccessful) {
-                    val token = task.result
-                    android.util.Log.i("FCM", "Device FCM token: $token")
-                    
-                        val uid = loadOrCreateUid(this@MainActivity)
-                    lifecycleScope.launch {
-    try {
-        val ok = apiUpdateFcmToken(uid, token)
-        android.util.Log.i("FCM", "token sent to backend: " + ok)
-        if (loadOwnerMode(this@MainActivity)) {
-            try {
-                val okOwner = apiUpdateFcmToken(OWNER_UID_BACKEND, token)
-                android.util.Log.i("FCM", "owner token sent: " + okOwner)
-            } catch (e: Exception) {
-                android.util.Log.w("FCM", "owner token failed: " + (e.message ?: ""))
-            }
-        }
-    } catch (e: Exception) {
-        android.util.Log.w("FCM", "send token failed: " + (e.message ?: ""))
-    }
-}
-
-if (loadOwnerMode(this@MainActivity)) {
-    lifecycleScope.launch {
-        try {
-            val okOwner = apiUpdateFcmToken(OWNER_UID_BACKEND, token)
-            android.util.Log.i("FCM", "owner token sent: " + okOwner)
-        } catch (e: Exception) {
-            android.util.Log.w("FCM", "owner token failed: " + (e.message ?: ""))
-        }
-    }
-}
-
- catch (e: Exception) {
-                            android.util.Log.w("FCM", "send token failed: ${e.message}")
+    FirebaseMessaging.getInstance().token.addOnCompleteListener { task: com.google.android.gms.tasks.Task<String> ->
+        if (task.isSuccessful) {
+            val token = task.result
+            android.util.Log.i("FCM", "Device FCM token: $token")
+            val uid = loadOrCreateUid(this@MainActivity)
+            lifecycleScope.launch {
+                try {
+                    val ok = apiUpdateFcmToken(uid, token)
+                    android.util.Log.i("FCM", "token sent to backend: $ok")
+                    if (loadOwnerMode(this@MainActivity)) {
+                        try {
+                            val okOwner = apiUpdateFcmToken(OWNER_UID_BACKEND, token)
+                            android.util.Log.i("FCM", "owner token sent: $okOwner")
+                        } catch (e: Exception) {
+                            android.util.Log.w("FCM", "owner token failed: " + (e.message ?: ""))
                         }
                     }
-                } else {
-                    android.util.Log.w("FCM", "Failed to get FCM token", task.exception)
+                } catch (e: Exception) {
+                    android.util.Log.w("FCM", "send token failed: " + (e.message ?: ""))
                 }
             }
+        } else {
+            android.util.Log.w("FCM", "Failed to get FCM token", task.exception)
+        }
+    }
+} catch (e: Exception) {
+    android.util.Log.e("FCM", "Exception while getting token", e)
+}
         } catch (e: Exception) {
             android.util.Log.e("FCM", "Exception while getting token", e)
         }

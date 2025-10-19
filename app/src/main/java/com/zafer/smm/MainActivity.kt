@@ -734,7 +734,7 @@ data class ServiceDef(
 )
 enum class OrderStatus { Pending, Processing, Done, Rejected, Refunded }
 data class OrderItem(
-val id: String,
+    val id: String,
     val title: String,
     val quantity: Int,
     val price: Double,
@@ -742,8 +742,7 @@ val id: String,
     val status: OrderStatus,
     val createdAt: Long,
     val uid: String = ""            // ✅ إن توفّر من الباكند
-    , val accountId: String = "",
-    val orderNo: String? = null
+    , val accountId: String = ""
 )
 /* ✅ نموذج خاص بكروت أسيا سيل (لواجهة المالك) */
 data class PendingCard(
@@ -863,10 +862,21 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
 
     // ✅ جلب الإشعارات من الخادم ودمجها، وتحديث العداد تلقائيًا
     LaunchedEffect(uid) {
-        while (true) {
-            val remote = apiFetchNotificationsByUid(uid) ?: emptyList()
-            val before = notices.size
-            val merged = mergeNotices(notices.filter { !it.forOwner }, remote) + notices.filter { it.forOwner }
+        loading = true
+        err = null
+        while (isActive) {
+            try {
+                apiSyncProviderOrders(uid)
+                orders = apiGetMyOrders(uid)
+                err = null
+                loading = false
+            } catch (t: Throwable) {
+                // keep previous orders; set error but keep loop
+                err = "تعذر جلب الطلبات"
+            }
+            delay(3000)
+        }
+    }, remote) + notices.filter { it.forOwner }
             if (merged.size != before) {
                 notices = merged
                 saveNotices(ctx, notices)
@@ -1994,6 +2004,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     LaunchedEffect(uid) {
         loading = true
         err = null
+        apiSyncProviderOrders(uid)
         orders = apiGetMyOrders(uid).also { loading = false }
         if (orders == null) err = "تعذر جلب الطلبات"
     }
@@ -2016,9 +2027,6 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                             Text(o.title, fontWeight = FontWeight.SemiBold, color = OnBg)
                             Text("الكمية: ${o.quantity} | السعر: ${"%.2f".format(o.price)}$", color = Dim, fontSize = 12.sp)
                             Text("المعرف: ${o.id}", color = Dim, fontSize = 12.sp)
-                            if (!o.orderNo.isNullOrBlank()) {
-                                Text("رقم الطلب: ${o.orderNo}", color = OnBg, fontSize = 12.sp)
-                            }
                             Text("الحالة: ${o.status}", color = when (o.status) {
                                 OrderStatus.Done -> Good
                                 OrderStatus.Rejected -> Bad
@@ -3102,6 +3110,11 @@ suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int, acc
     val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
     val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true)
     return Pair(ok, txt)
+}
+
+private suspend fun apiSyncProviderOrders(uid: String): Boolean {
+    val (code, _) = httpPost("/api/orders/sync_provider?uid=" + uid, "{}")
+    return code in 200..299
 }
 
 private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {

@@ -4,7 +4,6 @@
 
 package com.zafer.smm
 
-private const val OWNER_UID_BACKEND = "OWNER-0001"  // طابق هذا مع OWNER_UID في Heroku
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.width
@@ -795,14 +794,25 @@ class MainActivity : ComponentActivity() {
                     val token = task.result
                     android.util.Log.i("FCM", "Device FCM token: $token")
                     
-                        val uid = loadOrCreateUid(this)
+                        val uid = loadOrCreateUid(this@MainActivity)
                     lifecycleScope.launch {
-                        try {
-                            val ok = apiUpdateFcmToken(uid, token)
-                            android.util.Log.i("FCM", "token sent to backend: $ok")
-                        }
+    try {
+        val ok = apiUpdateFcmToken(uid, token)
+        android.util.Log.i("FCM", "token sent to backend: " + ok)
+        if (loadOwnerMode(this@MainActivity)) {
+            try {
+                val okOwner = apiUpdateFcmToken(OWNER_UID_BACKEND, token)
+                android.util.Log.i("FCM", "owner token sent: " + okOwner)
+            } catch (e: Exception) {
+                android.util.Log.w("FCM", "owner token failed: " + (e.message ?: ""))
+            }
+        }
+    } catch (e: Exception) {
+        android.util.Log.w("FCM", "send token failed: " + (e.message ?: ""))
+    }
+}
 
-if (loadOwnerMode(this)) {
+if (loadOwnerMode(this@MainActivity)) {
     lifecycleScope.launch {
         try {
             val okOwner = apiUpdateFcmToken(OWNER_UID_BACKEND, token)

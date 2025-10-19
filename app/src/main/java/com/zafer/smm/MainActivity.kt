@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -861,30 +862,26 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
     }
 
     // ✅ جلب الإشعارات من الخادم ودمجها، وتحديث العداد تلقائيًا
-    LaunchedEffect(uid) {
-        loading = true
-        err = null
-        while (isActive) {
-            try {
-                apiSyncProviderOrders(uid)
-                orders = apiGetMyOrders(uid)
-                err = null
-                loading = false
-            } catch (t: Throwable) {
-                // keep previous orders; set error but keep loop
-                err = "تعذر جلب الطلبات"
-            }
-            delay(3000)
-        }
-    }, remote) + notices.filter { it.forOwner }
-            if (merged.size != before) {
-                notices = merged
+// ✅ جلب إشعارات المستخدم من الخادم ودمجها مع المحلي كل 10 ثوانٍ
+LaunchedEffect(uid) {
+    while (true) {
+        try {
+            val remote = apiFetchNotificationsByUid(uid) ?: emptyList()
+            val userLocal = notices.filter { !it.forOwner }
+            val ownerLocal = notices.filter { it.forOwner }
+            val merged = mergeNotices(userLocal, remote)
+            if (merged.size != userLocal.size) {
+                notices = merged + ownerLocal
                 saveNotices(ctx, notices)
                 noticeTick++
             }
-            delay(10_000)
+        } catch (_: Exception) {
+            // ignore
         }
+        delay(10_000)
     }
+}
+
 
 // ✅ جلب إشعارات المالك من الخادم عندما يكون وضع المالك مُفعّلاً
 LaunchedEffect(loadOwnerMode(ctx)) {
@@ -2002,12 +1999,21 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     var err by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(uid) {
-        loading = true
-        err = null
-        apiSyncProviderOrders(uid)
-        orders = apiGetMyOrders(uid).also { loading = false }
-        if (orders == null) err = "تعذر جلب الطلبات"
+    loading = true
+    err = null
+    while (isActive) {
+        try {
+            apiSyncProviderOrders(uid)
+            orders = apiGetMyOrders(uid)
+            err = null
+        } catch (_: Throwable) {
+            err = "تعذر جلب البيانات"
+        } finally {
+            loading = false
+        }
+        delay(3000)
     }
+}
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("طلباتي", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = OnBg)
@@ -3113,7 +3119,7 @@ suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int, acc
 }
 
 private suspend fun apiSyncProviderOrders(uid: String): Boolean {
-    val (code, _) = httpPost("/api/orders/sync_provider?uid=" + uid, "{}")
+    val (code, _) = httpPost("/api/orders/sync_provider?uid=$uid", JSONObject())
     return code in 200..299
 }
 

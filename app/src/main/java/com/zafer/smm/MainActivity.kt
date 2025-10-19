@@ -817,11 +817,8 @@ class MainActivity : ComponentActivity() {
 } catch (e: Exception) {
     android.util.Log.e("FCM", "Exception while getting token", e)
 }
-        } catch (e: Exception) {
-            android.util.Log.e("FCM", "Exception while getting token", e)
-        }
-        enableEdgeToEdge()
-        setContent { AppTheme { AppRoot() } }
+
+setContent { AppTheme { AppRoot() } }
     }
 }
 

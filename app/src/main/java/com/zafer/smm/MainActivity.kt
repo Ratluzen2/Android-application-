@@ -734,7 +734,7 @@ data class ServiceDef(
 )
 enum class OrderStatus { Pending, Processing, Done, Rejected, Refunded }
 data class OrderItem(
-    val id: String,
+val id: String,
     val title: String,
     val quantity: Int,
     val price: Double,
@@ -742,7 +742,8 @@ data class OrderItem(
     val status: OrderStatus,
     val createdAt: Long,
     val uid: String = ""            // ✅ إن توفّر من الباكند
-    , val accountId: String = ""
+    , val accountId: String = "",
+    val orderNo: String? = null
 )
 /* ✅ نموذج خاص بكروت أسيا سيل (لواجهة المالك) */
 data class PendingCard(
@@ -2015,6 +2016,10 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                             Text(o.title, fontWeight = FontWeight.SemiBold, color = OnBg)
                             Text("الكمية: ${o.quantity} | السعر: ${"%.2f".format(o.price)}$", color = Dim, fontSize = 12.sp)
                             Text("المعرف: ${o.id}", color = Dim, fontSize = 12.sp)
+                            if (o.status == OrderStatus.Done && !o.orderNo.isNullOrBlank()) {
+                                Text("رقم الطلب: ${o.orderNo}", color = OnBg, fontSize = 12.sp)
+                            }
+
                             Text("الحالة: ${o.status}", color = when (o.status) {
                                 OrderStatus.Done -> Good
                                 OrderStatus.Rejected -> Bad
@@ -3131,7 +3136,8 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
                     else -> OrderStatus.Pending
                 },
                 createdAt = o.optLong("created_at"),
-                uid = o.optString("uid","")
+                uid = o.optString("uid",""),
+                orderNo = o.optString("order_no", null)
             )
         }
     } catch (_: Exception) { null }

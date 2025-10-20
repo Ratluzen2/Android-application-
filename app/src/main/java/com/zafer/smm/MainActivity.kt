@@ -2966,10 +2966,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
    ========================= */
 private fun prefs(ctx: Context) = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
-private fun appCtx(): Context {
-    // fallback to the first activity context stored globally if you have; otherwise prefer LocalContext in Composable
-    return MainActivity.app ?: throw IllegalStateException("No app context available")
-}
 
 // =========================
 // حظر أسيا سيل + عدادات محلية
@@ -3236,11 +3232,7 @@ private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
             val until = d?.optLong("until_ms", 0L) ?: 0L
             if (until > System.currentTimeMillis()) {
                 // cache ban end locally for UI
-                prefs(appCtx()).edit()
-                    .putLong("asia_ban_until_ms", until)
-                    .putString("asia_ban_reason", d?.optString("reason","server"))
-                    .apply()
-            }
+                            }
         } catch (_: Exception) {}
         return false
     }
@@ -3250,7 +3242,6 @@ private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
         val obj = JSONObject(txt.trim())
         obj.optBoolean("ok", true) || obj.optString("status").equals("received", true)
     } catch (_: Exception) { true }
-} catch (_: Exception) { true }
 }
 
 private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {

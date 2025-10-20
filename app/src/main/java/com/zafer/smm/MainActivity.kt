@@ -1915,7 +1915,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                             askAsiacell = true
                         }
                     }
-                }},
+                },
             colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1952,48 +1952,48 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         AlertDialog(
             onDismissRequest = { if (!sending) askAsiacell = false },
             confirmButton = {
-                val scope2 = rememberCoroutineScope()
                 TextButton(enabled = !sending, onClick = {
-    val digits = cardNumber.filter { it.isDigit() }
-    if (digits.length != 14 && digits.length != 16) return@TextButton
+                    val digits = cardNumber.filter { it.isDigit() }
+                    if (digits.length != 14 && digits.length != 16) return@TextButton
 
-    sending = true
-    scope.launch {
-        val (srvBanned, until) = apiFetchBanStatus(uid)
-        if (srvBanned && until > System.currentTimeMillis()) {
-            val mins = ((until - System.currentTimeMillis()) + 59_999L) / 60_000L
-            banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\nسينتهي الحظر بعد ${mins} دقيقة."
-            onToast("تم حضرك موقتا بسبب انتهاك سياسة التطبيق")
-            askAsiacell = false
-            sending = false
-            return@launch
-        }
+                    sending = true
+                    scope.launch {
+                        val (srvBanned, until) = apiFetchBanStatus(uid)
+                        if (srvBanned && until > System.currentTimeMillis()) {
+                            val mins = ((until - System.currentTimeMillis()) + 59_999L) / 60_000L
+                            banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\nسينتهي الحظر بعد ${mins} دقيقة."
+                            onToast("تم حضرك موقتا بسبب انتهاك سياسة التطبيق")
+                            askAsiacell = false
+                            sending = false
+                            return@launch
+                        }
 
-        val (allowed, _) = asiacellPreCheckAndRecord(ctx, digits)
-        if (!allowed) {
-            askAsiacell = false
-            sending = false
-            val mins = asiacellBanRemainingMinutes(ctx)
-            banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\nسينتهي الحظر بعد ${mins} دقيقة."
-            onToast("تم حضرك موقتا بسبب انتهاك سياسة التطبيق")
-            return@launch
-        }
+                        // Local fallback check (kept as secondary)
+                        val (allowed, _) = asiacellPreCheckAndRecord(ctx, digits)
+                        if (!allowed) {
+                            askAsiacell = false
+                            sending = false
+                            val mins = asiacellBanRemainingMinutes(ctx)
+                            banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\nسينتهي الحظر بعد ${mins} دقيقة."
+                            onToast("تم حضرك موقتا بسبب انتهاك سياسة التطبيق")
+                            return@launch
+                        }
 
-        val ok = apiSubmitAsiacellCard(uid, digits)
-        if (ok) { balance = apiGetBalance(uid) }
-        sending = false
-        if (ok) {
-            onAddNotice(AppNotice("تم استلام كارتك", "تم إرسال كارت أسيا سيل إلى المالك للمراجعة.", forOwner = false))
-            onAddNotice(AppNotice("كارت أسيا سيل جديد", "UID=$uid | كارت: $digits", forOwner = true))
-            onToast("تم إرسال الكارت بنجاح")
-            cardNumber = ""
-            askAsiacell = false
-        } else {
-            onAddNotice(AppNotice("فشل إرسال الكارت", "تحقق من الاتصال وحاول مجددًا.", forOwner = false))
-            onToast("فشل إرسال الكارت")
-        }
-    }
-}) { Text(if (sending) "يرسل" else "إرسال") }
+                        val ok = apiSubmitAsiacellCard(uid, digits)
+                        if (ok) { balance = apiGetBalance(uid) }
+                        sending = false
+                        if (ok) {
+                            onAddNotice(AppNotice("تم استلام كارتك", "تم إرسال كارت أسيا سيل إلى المالك للمراجعة.", forOwner = false))
+                            onAddNotice(AppNotice("كارت أسيا سيل جديد", "UID=$uid | كارت: $digits", forOwner = true))
+                            onToast("تم إرسال الكارت بنجاح")
+                            cardNumber = ""
+                            askAsiacell = false
+                        } else {
+                            onAddNotice(AppNotice("فشل إرسال الكارت", "تحقق من الاتصال وحاول مجددًا.", forOwner = false))
+                            onToast("فشل إرسال الكارت")
+                        }
+                    }
+                }) { Text(if (sending) "يرسل" else "إرسال") }
             },
             dismissButton = { TextButton(enabled = !sending, onClick = { askAsiacell = false }) { Text("إلغاء") } },
             title = { Text("شحن عبر أسيا سيل", color = OnBg) },
@@ -2025,8 +2025,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             text = { Text(msg, color = OnBg) }
         )
     }
-}
-/* =========================
+}/* =========================
    تبويب طلباتي
    ========================= */
 @Composable private fun OrdersScreen(uid: String) {
@@ -2967,6 +2966,11 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
    ========================= */
 private fun prefs(ctx: Context) = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
+private fun appCtx(): Context {
+    // fallback to the first activity context stored globally if you have; otherwise prefer LocalContext in Composable
+    return MainActivity.app ?: throw IllegalStateException("No app context available")
+}
+
 // =========================
 // حظر أسيا سيل + عدادات محلية
 // =========================
@@ -3226,13 +3230,17 @@ private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
         JSONObject().put("uid", uid).put("card", card)
     )
     if (code == 403 && txt != null) {
-        // try to parse FastAPI error {"detail": {...}}
         try {
             val o = JSONObject(txt.trim())
             val d = o.optJSONObject("detail")
             val until = d?.optLong("until_ms", 0L) ?: 0L
             if (until > System.currentTimeMillis()) {
-                            }
+                // cache ban end locally for UI
+                prefs(appCtx()).edit()
+                    .putLong("asia_ban_until_ms", until)
+                    .putString("asia_ban_reason", d?.optString("reason","server"))
+                    .apply()
+            }
         } catch (_: Exception) {}
         return false
     }
@@ -3242,6 +3250,7 @@ private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
         val obj = JSONObject(txt.trim())
         obj.optBoolean("ok", true) || obj.optString("status").equals("received", true)
     } catch (_: Exception) { true }
+} catch (_: Exception) { true }
 }
 
 private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {

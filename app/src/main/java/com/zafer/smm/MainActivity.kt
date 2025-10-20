@@ -1906,20 +1906,16 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                 .fillMaxWidth()
                 .padding(bottom = 8.dp)
                 .clickable {
-    scope.launch {
-        val (srvBanned, until) = apiFetchBanStatus(uid)
-        if (srvBanned && until > System.currentTimeMillis()) {
-            val mins = ((until - System.currentTimeMillis()) + 59_999L) / 60_000L
-            banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\nسينتهي الحظر بعد ${mins} دقيقة."
-        } else {
-            askAsiacell = true
-        }
-    }
-} else {
-        askAsiacell = true
-    }
-}
-                },
+                    scope.launch {
+                        val (srvBanned, until) = apiFetchBanStatus(uid)
+                        if (srvBanned && until > System.currentTimeMillis()) {
+                            val mins = ((until - System.currentTimeMillis()) + 59_999L) / 60_000L
+                            banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\nسينتهي الحظر بعد ${mins} دقيقة."
+                        } else {
+                            askAsiacell = true
+                        }
+                    }
+                }},
             colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {

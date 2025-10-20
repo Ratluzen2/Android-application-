@@ -1906,14 +1906,12 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                 .fillMaxWidth()
                 .padding(bottom = 8.dp)
                 .clickable {
-                    scope.launch {
-                        val (srvBanned, until) = apiFetchBanStatus(uid)
-                        if (srvBanned && until > System.currentTimeMillis()) {
-                            val mins = ((until - System.currentTimeMillis()) + 59_999L) / 60_000L
-                            banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\nسينتهي الحظر بعد ${mins} دقيقة."
-                        } else {
-                            askAsiacell = true
-                        }
+                    val until = loadAsiacellBanUntil(ctx)
+                    if (until > 0L && until > System.currentTimeMillis()) {
+                        val mins = asiacellBanRemainingMinutes(ctx)
+                        banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\\nسينتهي الحظر بعد ${mins} دقيقة."
+                    } else {
+                        askAsiacell = true
                     }
                 },
             colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
@@ -1952,33 +1950,23 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         AlertDialog(
             onDismissRequest = { if (!sending) askAsiacell = false },
             confirmButton = {
+                val scope2 = rememberCoroutineScope()
                 TextButton(enabled = !sending, onClick = {
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
 
+                    val (allowed, _) = asiacellPreCheckAndRecord(ctx, digits)
+                    if (!allowed) {
+                        askAsiacell = false
+                        sending = false
+                        val mins = asiacellBanRemainingMinutes(ctx)
+                        banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\\nسينتهي الحظر بعد ${mins} دقيقة."
+                        onToast("تم حضرك موقتا بسبب انتهاك سياسة التطبيق")
+                        return@TextButton
+                    }
+
                     sending = true
-                    scope.launch {
-                        val (srvBanned, until) = apiFetchBanStatus(uid)
-                        if (srvBanned && until > System.currentTimeMillis()) {
-                            val mins = ((until - System.currentTimeMillis()) + 59_999L) / 60_000L
-                            banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\nسينتهي الحظر بعد ${mins} دقيقة."
-                            onToast("تم حضرك موقتا بسبب انتهاك سياسة التطبيق")
-                            askAsiacell = false
-                            sending = false
-                            return@launch
-                        }
-
-                        // Local fallback check (kept as secondary)
-                        val (allowed, _) = asiacellPreCheckAndRecord(ctx, digits)
-                        if (!allowed) {
-                            askAsiacell = false
-                            sending = false
-                            val mins = asiacellBanRemainingMinutes(ctx)
-                            banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\nسينتهي الحظر بعد ${mins} دقيقة."
-                            onToast("تم حضرك موقتا بسبب انتهاك سياسة التطبيق")
-                            return@launch
-                        }
-
+                    scope2.launch {
                         val ok = apiSubmitAsiacellCard(uid, digits)
                         if (ok) { balance = apiGetBalance(uid) }
                         sending = false
@@ -2025,7 +2013,8 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             text = { Text(msg, color = OnBg) }
         )
     }
-}/* =========================
+}
+/* =========================
    تبويب طلباتي
    ========================= */
 @Composable private fun OrdersScreen(uid: String) {
@@ -2966,7 +2955,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
    ========================= */
 private fun prefs(ctx: Context) = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
 
-
 // =========================
 // حظر أسيا سيل + عدادات محلية
 // =========================
@@ -3179,19 +3167,6 @@ private suspend fun httpPostFormAbs(fullUrl: String, fields: Map<String, String>
     withContext(Dispatchers.IO) { httpPostFormAbsolute(fullUrl, fields, headers) }
 
 /* ===== وظائف مشتركة مع الخادم ===== */
-
-private suspend fun apiFetchBanStatus(uid: String): Pair<Boolean, Long> {
-    val (code, txt) = httpGet("/api/users/ban/status?uid=$uid")
-    if (code in 200..299 && txt != null) {
-        try {
-            val o = JSONObject(txt.trim())
-            val banned = o.optBoolean("banned", false)
-            val until = o.optLong("until_ms", 0L)
-            return banned to until
-        } catch (_: Exception) { }
-    }
-    return false to 0L
-}
 private suspend fun pingHealth(): Boolean? {
     val (code, _) = httpGet("/health")
     return code in 200..299
@@ -3225,17 +3200,6 @@ private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
         "/api/wallet/asiacell/submit",
         JSONObject().put("uid", uid).put("card", card)
     )
-    if (code == 403 && txt != null) {
-        try {
-            val o = JSONObject(txt.trim())
-            val d = o.optJSONObject("detail")
-            val until = d?.optLong("until_ms", 0L) ?: 0L
-            if (until > System.currentTimeMillis()) {
-                // cache ban end locally for UI
-                            }
-        } catch (_: Exception) {}
-        return false
-    }
     if (code !in 200..299) return false
     return try {
         if (txt == null) return true

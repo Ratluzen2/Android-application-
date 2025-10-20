@@ -1887,7 +1887,6 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     val ctx = LocalContext.current
     var banPopup by remember { mutableStateOf<String?>(null) }
 
-
     LaunchedEffect(Unit) { balance = apiGetBalance(uid) }
     LaunchedEffect(noticeTick) { balance = apiGetBalance(uid) }
 
@@ -1903,12 +1902,14 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         Spacer(Modifier.height(8.dp))
 
         ElevatedCard(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable {
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp)
+                .clickable {
                     val until = loadAsiacellBanUntil(ctx)
                     if (until > 0L && until > System.currentTimeMillis()) {
                         val mins = asiacellBanRemainingMinutes(ctx)
-                        banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.
-سينتهي الحظر بعد ${mins} دقيقة."
+                        banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\\nسينتهي الحظر بعد ${mins} دقيقة."
                     } else {
                         askAsiacell = true
                     }
@@ -1954,13 +1955,12 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
 
-                    val (allowed, reason) = asiacellPreCheckAndRecord(ctx, digits)
+                    val (allowed, _) = asiacellPreCheckAndRecord(ctx, digits)
                     if (!allowed) {
                         askAsiacell = false
                         sending = false
                         val mins = asiacellBanRemainingMinutes(ctx)
-                        banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.
-سينتهي الحظر بعد ${mins} دقيقة."
+                        banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\\nسينتهي الحظر بعد ${mins} دقيقة."
                         onToast("تم حضرك موقتا بسبب انتهاك سياسة التطبيق")
                         return@TextButton
                     }
@@ -2002,8 +2002,9 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                     )
                 }
             }
-        
-    // منبّه الحظر (يظهر في أي مكان داخل WalletScreen)
+        )
+    }
+
     banPopup?.let { msg ->
         AlertDialog(
             onDismissRequest = { banPopup = null },
@@ -2012,10 +2013,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             text = { Text(msg, color = OnBg) }
         )
     }
-)
-    }
 }
-
 /* =========================
    تبويب طلباتي
    ========================= */

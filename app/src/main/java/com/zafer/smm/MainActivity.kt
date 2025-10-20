@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -862,26 +861,19 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
     }
 
     // ✅ جلب الإشعارات من الخادم ودمجها، وتحديث العداد تلقائيًا
-// ✅ جلب إشعارات المستخدم من الخادم ودمجها مع المحلي كل 10 ثوانٍ
-LaunchedEffect(uid) {
-    while (true) {
-        try {
+    LaunchedEffect(uid) {
+        while (true) {
             val remote = apiFetchNotificationsByUid(uid) ?: emptyList()
-            val userLocal = notices.filter { !it.forOwner }
-            val ownerLocal = notices.filter { it.forOwner }
-            val merged = mergeNotices(userLocal, remote)
-            if (merged.size != userLocal.size) {
-                notices = merged + ownerLocal
+            val before = notices.size
+            val merged = mergeNotices(notices.filter { !it.forOwner }, remote) + notices.filter { it.forOwner }
+            if (merged.size != before) {
+                notices = merged
                 saveNotices(ctx, notices)
                 noticeTick++
             }
-        } catch (_: Exception) {
-            // ignore
+            delay(10_000)
         }
-        delay(10_000)
     }
-}
-
 
 // ✅ جلب إشعارات المالك من الخادم عندما يكون وضع المالك مُفعّلاً
 LaunchedEffect(loadOwnerMode(ctx)) {
@@ -1892,6 +1884,9 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     var askAsiacell by remember { mutableStateOf(false) }
     var cardNumber by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
+    var banPopup by remember { mutableStateOf<String?>(null) }
+
 
     LaunchedEffect(Unit) { balance = apiGetBalance(uid) }
     LaunchedEffect(noticeTick) { balance = apiGetBalance(uid) }
@@ -1908,7 +1903,16 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         Spacer(Modifier.height(8.dp))
 
         ElevatedCard(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { askAsiacell = true },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable {
+                    val until = loadAsiacellBanUntil(ctx)
+                    if (until > 0L && until > System.currentTimeMillis()) {
+                        val mins = asiacellBanRemainingMinutes(ctx)
+                        banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.
+سينتهي الحظر بعد ${mins} دقيقة."
+                    } else {
+                        askAsiacell = true
+                    }
+                },
             colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -1949,6 +1953,18 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                 TextButton(enabled = !sending, onClick = {
                     val digits = cardNumber.filter { it.isDigit() }
                     if (digits.length != 14 && digits.length != 16) return@TextButton
+
+                    val (allowed, reason) = asiacellPreCheckAndRecord(ctx, digits)
+                    if (!allowed) {
+                        askAsiacell = false
+                        sending = false
+                        val mins = asiacellBanRemainingMinutes(ctx)
+                        banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.
+سينتهي الحظر بعد ${mins} دقيقة."
+                        onToast("تم حضرك موقتا بسبب انتهاك سياسة التطبيق")
+                        return@TextButton
+                    }
+
                     sending = true
                     scope2.launch {
                         val ok = apiSubmitAsiacellCard(uid, digits)
@@ -1986,7 +2002,17 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                     )
                 }
             }
+        
+    // منبّه الحظر (يظهر في أي مكان داخل WalletScreen)
+    banPopup?.let { msg ->
+        AlertDialog(
+            onDismissRequest = { banPopup = null },
+            confirmButton = { TextButton(onClick = { banPopup = null }) { Text("حسنًا") } },
+            title = { Text("تنبيه", color = OnBg) },
+            text = { Text(msg, color = OnBg) }
         )
+    }
+)
     }
 }
 
@@ -1999,21 +2025,11 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     var err by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(uid) {
-    loading = true
-    err = null
-    while (isActive) {
-        try {
-            apiSyncProviderOrders(uid)
-            orders = apiGetMyOrders(uid)
-            err = null
-        } catch (_: Throwable) {
-            err = "تعذر جلب البيانات"
-        } finally {
-            loading = false
-        }
-        delay(3000)
+        loading = true
+        err = null
+        orders = apiGetMyOrders(uid).also { loading = false }
+        if (orders == null) err = "تعذر جلب الطلبات"
     }
-}
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Text("طلباتي", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = OnBg)
@@ -2940,6 +2956,99 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
    تخزين محلي + أدوات شبكة
    ========================= */
 private fun prefs(ctx: Context) = ctx.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+
+// =========================
+// حظر أسيا سيل + عدادات محلية
+// =========================
+private const val PREF_ASIA_BAN_UNTIL = "asia_ban_until_ms"
+private const val PREF_ASIA_BAN_REASON = "asia_ban_reason"
+private const val PREF_ASIA_CARD_TIMES = "asia_card_times"    // JSONObject: { "CARD_DIGITS": [ts, ts, ...] }
+private const val PREF_ASIA_RECENT = "asia_recent_times"      // JSONArray: [ts, ts, ...]
+
+private fun clearAsiacellBan(ctx: Context) {
+    prefs(ctx).edit().remove(PREF_ASIA_BAN_UNTIL).remove(PREF_ASIA_BAN_REASON).apply()
+}
+
+private fun loadAsiacellBanUntil(ctx: Context): Long {
+    val until = prefs(ctx).getLong(PREF_ASIA_BAN_UNTIL, 0L)
+    if (until > 0 && System.currentTimeMillis() > until) {
+        clearAsiacellBan(ctx) // انتهى الحظر تلقائيًا
+        return 0L
+    }
+    return until
+}
+
+private fun setAsiacellBan(ctx: Context, reason: String) {
+    val until = System.currentTimeMillis() + 60L * 60L * 1000L // ساعة
+    prefs(ctx).edit()
+        .putLong(PREF_ASIA_BAN_UNTIL, until)
+        .putString(PREF_ASIA_BAN_REASON, reason)
+        .apply()
+}
+
+private fun asiacellBanRemainingMinutes(ctx: Context): Long {
+    val until = loadAsiacellBanUntil(ctx)
+    val left = until - System.currentTimeMillis()
+    return if (left <= 0) 0 else (left + 59_999L) / 60_000L
+}
+
+private fun loadJsonObjectOrEmpty(s: String?): JSONObject =
+    try { if (!s.isNullOrBlank()) JSONObject(s) else JSONObject() } catch (_: Throwable) { JSONObject() }
+
+private fun loadJsonArrayOrEmpty(s: String?): JSONArray =
+    try { if (!s.isNullOrBlank()) JSONArray(s) else JSONArray() } catch (_: Throwable) { JSONArray() }
+
+/**
+ * يفحص الحظر + السرعة + تكرار نفس الكارت، ويحدث العدادات إن لم يُحظر.
+ * @return Pair(allowed, reasonOrNull)
+ *  - allowed=false, reason in {"ban_active","speed","repeat"} عند الحظر.
+ */
+private fun asiacellPreCheckAndRecord(ctx: Context, digitsRaw: String): Pair<Boolean, String?> {
+    val now = System.currentTimeMillis()
+    if (loadAsiacellBanUntil(ctx) > now) return false to "ban_active"
+
+    val digits = digitsRaw.filter { it.isDigit() }
+
+    // 1) فحص السرعة: 3 محاولات خلال دقيقة -> حظر ساعة
+    val recStr = prefs(ctx).getString(PREF_ASIA_RECENT, "[]")
+    val recent = loadJsonArrayOrEmpty(recStr)
+    val keep = JSONArray()
+    var recentCount = 0
+    for (i in 0 until recent.length()) {
+        val t = recent.optLong(i, 0L)
+        if (t > now - 60_000L) { keep.put(t); recentCount++ }
+    }
+    if (recentCount >= 2) { // هذه ستكون المحاولة الثالثة خلال دقيقة
+        setAsiacellBan(ctx, "speed")
+        return false to "speed"
+    }
+
+    // 2) تكرار نفس الرقم: أكثر من مرتين خلال 24 ساعة -> حظر ساعة
+    val mapStr = prefs(ctx).getString(PREF_ASIA_CARD_TIMES, "{}")
+    val obj = loadJsonObjectOrEmpty(mapStr)
+    val arr = obj.optJSONArray(digits) ?: JSONArray()
+    val arrKeep = JSONArray()
+    var sameCardCount = 0
+    for (i in 0 until arr.length()) {
+        val t = arr.optLong(i, 0L)
+        if (t > now - 24L * 60L * 60L * 1000L) {
+            arrKeep.put(t); sameCardCount++
+        }
+    }
+    if (sameCardCount >= 2) { // المحاولة الحالية ستكون الثالثة لهذا الرقم
+        setAsiacellBan(ctx, "repeat")
+        return false to "repeat"
+    }
+
+    // لم يُحظر: نسجل المحاولة الحالية
+    keep.put(now)
+    prefs(ctx).edit().putString(PREF_ASIA_RECENT, keep.toString()).apply()
+    arrKeep.put(now)
+    obj.put(digits, arrKeep)
+    prefs(ctx).edit().putString(PREF_ASIA_CARD_TIMES, obj.toString()).apply()
+
+    return true to null
+}
 private fun loadOrCreateUid(ctx: Context): String {
     val sp = prefs(ctx)
     val existing = sp.getString("uid", null)
@@ -3116,11 +3225,6 @@ suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int, acc
     val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
     val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true)
     return Pair(ok, txt)
-}
-
-private suspend fun apiSyncProviderOrders(uid: String): Boolean {
-    val (code, _) = httpPost("/api/orders/sync_provider?uid=$uid", JSONObject())
-    return code in 200..299
 }
 
 private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {

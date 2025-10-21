@@ -3312,10 +3312,12 @@ private suspend fun apiFetchNotificationsByUid(uid: String, limit: Int = 50): Li
 
 /* دخول المالك */
 private suspend fun apiAdminLogin(password: String): String? {
-    if (password == "2000") return password
-    val (code, _) = httpGet(AdminEndpoints.pendingServices, headers = mapOf("x-admin-password" to password))
+    val (code, _) = httpGet(
+        AdminEndpoints.pendingServices,
+        headers = mapOf("x-admin-password" to password)
+    )
     return if (code in 200..299) password else null
-}
+} 
 private suspend fun apiAdminPOST(path: String, token: String, body: JSONObject? = null): Boolean {
     val (code, _) = if (body == null) {
         httpPost(path, JSONObject(), headers = mapOf("x-admin-password" to token))

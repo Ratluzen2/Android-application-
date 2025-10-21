@@ -1,3 +1,7 @@
 <resources>
-    <color name="ic_launcher_background">#101820</color>
+    <!-- لون مضاف للخلفية المطلوبة (تقريباً نفس لون الصورة) -->
+    <color name="brand_launcher_bg">#2E3F47</color>
+
+    <!-- خلفية أيقونة التطبيق (lanucher background) -->
+    <color name="ic_launcher_background">#2E3F47</color>
 </resources>

@@ -781,11 +781,59 @@ private val serviceCategories = listOf(
 /* =========================
    Activity
    ========================= */
+// === Security: Global app context + HMAC signing helpers ===
+object AppCtx {
+    @JvmStatic lateinit var ctx: android.content.Context
+    @JvmStatic fun ready(): Boolean = this::ctx.isInitialized
+}
+
+private const val APP_SECRET = "jxjvjxcjj67646486jcjdjfjcjcjf168676868"
+
+private object HmacUtil {
+    private fun hmacSha256(data: String, secret: String): ByteArray {
+        val mac = javax.crypto.Mac.getInstance("HmacSHA256")
+        mac.init(javax.crypto.spec.SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
+        return mac.doFinal(data.toByteArray(Charsets.UTF_8))
+    }
+    private fun sha256Hex(bytes: ByteArray): String {
+        val md = java.security.MessageDigest.getInstance("SHA-256")
+        val d = md.digest(bytes)
+        val sb = StringBuilder()
+        d.forEach { b -> sb.append(String.format("%02x", b)) }
+        return sb.toString()
+    }
+    private fun deviceId(ctx: android.content.Context): String {
+        val androidId = android.provider.Settings.Secure.getString(ctx.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: ""
+        val model = android.os.Build.MODEL ?: "Android"
+        return if (androidId.isNotEmpty()) "$model:$androidId" else model
+    }
+    fun addSignatureHeaders(con: java.net.HttpURLConnection, method: String, path: String, bodyBytes: ByteArray? = null) {
+        try {
+            if (!AppCtx.ready()) return
+            val ctx = AppCtx.ctx
+            val uid = loadOrCreateUid(ctx)
+            val dev = deviceId(ctx)
+            val t = System.currentTimeMillis() / 1000L
+            val bodySha = sha256Hex(bodyBytes ?: ByteArray(0))
+            val payload = listOf(uid, dev, t.toString(), method.uppercase(), path, bodySha).joinToString("|")
+            val raw = hmacSha256(payload, APP_SECRET)
+            val sign = android.util.Base64.encodeToString(raw, android.util.Base64.NO_WRAP)
+            con.setRequestProperty("X-UID", uid)
+            con.setRequestProperty("X-Device", dev)
+            con.setRequestProperty("X-Time", t.toString())
+            con.setRequestProperty("X-Sign", sign)
+        } catch (_: Throwable) { /* ignore */ }
+    }
+}
+// === End Security helpers ===
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        AppNotifier.ensureChannel(this)
+        
+        AppCtx.ctx = applicationContext
+AppNotifier.ensureChannel(this)
         AppNotifier.requestPermissionIfNeeded(this)
         OrderDoneCheckWorker.schedule(this)
         // === FCM token — خطوة 1 (تشغيلياً من داخل الملف الرئيسي) ===
@@ -3128,7 +3176,10 @@ private fun httpPostBlocking(path: String, json: JSONObject, headers: Map<String
             connectTimeout = 12000
             readTimeout = 12000
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            val jsonStr = json.toString()
+            val _bytes = jsonStr.toByteArray(Charsets.UTF_8)
             headers.forEach { (k, v) -> setRequestProperty(k, v) }
+            HmacUtil.addSignatureHeaders(con, "POST", path, _bytes)
         }
         OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(json.toString()) }
         val code = con.responseCode
@@ -3143,6 +3194,7 @@ private fun httpPostFormAbsolute(fullUrl: String, fields: Map<String, String>, h
     return try {
         val url = URL(fullUrl)
         val form = fields.entries.joinToString("&") { (k, v) -> "${URLEncoder.encode(k, "UTF-8")}=${URLEncoder.encode(v, "UTF-8")}" }
+        val _bytes = form.toByteArray(Charsets.UTF_8)
         val con = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
@@ -3150,6 +3202,7 @@ private fun httpPostFormAbsolute(fullUrl: String, fields: Map<String, String>, h
             readTimeout = 12000
             setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
             headers.forEach { (k, v) -> setRequestProperty(k, v) }
+            HmacUtil.addSignatureHeaders(con, "POST", URL(fullUrl).path, _bytes)
         }
         con.outputStream.use { it.write(form.toByteArray(Charsets.UTF_8)) }
         val code = con.responseCode
@@ -3160,10 +3213,7 @@ private fun httpPostFormAbsolute(fullUrl: String, fields: Map<String, String>, h
 }
 
 /* أغلفة suspend للـ POSTs */
-private suspend fun httpPost(path: String, json: JSONObject, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
-    withContext(Dispatchers.IO) { httpPostBlocking(path, json, headers) }
-
-private suspend fun httpPostFormAbs(fullUrl: String, fields: Map<String, String>, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
+private suspend fun httpPost(path: String, jd fun httpPostFormAbs(fullUrl: String, fields: Map<String, String>, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
     withContext(Dispatchers.IO) { httpPostFormAbsolute(fullUrl, fields, headers) }
 
 /* ===== وظائف مشتركة مع الخادم ===== */
@@ -3197,10 +3247,7 @@ private suspend fun apiCreateProviderOrder(
 /* أسيا سيل */
 private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
     val (code, txt) = httpPost(
-        "/api/wallet/asiacell/submit",
-        JSONObject().put("uid", uid).put("card", card)
-    )
-    if (code !in 200..299) return false
+ lse
     return try {
         if (txt == null) return true
         val obj = JSONObject(txt.trim())

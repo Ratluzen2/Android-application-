@@ -798,21 +798,20 @@ private object HmacUtil {
     private fun sha256Hex(bytes: ByteArray): String {
         val md = java.security.MessageDigest.getInstance("SHA-256")
         val d = md.digest(bytes)
-        val sb = StringBuilder()
-        d.forEach { b -> sb.append(String.format("%02x", b)) }
-        return sb.toString()
+        return d.joinToString("") { "%02x".format(it) }
     }
     private fun deviceId(ctx: android.content.Context): String {
-        val androidId = android.provider.Settings.Secure.getString(ctx.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: ""
+        val androidId = android.provider.Settings.Secure.getString(
+            ctx.contentResolver, android.provider.Settings.Secure.ANDROID_ID
+        ) ?: ""
         val model = android.os.Build.MODEL ?: "Android"
         return if (androidId.isNotEmpty()) "$model:$androidId" else model
     }
     fun addSignatureHeaders(con: java.net.HttpURLConnection, method: String, path: String, bodyBytes: ByteArray? = null) {
         try {
             if (!AppCtx.ready()) return
-            val ctx = AppCtx.ctx
-            val uid = loadOrCreateUid(ctx)
-            val dev = deviceId(ctx)
+            val uid = loadOrCreateUid(AppCtx.ctx)
+            val dev = deviceId(AppCtx.ctx)
             val t = System.currentTimeMillis() / 1000L
             val bodySha = sha256Hex(bodyBytes ?: ByteArray(0))
             val payload = listOf(uid, dev, t.toString(), method.uppercase(), path, bodySha).joinToString("|")
@@ -825,6 +824,8 @@ private object HmacUtil {
         } catch (_: Throwable) { /* ignore */ }
     }
 }
+// === End Security helpers ===
+
 // === End Security helpers ===
 
 class MainActivity : ComponentActivity() {
@@ -3158,6 +3159,7 @@ private suspend fun httpGet(path: String, headers: Map<String, String> = emptyMa
                 connectTimeout = 8000
                 readTimeout = 8000
                 headers.forEach { (k, v) -> setRequestProperty(k, v) }
+            HmacUtil.addSignatureHeaders(this, "GET", path)
             }
             val code = con.responseCode
             val txt = (if (code in 200..299) con.inputStream else con.errorStream)
@@ -3167,21 +3169,21 @@ private suspend fun httpGet(path: String, headers: Map<String, String> = emptyMa
     }
 
 /* POST JSON (blocking) — نغلفها بدالة suspend أدناه */
-private fun httpPostBlocking(path: String, json: JSONObject, headers: Map<String, String> = emptyMap()): Pair<Int, String?> {
+private private fun httpPostBlocking(path: String, json: JSONObject, headers: Map<String, String> = emptyMap()): Pair<Int, String?> {
     return try {
         val url = URL("$API_BASE$path")
+        val jsonStr = json.toString()
+        val payloadBytes = jsonStr.toByteArray(Charsets.UTF_8)
         val con = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
             connectTimeout = 12000
             readTimeout = 12000
             setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            val jsonStr = json.toString()
-            val _bytes = jsonStr.toByteArray(Charsets.UTF_8)
             headers.forEach { (k, v) -> setRequestProperty(k, v) }
-            HmacUtil.addSignatureHeaders(con, "POST", path, _bytes)
+            HmacUtil.addSignatureHeaders(this, "POST", path, payloadBytes)
         }
-        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(json.toString()) }
+        OutputStreamWriter(con.outputStream, Charsets.UTF_8).use { it.write(jsonStr) }
         val code = con.responseCode
         val txt = (if (code in 200..299) con.inputStream else con.errorStream)
             ?.bufferedReader()?.use { it.readText() }
@@ -3189,12 +3191,18 @@ private fun httpPostBlocking(path: String, json: JSONObject, headers: Map<String
     } catch (_: Exception) { -1 to null }
 }
 
+
 /* POST form مطلق (KD1S) — نغلفها بدالة suspend */
-private fun httpPostFormAbsolute(fullUrl: String, fields: Map<String, String>, headers: Map<String, String> = emptyMap()): Pair<Int, String?> {
+private fun httpPostFormAbsolute(
+    fullUrl: String,
+    fields: Map<String, String>,
+    headers: Map<String, String> = emptyMap()
+): Pair<Int, String?> {
     return try {
         val url = URL(fullUrl)
-        val form = fields.entries.joinToString("&") { (k, v) -> "${URLEncoder.encode(k, "UTF-8")}=${URLEncoder.encode(v, "UTF-8")}" }
-        val _bytes = form.toByteArray(Charsets.UTF_8)
+        val form = fields.entries.joinToString("&") { (k, v) ->
+            "${URLEncoder.encode(k, "UTF-8")}=${URLEncoder.encode(v, "UTF-8")}"
+        }
         val con = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             doOutput = true
@@ -3202,8 +3210,8 @@ private fun httpPostFormAbsolute(fullUrl: String, fields: Map<String, String>, h
             readTimeout = 12000
             setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
             headers.forEach { (k, v) -> setRequestProperty(k, v) }
-            HmacUtil.addSignatureHeaders(con, "POST", URL(fullUrl).path, _bytes)
         }
+        HmacUtil.addSignatureHeaders(con, "POST", URL(fullUrl).path, form.toByteArray(Charsets.UTF_8))
         con.outputStream.use { it.write(form.toByteArray(Charsets.UTF_8)) }
         val code = con.responseCode
         val txt = (if (code in 200..299) con.inputStream else con.errorStream)
@@ -3212,10 +3220,13 @@ private fun httpPostFormAbsolute(fullUrl: String, fields: Map<String, String>, h
     } catch (_: Exception) { -1 to null }
 }
 
-/* أغلفة suspend للـ POSTs */
-private suspend fun httpPost(path: String, jd fun httpPostFormAbs(fullUrl: String, fields: Map<String, String>, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
-    withContext(Dispatchers.IO) { httpPostFormAbsolute(fullUrl, fields, headers) }
 
+/* أغلفة suspend للـ POSTs */
+private suspend fun httpPost(path: String, jd: JSONObject, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
+    withContext(Dispatchers.IO) { httpPostBlocking(path, jd, headers) }
+
+private suspend fun httpPostFormAbs(fullUrl: String, fields: Map<String, String>, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
+    withContext(Dispatchers.IO) { httpPostFormAbsolute(fullUrl, fields, headers) }
 /* ===== وظائف مشتركة مع الخادم ===== */
 private suspend fun pingHealth(): Boolean? {
     val (code, _) = httpGet("/health")
@@ -3245,15 +3256,17 @@ private suspend fun apiCreateProviderOrder(
 }
 
 /* أسيا سيل */
+private suspend fun/* أسيا سيل */
 private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
-    val (code, txt) = httpPost(
- lse
+    val body = JSONObject().put("uid", uid).put("card", card)
+    val (code, txt) = httpPost("/api/topup/asiacell/card", body)
     return try {
         if (txt == null) return true
         val obj = JSONObject(txt.trim())
         obj.optBoolean("ok", true) || obj.optString("status").equals("received", true)
     } catch (_: Exception) { true }
 }
+
 
 private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     val body = JSONObject().put("uid", uid).put("title", name)

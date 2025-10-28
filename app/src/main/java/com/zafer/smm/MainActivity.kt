@@ -858,6 +858,9 @@ fun AppRoot() {
     val unreadUser = notices.count { !it.forOwner && it.ts > lastSeenUser }
     val unreadOwner = notices.count { it.forOwner && it.ts > lastSeenOwner }
     var topBalance by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(Unit) { try { topBalance = apiGetBalance(uid) } catch (_: Exception) { } }
+    LaunchedEffect(currentTab) { try { topBalance = apiGetBalance(uid) } catch (_: Exception) { } }
+    LaunchedEffect(noticeTick) { try { topBalance = apiGetBalance(uid) } catch (_: Exception) { } }
 var currentTab by remember { mutableStateOf(Tab.HOME) }
 
     // فحص الصحة + تسجيل UID
@@ -868,29 +871,16 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
             delay(15_000)
         }
     }
-
-        LaunchedEffect(uid) {
-        while (true) {
-            try { topBalance = apiGetBalance(uid) } catch (_: Exception) { }
-            delay(20_000)
-        }
+// تحديث فوري عند الدخول ولدى تغيّر التبويب
+    LaunchedEffect(Unit) {
+        try { topBalance = apiGetBalance(uid) } catch (_: Exception) { }
     }
+    LaunchedEffect(currentTab) {
+        try { topBalance = apiGetBalance(uid) } catch (_: Exception) { }
+    }
+
 
 // ✅ جلب الإشعارات من الخادم ودمجها، وتحديث العداد تلقائيًا
-    LaunchedEffect(uid) {
-        while (true) {
-            val remote = apiFetchNotificationsByUid(uid) ?: emptyList()
-            val before = notices.size
-            val merged = mergeNotices(notices.filter { !it.forOwner }, remote) + notices.filter { it.forOwner }
-            if (merged.size != before) {
-                notices = merged
-                saveNotices(ctx, notices)
-                noticeTick++
-            }
-            delay(10_000)
-        }
-    }
-
 // ✅ جلب إشعارات المالك من الخادم عندما يكون وضع المالك مُفعّلاً
 LaunchedEffect(loadOwnerMode(ctx)) {
     while (loadOwnerMode(ctx)) {
@@ -1165,51 +1155,7 @@ Column(
 /* =========================
    الشريط العلوي الثابت (Top App Bar)
    ========================= */
-@Composable
-private fun FixedTopBar(
-    online: Boolean?,
-    unread: Int,
-    balance: Double?,
-    onOpenNotices: () -> Unit,
-    onOpenSettings: () -> Unit,
-    onOpenWallet: () -> Unit
 ) {
-    Surface(
-        color = Surface1,
-        contentColor = OnBg,
-        shadowElevation = 6.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .statusBarsPadding()
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            // رصيد المستخدم (كبسولة) - أيقونة بيضاء ونص واضح
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFF2E3F47))
-                    .clickable { onOpenWallet() }
-                    .padding(horizontal = 14.dp, vertical = 8.dp)
-            ) {
-                Text(
-                    text = "$ " + (balance?.let { String.format(java.util.Locale.US, "%.2f", it) } ?: "--"),
-                    color = Color.White,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.width(10.dp))
-                Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = Color.White)
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // إشعارات مع بادج
-                BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
                     IconButton(onClick = onOpenNotices) {
                         Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
                     }
@@ -1240,7 +1186,7 @@ private fun FixedTopBar(
 size(24.dp)) {
             Icon(Icons.Filled.Settings, contentDescription = null, tint = OnBg)
         }
-    }
+    
 }
 
 /* مركز الإشعارات */
@@ -3705,6 +3651,82 @@ class OrderDoneCheckWorker(appContext: Context, params: WorkerParameters) : Coro
             // فحص فوري لمرة واحدة عند الإقلاع
             val once = OneTimeWorkRequestBuilder<OrderDoneCheckWorker>().setConstraints(constraints).build()
             WorkManager.getInstance(context.applicationContext).enqueue(once)
+        }
+    }
+}
+
+/* =========================
+   الشريط العلوي الثابت (Top App Bar)
+   ========================= */
+@Composable
+private fun FixedTopBar(
+    online: Boolean?,
+    unread: Int,
+    balance: Double?,
+    onOpenNotices: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenWallet: () -> Unit
+) {
+    Surface(
+        color = Surface1,
+        contentColor = OnBg,
+        shadowElevation = 6.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .statusBarsPadding()
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // كبسولة الرصيد - أيقونة بيضاء ونص واضح
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(Color(0xFF2E3F47))
+                    .clickable { onOpenWallet() }
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "$ " + (balance?.let { String.format(java.util.Locale.US, "%.2f", it) } ?: "--"),
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.width(10.dp))
+                Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = Color.White)
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // إشعارات مع بادج
+                BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
+                    IconButton(onClick = onOpenNotices) {
+                        Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
+
+                // حالة الخادم
+                val (txt, clr) = when (online) {
+                    true -> "متصل" to Good
+                    false -> "غير متصل" to Bad
+                    else -> "..." to Dim
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(clr))
+                    Spacer(Modifier.width(6.dp))
+                    Text(txt, color = OnBg, fontSize = 12.sp)
+                }
+                Spacer(Modifier.width(8.dp))
+
+                // الإعدادات
+                IconButton(onClick = onOpenSettings) {
+                    Icon(Icons.Filled.Settings, contentDescription = null, tint = OnBg)
+                }
+            }
         }
     }
 }

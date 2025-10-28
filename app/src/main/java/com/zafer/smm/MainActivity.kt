@@ -94,6 +94,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Divider
 
 private const val OWNER_UID_BACKEND = "OWNER-0001" // يجب أن يطابق OWNER_UID في السيرفر
 
@@ -1114,25 +1116,6 @@ Column(
    الشريط العلوي يمين — (عمودي)
    ========================= */
 
-        confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
-        dismissButton = { TextButton(onClick = onClear) { Text("مسح الإشعارات") } },
-        title = { Text("الإشعارات") },
-        text = {
-            if (notices.isEmpty()) {
-                Text("لا توجد إشعارات حاليًا", color = Dim)
-            } else {
-                LazyColumn {
-                    items(notices.sortedByDescending { it.ts }) { itx ->
-                        val dt = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(itx.ts))
-                        Text("• ${itx.title}", fontWeight = FontWeight.SemiBold, color = OnBg)
-                        NoticeBody(itx.body)
-                        Text(dt, color = Dim, fontSize = 10.sp)
-                        Divider(Modifier.padding(vertical = 8.dp), color = Surface1)
-                    }
-                }
-            }
-        }
-    )
 }
 
 /* =========================
@@ -3645,4 +3628,37 @@ private fun FixedTopBar(
             }
         }
     }
+}
+
+/* =========================
+   واجهة مركز الإشعارات
+   ========================= */
+@Composable
+private fun NoticeCenterDialog(
+    notices: List<AppNotice>,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
+        dismissButton = { TextButton(onClick = onClear) { Text("مسح الإشعارات") } },
+        title = { Text("الإشعارات") },
+        text = {
+            if (notices.isEmpty()) {
+                Text("لا توجد إشعارات حاليًا", color = Dim)
+            } else {
+                LazyColumn {
+                    items(notices.sortedByDescending { it.ts }) { itx ->
+                        val dt = java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale.getDefault())
+                            .format(java.util.Date(itx.ts))
+                        Text("• " + itx.title, fontWeight = FontWeight.SemiBold, color = OnBg)
+                        NoticeBody(itx.body)
+                        Text(dt, color = Dim, fontSize = 10.sp)
+                        Divider(Modifier.padding(vertical = 8.dp), color = Surface1)
+                    }
+                }
+            }
+        }
+    )
 }

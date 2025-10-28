@@ -22,19 +22,24 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # إعداد Android SDK + قبول الرخص
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # نوفّر Gradle (بدون wrapper) — سيُتيح أمر "gradle"
+      # ✅ تثبيت build-tools لتوفير zipalign/apksigner
+      - name: Install Android build tools
+        run: |
+          yes | sdkmanager --licenses
+          sdkmanager "build-tools;34.0.0"
+
+      # يوفر Gradle (بدون wrapper) + كاش تلقائي
       - name: Install Gradle 8.7
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.7
 
-      # ⬇️ إنشاء ملف google-services.json من السر (النص الخام)
-      # ضع محتوى JSON الحقيقي داخل السر: GOOGLE_SERVICES_JSON
+      # ⬇️ إنشاء google-services.json من السر (لو السر موجود)
       - name: Create google-services.json from secret
+        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
         run: |
           mkdir -p "${{ env.PROJECT_DIR }}/app"
           cat > "${{ env.PROJECT_DIR }}/app/google-services.json" << 'JSON'
@@ -47,7 +52,7 @@ jobs:
           echo "VERSION_CODE=$((1000 + $GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
           echo "VERSION_NAME=${GITHUB_REF_NAME:-1.0.$GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
 
-      # بناء APK + AAB باستخدام "gradle"
+      # بناء APK + AAB
       - name: Build (APK + AAB)
         working-directory: ${{ env.PROJECT_DIR }}
         run: gradle clean assembleRelease bundleRelease -PversionName="$VERSION_NAME"

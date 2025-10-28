@@ -1,13 +1,9 @@
-name: Android CI (with Firebase)
+name: Android CI (Auto Version + Signing)
 
 on:
-  workflow_dispatch:
   push:
-    paths:
-      - 'app/**'
-      - 'build.gradle'
-      - 'settings.gradle'
-      - '.github/workflows/android.yml'
+    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -17,38 +13,57 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: 17
+          distribution: 'temurin'
+          java-version: '17'
 
-      # Android SDK + licenses
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # === Auto-versioning ===
+      # VERSION_CODE increases every run so Play/Android accepts it as an update.
+      - name: Compute VERSION_CODE
+        run: echo "VERSION_CODE=$((1000 + $GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
 
-      - name: Install SDK packages
+      - name: Compute VERSION_NAME (optional)
         run: |
-          sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+          if [ -n "${GITHUB_REF_NAME}" ]; then
+            echo "VERSION_NAME=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+          else
+            echo "VERSION_NAME=1.0.${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+          fi
 
-      # ➜ استرجاع ملف google-services.json من Secrets (لا تضع الملف علنيًا)
-      - name: Restore google-services.json
-        run: |
-          mkdir -p app
-          echo "$GOOGLE_SERVICES_JSON" > app/google-services.json
-          test -s app/google-services.json || (echo "google-services.json is empty!" && exit 1)
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+      - name: Gradle cache
+        uses: gradle/actions/setup-gradle@v3
 
-      # بناء Debug APK باستخدام Gradle 8.7
-      - name: Build Debug APK with Gradle 8.7
-        uses: gradle/gradle-build-action@v3
+      # === Build release APK & AAB (Bundle) ===
+      - name: Build release artifacts
+        run: ./gradlew clean assembleRelease bundleRelease -PversionName="$VERSION_NAME"
+
+      # === Sign artifacts (APK & AAB) using your keystore secrets ===
+      # Add these secrets in: GitHub → Settings → Secrets and variables → Actions
+      # ANDROID_KEYSTORE_BASE64, ANDROID_KEY_ALIAS, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_PASSWORD
+      - name: Sign APK
+        uses: r0adkll/sign-android-release@v1
         with:
-          gradle-version: 8.7
-          arguments: clean assembleDebug
+          releaseDirectory: app/build/outputs/apk/release
+          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
-      - name: Upload APK
+      - name: Sign AAB (Bundle)
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: app/build/outputs/bundle/release
+          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/*.apk
+          name: android-release
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/bundle/release/*.aab

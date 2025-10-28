@@ -20,8 +20,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.lazy.LazyColumn
@@ -98,6 +96,9 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Divider
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.text.style.TextAlign
 
 private const val OWNER_UID_BACKEND = "OWNER-0001" // يجب أن يطابق OWNER_UID في السيرفر
 
@@ -1132,7 +1133,7 @@ Column(
     var selectedService by remember { mutableStateOf<ServiceDef?>(null) }
 
     if (selectedCategory == null) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Column(Modifier.fillMaxSize().padding(16.dp)) {
             Text("الخدمات", color = OnBg, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
             serviceCategories.forEach { cat ->
@@ -1179,7 +1180,7 @@ Column(
         }
     }
     if (inCat.isNotEmpty()) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Column(Modifier.fillMaxSize().padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { selectedCategory = null }) {
                     Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg)
@@ -3601,24 +3602,8 @@ private fun FixedTopBar(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // إشعارات مع بادج (متموضعة فوق الأيقونة مباشرة)
-                Box(modifier = Modifier.size(40.dp)) {
-                    IconButton(onClick = onOpenNotices, modifier = Modifier.matchParentSize()) {
-                        Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
-                    }
-                    if (unread > 0) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .offset(x = (-2).dp, y = (-2).dp)
-                                .size(16.dp)
-                                .background(Bad, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(unread.toString(), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
+                // إشعارات مع بادج
+                NotificationBellCentered(unread = unread, onClick = onOpenNotices)
                 Spacer(Modifier.width(8.dp))
 
                 // حالة الخادم
@@ -3674,4 +3659,39 @@ private fun NoticeCenterDialog(
             }
         }
     )
+}
+
+@Composable
+private fun NotificationBellCentered(
+    unread: Int,
+    onClick: () -> Unit
+) {
+    Box {
+        IconButton(onClick = onClick) {
+            Icon(
+                Icons.Filled.Notifications,
+                contentDescription = null,
+                tint = OnBg
+            )
+        }
+        if (unread > 0) {
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = (-2).dp, y = 2.dp)
+                    .background(Color(0xFFE53935), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = unread.toString(),
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+            }
+        }
+    }
 }

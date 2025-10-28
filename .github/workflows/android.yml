@@ -37,14 +37,13 @@ jobs:
         with:
           gradle-version: 8.7
 
-      # إنشاء google-services.json من السر عبر متغير بيئة (آمن على YAML)
+      # إنشاء google-services.json من السر عبر متغير بيئة (يحافظ على الأسطر)
       - name: Create google-services.json from secret
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           mkdir -p "${{ env.PROJECT_DIR }}/app"
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
-            # يكتب النص كما هو بدون كسر أسطر
             printf '%s' "$GOOGLE_SERVICES_JSON" > "${{ env.PROJECT_DIR }}/app/google-services.json"
             echo "✅ google-services.json created"
           else
@@ -71,6 +70,7 @@ jobs:
           alias: ${{ secrets.ANDROID_KEY_ALIAS }}
           keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          buildToolsVersion: "34.0.0"   # 👈 مهم
 
       # توقيع الـ AAB
       - name: Sign AAB
@@ -81,6 +81,7 @@ jobs:
           alias: ${{ secrets.ANDROID_KEY_ALIAS }}
           keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          buildToolsVersion: "34.0.0"   # 👈 مهم
 
       # رفع المخرجات
       - name: Upload artifacts

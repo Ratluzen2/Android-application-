@@ -859,9 +859,9 @@ fun AppRoot() {
     val unreadOwner = notices.count { it.forOwner && it.ts > lastSeenOwner }
     var topBalance by remember { mutableStateOf<Double?>(null) }
     LaunchedEffect(Unit) { try { topBalance = apiGetBalance(uid) } catch (_: Exception) { } }
-    LaunchedEffect(currentTab) { try { topBalance = apiGetBalance(uid) } catch (_: Exception) { } }
-    LaunchedEffect(noticeTick) { try { topBalance = apiGetBalance(uid) } catch (_: Exception) { } }
 var currentTab by remember { mutableStateOf(Tab.HOME) }
+
+    LaunchedEffect(noticeTick) { try { topBalance = apiGetBalance(uid) } catch (_: Exception) { } }
 
     // فحص الصحة + تسجيل UID
     LaunchedEffect(Unit) {
@@ -1113,81 +1113,14 @@ Column(
 /* =========================
    الشريط العلوي يمين — (عمودي)
    ========================= */
-@Composable private fun TopRightBar(
-    online: Boolean?, unread: Int,
-    onOpenNotices: () -> Unit, onOpenSettings: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .background(Surface1, shape = MaterialTheme.shapes.medium)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        // حالة السيرفر
-        val (txt, clr) = when (online) {
-            true -> "الخادم: متصل" to Good
-            false -> "الخادم: غير متصل" to Bad
-            else -> "الخادم: " to Dim
-        }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.background(Surface1, shape = MaterialTheme.shapes.small)
-                .padding(horizontal = 8.dp, vertical = 4.dp)
-        ) {
-            Box(Modifier.size(8.dp).background(clr, shape = MaterialTheme.shapes.small))
-            Spacer(Modifier.width(6.dp))
-            Text(txt, fontSize = 12.sp, color = OnBg)
-        }
 
-        // الجرس
-        BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
-            IconButton(onClick = onOpenNotices, modifier = Modifier.size(24.dp)) {
-                Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
-            }
-        }
-
-        // الضبط
-                IconButton(onClick = onOpenSettings) {
-                    Icon(Icons.Filled.Settings, contentDescription = null, tint = OnBg)
-                }
-/* =========================
-   الشريط العلوي الثابت (Top App Bar)
-   ========================= */
-) {
-                    IconButton(onClick = onOpenNotices) {
-                        Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
-                    }
-                }
-                Spacer(Modifier.width(8.dp))
-
-                // حالة الخادم
-                val (txt, clr) = when (online) {
-                    true -> "متصل" to Good
-                    false -> "غير متصل" to Bad
-                    else -> "..." to Dim
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(10.dp).clip(CircleShape).background(clr))
-                    Spacer(Modifier.width(6.dp))
-                    Text(txt, color = OnBg, fontSize = 12.sp)
-                }
-                Spacer(Modifier.width(8.dp))
-
-                // الإعدادات
-                IconButton(onClick = onOpenSettings) {
-                    Icon(Icons.Filled.Settings, contentDescription = null, tint = OnBg)
-                }
-            }
-        }
     }
 }
 size(24.dp)) {
             Icon(Icons.Filled.Settings, contentDescription = null, tint = OnBg)
         }
     
-}
+
 
 /* مركز الإشعارات */
 @Composable private fun NoticeCenterDialog(
@@ -3654,10 +3587,34 @@ class OrderDoneCheckWorker(appContext: Context, params: WorkerParameters) : Coro
         }
     }
 }
+                    IconButton(onClick = onOpenNotices) {
+                        Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
 
-/* =========================
-   الشريط العلوي الثابت (Top App Bar)
-   ========================= */
+                // حالة الخادم
+                val (txt, clr) = when (online) {
+                    true -> "متصل" to Good
+                    false -> "غير متصل" to Bad
+                    else -> "..." to Dim
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).clip(CircleShape).background(clr))
+                    Spacer(Modifier.width(6.dp))
+                    Text(txt, color = OnBg, fontSize = 12.sp)
+                }
+                Spacer(Modifier.width(8.dp))
+
+                // الإعدادات
+                IconButton(onClick = onOpenSettings) {
+                    Icon(Icons.Filled.Settings, contentDescription = null, tint = OnBg)
+                }
+            
+        
+    
+
+
 @Composable
 private fun FixedTopBar(
     online: Boolean?,

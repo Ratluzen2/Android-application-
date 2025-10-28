@@ -3,18 +3,23 @@ package com.zafer.smm.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.util.Log
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import com.zafer.smm.BuildConfig
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -39,6 +44,17 @@ private val latestApkUrl: String
 // عنوان API لإحضار آخر إصدار
 private val latestReleaseApiUrl: String
     get() = "https://api.github.com/repos/$OWNER/$REPO/releases/latest"
+
+/** إحضار versionCode الحالي المثبّت على الجهاز بدون الحاجة إلى BuildConfig. */
+private fun currentVersionCode(ctx: Context): Int = try {
+    val pkgInfo = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
+    if (Build.VERSION.SDK_INT >= 28) {
+        (pkgInfo.longVersionCode and 0xFFFFFFFF).toInt()
+    } else {
+        @Suppress("DEPRECATION")
+        pkgInfo.versionCode
+    }
+} catch (_: Throwable) { 0 }
 
 /** يفحص إن كان هناك تحديث جديد (باستخدام GitHub Releases) ويراعي الإرجاء لمدة ساعة عند اختيار "لاحقًا". */
 private suspend fun checkForUpdateOrNull(ctx: Context): Int? = withContext(Dispatchers.IO) {
@@ -65,7 +81,7 @@ private suspend fun checkForUpdateOrNull(ctx: Context): Int? = withContext(Dispa
         val tagName = JSONObject(body).optString("tag_name").trim() // مثل v1711
         val remoteVc = tagName.filter { it.isDigit() }.toIntOrNull() ?: return@withContext null
 
-        return@withContext if (remoteVc > BuildConfig.VERSION_CODE) remoteVc else null
+        return@withContext if (remoteVc > currentVersionCode(ctx)) remoteVc else null
     } catch (t: Throwable) {
         Log.e("UpdatePrompt", "checkForUpdateOrNull failed", t)
         null
@@ -97,6 +113,7 @@ private fun snoozeOneHour(ctx: Context) {
 @Composable
 fun UpdatePrompt() {
     val ctx = LocalContext.current
+    val currentVc = remember { currentVersionCode(ctx) }
     var show by remember { mutableStateOf(false) }
     var remoteVc by remember { mutableIntStateOf(0) }
 
@@ -141,7 +158,7 @@ fun UpdatePrompt() {
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "الإصدار الحالي: ${BuildConfig.VERSION_CODE}\nالإصدار الجديد: $remoteVc",
+                    "الإصدار الحالي: $currentVc\nالإصدار الجديد: $remoteVc",
                     fontSize = 14.sp,
                     color = Color(0xFF424242)
                 )

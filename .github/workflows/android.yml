@@ -32,13 +32,22 @@ jobs:
         with:
           gradle-version: 8.7
 
+      # ⬇️ إنشاء ملف google-services.json من السر (النص الخام)
+      # ضع محتوى JSON الحقيقي داخل السر: GOOGLE_SERVICES_JSON
+      - name: Create google-services.json from secret
+        run: |
+          mkdir -p "${{ env.PROJECT_DIR }}/app"
+          cat > "${{ env.PROJECT_DIR }}/app/google-services.json" << 'JSON'
+          ${{ secrets.GOOGLE_SERVICES_JSON }}
+          JSON
+
       # رقم الإصدار والاسم
       - name: Compute VERSION_CODE / NAME
         run: |
           echo "VERSION_CODE=$((1000 + $GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
           echo "VERSION_NAME=${GITHUB_REF_NAME:-1.0.$GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
 
-      # بناء APK + AAB باستخدام "gradle" بدلاً من "./gradlew"
+      # بناء APK + AAB باستخدام "gradle"
       - name: Build (APK + AAB)
         working-directory: ${{ env.PROJECT_DIR }}
         run: gradle clean assembleRelease bundleRelease -PversionName="$VERSION_NAME"

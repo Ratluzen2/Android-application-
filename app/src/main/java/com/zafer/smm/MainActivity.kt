@@ -66,6 +66,7 @@ import android.app.NotificationManager
 import android.app.Notification
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.ActivityCompat
@@ -213,6 +214,30 @@ private object AdminEndpoints {
     const val orderClearPrice = "/api/admin/pricing/order/clear"
     const val orderSetQty = "/api/admin/pricing/order/set_qty"
 }
+
+
+object PublicEndpoints {
+    const val appUpdate = "/api/public/app_update"
+}
+
+data class AppUpdateInfo(val vcTarget: Int, val apkUrl: String, val title: String, val notes: String)
+
+suspend fun apiFetchAppUpdate(): AppUpdateInfo? {
+    val (code, txt) = httpGet(PublicEndpoints.appUpdate)
+    if (code !in 200..299 || txt == null) return null
+    return try {
+        val o = org.json.JSONObject(txt)
+        val enabled = o.optBoolean("enabled", false)
+        val vc = o.optInt("vc_target", 0)
+        val url = o.optString("apk_url", "")
+        val title = o.optString("title", "تحديث جديد")
+        val notes = o.optString("notes", "")
+        if (enabled && vc > BuildConfig.VERSION_CODE && url.isNotBlank()) {
+            AppUpdateInfo(vc, url, title, notes)
+        } else null
+    } catch (_: Exception) { null }
+}
+
 
 /* =========================
    Admin Service ID Overrides API
@@ -843,6 +868,13 @@ fun AppRoot() {
     var notices by remember { mutableStateOf(loadNotices(ctx)) }
     var noticeTick by remember { mutableStateOf(0) }
     var showNoticeCenter by remember { mutableStateOf(false) }
+    var appUpdate by remember { mutableStateOf<AppUpdateInfo?>(null) }
+
+    // فحص التحديث الخارجي (يتحكم به متغير Heroku APP_UPDATE_VC)
+    LaunchedEffect(Unit) {
+        try { appUpdate = apiFetchAppUpdate() } catch (_: Exception) {}
+    }
+
 
     var lastSeenUser by remember { mutableStateOf(loadLastSeen(ctx, false)) }
     var lastSeenOwner by remember { mutableStateOf(loadLastSeen(ctx, true)) }
@@ -1026,6 +1058,32 @@ LaunchedEffect(loadOwnerMode(ctx)) {
                 ownerMode = false
                 saveOwnerMode(ctx, false)
                 saveOwnerToken(ctx, null)
+    // نافذة التحديث المنبثقة
+    appUpdate?.let { upd ->
+        AlertDialog(
+            onDismissRequest = { /* اظهرها دائماً حتى يقرر المستخدم التحديث */ },
+            title = { Text(upd.title, color = OnBg) },
+            text  = {
+                Column {
+                    Text("يتوفر إصدار أحدث (${upd.vcTarget}).", color = OnBg)
+                    if (upd.notes.isNotBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(upd.notes, color = OnBg)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    try {
+                        val it = Intent(Intent.ACTION_VIEW, Uri.parse(upd.apkUrl))
+                        it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        ctx.startActivity(it)
+                    } catch (_: Exception) { }
+                }) { Text("تحديث الآن") }
+            }
+        )
+    }
+}
             },
             onDismiss = { showSettings = false }
         )

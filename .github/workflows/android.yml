@@ -1,9 +1,12 @@
-name: Android CI (Auto Version + Signing)
+name: Android CI (no wrapper)
 
 on:
   push:
     branches: [ "main" ]
   workflow_dispatch:
+
+env:
+  PROJECT_DIR: .
 
 jobs:
   build:
@@ -13,48 +16,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
-      # === Auto-versioning ===
-      # VERSION_CODE increases every run so Play/Android accepts it as an update.
-      - name: Compute VERSION_CODE
-        run: echo "VERSION_CODE=$((1000 + $GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
+      # إعداد Android SDK + قبول الرخص
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Compute VERSION_NAME (optional)
-        run: |
-          if [ -n "${GITHUB_REF_NAME}" ]; then
-            echo "VERSION_NAME=${GITHUB_REF_NAME}" >> $GITHUB_ENV
-          else
-            echo "VERSION_NAME=1.0.${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
-          fi
-
-      - name: Gradle cache
+      # نوفّر Gradle (بدون wrapper) — سيُتيح أمر "gradle"
+      - name: Install Gradle 8.7
         uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.7
 
-      # === Build release APK & AAB (Bundle) ===
-      - name: Build release artifacts
-        run: ./gradlew clean assembleRelease bundleRelease -PversionName="$VERSION_NAME"
+      # رقم الإصدار والاسم
+      - name: Compute VERSION_CODE / NAME
+        run: |
+          echo "VERSION_CODE=$((1000 + $GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
+          echo "VERSION_NAME=${GITHUB_REF_NAME:-1.0.$GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
 
-      # === Sign artifacts (APK & AAB) using your keystore secrets ===
-      # Add these secrets in: GitHub → Settings → Secrets and variables → Actions
-      # ANDROID_KEYSTORE_BASE64, ANDROID_KEY_ALIAS, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_PASSWORD
+      # بناء APK + AAB باستخدام "gradle" بدلاً من "./gradlew"
+      - name: Build (APK + AAB)
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: gradle clean assembleRelease bundleRelease -PversionName="$VERSION_NAME"
+
+      # توقيع الـ APK
       - name: Sign APK
         uses: r0adkll/sign-android-release@v1
         with:
-          releaseDirectory: app/build/outputs/apk/release
+          releaseDirectory: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/release
           signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           alias: ${{ secrets.ANDROID_KEY_ALIAS }}
           keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
-      - name: Sign AAB (Bundle)
+      # توقيع الـ AAB
+      - name: Sign AAB
         uses: r0adkll/sign-android-release@v1
         with:
-          releaseDirectory: app/build/outputs/bundle/release
+          releaseDirectory: ${{ env.PROJECT_DIR }}/app/build/outputs/bundle/release
           signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           alias: ${{ secrets.ANDROID_KEY_ALIAS }}
           keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -65,5 +68,5 @@ jobs:
         with:
           name: android-release
           path: |
-            app/build/outputs/apk/release/*.apk
-            app/build/outputs/bundle/release/*.aab
+            ${{ env.PROJECT_DIR }}/app/build/outputs/apk/release/*.apk
+            ${{ env.PROJECT_DIR }}/app/build/outputs/bundle/release/*.aab

@@ -37,15 +37,16 @@ jobs:
         with:
           gradle-version: 8.7
 
-      # إنشاء google-services.json من السر (يحافظ على الأسطر عبر heredoc)
+      # إنشاء google-services.json من السر عبر متغير بيئة (آمن على YAML)
       - name: Create google-services.json from secret
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           mkdir -p "${{ env.PROJECT_DIR }}/app"
-          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
-            cat > "${{ env.PROJECT_DIR }}/app/google-services.json" <<'JSON'
-${{ secrets.GOOGLE_SERVICES_JSON }}
-JSON
-            echo "✅ google-services.json created (heredoc)"
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            # يكتب النص كما هو بدون كسر أسطر
+            printf '%s' "$GOOGLE_SERVICES_JSON" > "${{ env.PROJECT_DIR }}/app/google-services.json"
+            echo "✅ google-services.json created"
           else
             echo "⚠️ Secret GOOGLE_SERVICES_JSON is empty, skipping file"
           fi

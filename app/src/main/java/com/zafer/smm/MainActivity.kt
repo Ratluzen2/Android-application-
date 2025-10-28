@@ -88,6 +88,8 @@ import androidx.work.WorkManager
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ListenableWorker
 import com.zafer.smm.ui.UpdatePromptHost
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 private const val OWNER_UID_BACKEND = "OWNER-0001" // يجب أن يطابق OWNER_UID في السيرفر
 
 /* =========================
@@ -861,6 +863,18 @@ var currentTab by remember { mutableStateOf(Tab.HOME) }
         }
     }
 
+    // جلب رصيد الشريط العلوي دوريًا
+    LaunchedEffect(uid) {
+        while (true) {
+            try { topBalance = apiGetBalance(uid) } catch (_: Exception) { }
+            delay(20_000)
+        }
+    }
+    LaunchedEffect(noticeTick) {
+        try { topBalance = apiGetBalance(uid) } catch (_: Exception) { }
+    }
+
+
     // ✅ جلب الإشعارات من الخادم ودمجها، وتحديث العداد تلقائيًا
     LaunchedEffect(uid) {
         while (true) {
@@ -981,13 +995,6 @@ LaunchedEffect(loadOwnerMode(ctx)) {
         }
 
         // ✅ حالة السيرفر ثم الجرس ثم الضبط — عموديًا في أعلى يمين
-        TopRightBar(
-            online = online,
-            unread = if (ownerMode) unreadOwner else unreadUser,
-            onOpenNotices = { showNoticeCenter = true },
-            onOpenSettings = { showSettings = true },
-            modifier = Modifier
-                .align(Alignment.TopEnd)
                 .statusBarsPadding()
                 .padding(top = 6.dp, end = 10.dp)
         )
@@ -1011,6 +1018,18 @@ LaunchedEffect(loadOwnerMode(ctx)) {
             }
         }
     }
+
+        TopWideBar(
+            online = online,
+            unread = if (ownerMode) unreadOwner else unreadUser,
+            balance = topBalance,
+            onOpenNotices = { showNoticeCenter = true },
+            onOpenSettings = { showSettings = true },
+            onOpenWallet = { currentTab = Tab.WALLET },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+        )
 
     if (showSettings) {
         SettingsDialog(
@@ -1142,6 +1161,84 @@ LaunchedEffect(loadOwnerMode(ctx)) {
 
         // الضبط
         IconButton(onClick = onOpenSettings, modifier = Modifier.size(24.dp)) {
+            Icon(Icons.Filled.Settings, contentDescription = null, tint = OnBg)
+        }
+    }
+}
+
+/* =========================
+   الشريط العلوي بعرض كامل + شريحة الرصيد
+   ========================= */
+@Composable
+private fun BalanceChip(amount: Double?, onOpenWallet: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(Surface1)
+            .clickable { onOpenWallet() }
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "$ " + (amount?.let { String.format(java.util.Locale.getDefault(), "%.2f", it) } ?: "--"),
+            color = OnBg,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.width(10.dp))
+        Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = OnBg, modifier = Modifier.size(22.dp))
+    }
+}
+
+@Composable
+private fun ServerStatusPill(online: Boolean?) {
+    val (txt, clr) = when (online) {
+        true -> "الخادم: متصل" to Good
+        false -> "الخادم: غير متصل" to Bad
+        else -> "الخادم: " to Dim
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Surface1)
+            .padding(horizontal = 8.dp, vertical = 6.dp)
+    ) {
+        Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(clr))
+        Spacer(Modifier.width(6.dp))
+        Text(txt, fontSize = 12.sp, color = OnBg)
+    }
+}
+
+@Composable
+private fun TopWideBar(
+    online: Boolean?,
+    unread: Int,
+    balance: Double?,
+    onOpenNotices: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenWallet: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Bg)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        BalanceChip(amount = balance, onOpenWallet = onOpenWallet)
+        Spacer(Modifier.weight(1f))
+
+        ServerStatusPill(online = online)
+        Spacer(Modifier.width(8.dp))
+
+        BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
+            IconButton(onClick = onOpenNotices) {
+                Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
+            }
+        }
+        IconButton(onClick = onOpenSettings) {
             Icon(Icons.Filled.Settings, contentDescription = null, tint = OnBg)
         }
     }

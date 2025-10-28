@@ -31,33 +31,31 @@ jobs:
           yes | sdkmanager --licenses
           sdkmanager "build-tools;34.0.0"
 
-      # يوفر Gradle (بدون wrapper) + كاش تلقائي
       - name: Install Gradle 8.7
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.7
 
-      # ⬇️ إنشاء google-services.json من السر (لو السر موجود)
+      # ✅ إنشاء google-services.json (لو السر موجود)
       - name: Create google-services.json from secret
-        if: ${{ secrets.GOOGLE_SERVICES_JSON != '' }}
         run: |
           mkdir -p "${{ env.PROJECT_DIR }}/app"
-          cat > "${{ env.PROJECT_DIR }}/app/google-services.json" << 'JSON'
-          ${{ secrets.GOOGLE_SERVICES_JSON }}
-          JSON
+          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON }}" ]; then
+            echo "${{ secrets.GOOGLE_SERVICES_JSON }}" > "${{ env.PROJECT_DIR }}/app/google-services.json"
+            echo "✅ google-services.json created"
+          else
+            echo "⚠️ Secret GOOGLE_SERVICES_JSON is empty, skipping file"
+          fi
 
-      # رقم الإصدار والاسم
       - name: Compute VERSION_CODE / NAME
         run: |
           echo "VERSION_CODE=$((1000 + $GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
           echo "VERSION_NAME=${GITHUB_REF_NAME:-1.0.$GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
 
-      # بناء APK + AAB
       - name: Build (APK + AAB)
         working-directory: ${{ env.PROJECT_DIR }}
         run: gradle clean assembleRelease bundleRelease -PversionName="$VERSION_NAME"
 
-      # توقيع الـ APK
       - name: Sign APK
         uses: r0adkll/sign-android-release@v1
         with:
@@ -67,7 +65,6 @@ jobs:
           keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
-      # توقيع الـ AAB
       - name: Sign AAB
         uses: r0adkll/sign-android-release@v1
         with:

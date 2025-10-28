@@ -25,19 +25,18 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # تثبيت build-tools لتوفير zipalign/apksigner
+      # ✅ ثبّت الإصدارات التي يحتاجها التوقيع (29.0.3 مطلوب للإجراء) + أحدث إصدار للاستخدام العام
       - name: Install Android build tools
         run: |
           yes | sdkmanager --licenses
-          sdkmanager "build-tools;34.0.0"
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;29.0.3" "build-tools;34.0.0"
 
-      # توفير Gradle 8.7
       - name: Install Gradle 8.7
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.7
 
-      # إنشاء google-services.json من السر عبر متغير بيئة (يحافظ على الأسطر)
+      # إنشاء google-services.json من السر (يحافظ على الأسطر)
       - name: Create google-services.json from secret
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
@@ -50,18 +49,16 @@ jobs:
             echo "⚠️ Secret GOOGLE_SERVICES_JSON is empty, skipping file"
           fi
 
-      # رقم الإصدار والاسم
       - name: Compute VERSION_CODE / NAME
         run: |
           echo "VERSION_CODE=$((1000 + $GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
           echo "VERSION_NAME=${GITHUB_REF_NAME:-1.0.$GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
 
-      # بناء APK + AAB
       - name: Build (APK + AAB)
         working-directory: ${{ env.PROJECT_DIR }}
         run: gradle clean assembleRelease bundleRelease -PversionName="$VERSION_NAME"
 
-      # توقيع الـ APK
+      # 🔐 توقيع الـ APK (الإجراء سيستخدم build-tools/29.0.3 تلقائيًا بعد تثبيته بالأعلى)
       - name: Sign APK
         uses: r0adkll/sign-android-release@v1
         with:
@@ -70,9 +67,8 @@ jobs:
           alias: ${{ secrets.ANDROID_KEY_ALIAS }}
           keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          buildToolsVersion: "34.0.0"   # 👈 مهم
 
-      # توقيع الـ AAB
+      # 🔐 توقيع الـ AAB
       - name: Sign AAB
         uses: r0adkll/sign-android-release@v1
         with:
@@ -81,9 +77,7 @@ jobs:
           alias: ${{ secrets.ANDROID_KEY_ALIAS }}
           keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          buildToolsVersion: "34.0.0"   # 👈 مهم
 
-      # رفع المخرجات
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

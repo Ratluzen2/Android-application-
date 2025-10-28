@@ -1358,6 +1358,27 @@ LaunchedEffect(loadOwnerMode(ctx)) {
                         focusedLabelColor = OnBg, unfocusedLabelColor = Dim
                     )
                 )
+                // === Notes for Instagram & Telegram services ===
+                if (service.uiKey.contains("انستغرام")) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "يرجى إطفاء زر 'تميز للمراجعة' داخل حسابك الانستغرام قبل ارسال رابط الخدمه لضمان إكمال طلبك!",
+                        color = Dim, fontSize = 12.sp
+                    )
+                }
+                if (service.uiKey.contains("تلي") || service.uiKey.contains("تيليجرام") || service.uiKey.contains("التليجرام")) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "الرجاء إرسال رابط دعوة انضمام وليس رابط القناة ام المجموعة أو اسم المستخدم (مثل: https://t.me/+xxxx).\n"
+                        + "خطوات إنشاء رابط الدعوة الخاص:\n"
+                        + "1. ادخل إلى القناة او المجموعة\n"
+                        + "2. اختر خيار المشتركون.\n"
+                        + "3. اضغط على الدعوة عبر رابط خاص.\n"
+                        + "4. أنشئ رابط دعوة جديد.",
+                        color = Dim, fontSize = 12.sp
+                    )
+                }
+    
                 Spacer(Modifier.height(8.dp))
                 Text("السعر التقريبي: $price\$", fontWeight = FontWeight.SemiBold, color = OnBg)
                 Spacer(Modifier.height(4.dp))
@@ -1953,7 +1974,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                 val scope2 = rememberCoroutineScope()
                 TextButton(enabled = !sending, onClick = {
                     val digits = cardNumber.filter { it.isDigit() }
-                    if (digits.length != 14 && digits.length != 16) return@TextButton
+                    if (digits.length <= 10) return@TextButton
 
                     val (allowed, _) = asiacellPreCheckAndRecord(ctx, digits)
                     if (!allowed) {
@@ -1987,7 +2008,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             title = { Text("شحن عبر أسيا سيل", color = OnBg) },
             text = {
                 Column {
-                    Text("أدخل رقم الكارت (14 أو 16 رقم):", color = Dim, fontSize = 12.sp)
+                    Text("أدخل رقم الكارت (فوق 10 أرقام):", color = Dim, fontSize = 12.sp)
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = cardNumber,
@@ -3048,17 +3069,18 @@ private fun asiacellPreCheckAndRecord(ctx: Context, digitsRaw: String): Pair<Boo
     return true to null
 }
 private fun loadOrCreateUid(ctx: Context): String {
-    val sp = prefs(ctx)
-    val existing = sp.getString("uid", null)
-    if (existing != null) return existing
 
-    // Stable device-based UID derived from ANDROID_ID (persists across app reinstalls / clearing data)
-    val androidId = Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) ?: ""
-    val base = if (androidId.isNotBlank()) androidId.uppercase(Locale.getDefault()) else "R" + (100000..999999).random(Random(System.currentTimeMillis()))
-    // Keep it compact and prefixed to avoid exposing raw device id
-    val fresh = "U" + base.take(16)
-    sp.edit().putString("uid", fresh).apply()
-    return fresh
+    val p = prefs(ctx)
+    val key = "uid"
+    val existing = p.getString(key, null)
+    if (!existing.isNullOrBlank()) return existing
+    // Generate 7-digit numeric UID, never starting with 0
+    val first = (1..9).random().toString()
+    val rest = (1..6).map { ('0'..'9').random() }.joinToString("")
+    val uid = first + rest
+    p.edit().putString(key, uid).apply()
+    return uid
+
 }
 private fun loadOwnerMode(ctx: Context): Boolean = prefs(ctx).getBoolean("owner_mode", false)
 private fun saveOwnerMode(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("owner_mode", on).apply() }

@@ -1,8 +1,8 @@
-name: Android CI (no wrapper)
+name: Android Single APK
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
 env:
@@ -11,7 +11,6 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,28 +24,21 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      # ✅ ثبّت الإصدارات التي يحتاجها التوقيع (29.0.3 مطلوب للإجراء) + أحدث إصدار للاستخدام العام
       - name: Install Android build tools
         run: |
           yes | sdkmanager --licenses
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;29.0.3" "build-tools;34.0.0"
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "build-tools;29.0.3"
 
-      - name: Install Gradle 8.7
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: 8.7
-
-      # إنشاء google-services.json من السر (يحافظ على الأسطر)
       - name: Create google-services.json from secret
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
-          mkdir -p "${{ env.PROJECT_DIR }}/app"
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            mkdir -p "${{ env.PROJECT_DIR }}/app"
             printf '%s' "$GOOGLE_SERVICES_JSON" > "${{ env.PROJECT_DIR }}/app/google-services.json"
-            echo "✅ google-services.json created"
+            echo "google-services.json created"
           else
-            echo "⚠️ Secret GOOGLE_SERVICES_JSON is empty, skipping file"
+            echo "GOOGLE_SERVICES_JSON is empty (skipping)"
           fi
 
       - name: Compute VERSION_CODE / NAME
@@ -54,34 +46,37 @@ jobs:
           echo "VERSION_CODE=$((1000 + $GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
           echo "VERSION_NAME=${GITHUB_REF_NAME:-1.0.$GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
 
-      - name: Build (APK + AAB)
+      - name: Gradle build (APK only)
         working-directory: ${{ env.PROJECT_DIR }}
-        run: gradle clean assembleRelease bundleRelease -PversionName="$VERSION_NAME"
+        run: gradle clean assembleRelease -PversionName="$VERSION_NAME"
 
-      # 🔐 توقيع الـ APK (الإجراء سيستخدم build-tools/29.0.3 تلقائيًا بعد تثبيته بالأعلى)
-      - name: Sign APK
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Prepare keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\r' | base64 -d > keystore.jks
+          ls -lh keystore.jks
 
-      # 🔐 توقيع الـ AAB
-      - name: Sign AAB
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: ${{ env.PROJECT_DIR }}/app/build/outputs/bundle/release
-          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Align and Sign (produce single final APK)
+        env:
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -e
+          RELEASE_DIR="${{ env.PROJECT_DIR }}/app/build/outputs/apk/release"
+          UNSIGNED_APK=$(ls "$RELEASE_DIR"/*-unsigned.apk | head -n 1)
 
-      - name: Upload artifacts
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n1)
+          echo "Using build-tools at: $BT"
+
+          "$BT/zipalign" -f 4 "$UNSIGNED_APK" "$RELEASE_DIR/app-release-aligned.apk"
+          "$BT/apksigner" sign --ks keystore.jks --ks-key-alias "$KS_ALIAS"             --ks-pass pass:"$KS_PASS" --key-pass pass:"$KEY_PASS"             --out "$RELEASE_DIR/app-release.apk" "$RELEASE_DIR/app-release-aligned.apk"
+          "$BT/apksigner" verify -v "$RELEASE_DIR/app-release.apk"
+          ls -lh "$RELEASE_DIR"/app-release*.apk
+
+      - name: Upload final APK only
         uses: actions/upload-artifact@v4
         with:
           name: android-release
-          path: |
-            ${{ env.PROJECT_DIR }}/app/build/outputs/apk/release/*.apk
-            ${{ env.PROJECT_DIR }}/app/build/outputs/bundle/release/*.aab
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/release/app-release.apk

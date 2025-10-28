@@ -821,7 +821,7 @@ class MainActivity : ComponentActivity() {
     android.util.Log.e("FCM", "Exception while getting token", e)
 }
 
-setContent { AppTheme { AppRoot() } }
+setContent { AppTheme { UpdatePromptHost(); AppRoot() } }
     }
 }
 

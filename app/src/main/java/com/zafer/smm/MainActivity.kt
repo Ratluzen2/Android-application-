@@ -4,10 +4,6 @@
 
 package com.zafer.smm
 
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-
-
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.width
@@ -100,6 +96,9 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Divider
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.text.style.TextAlign
 
 private const val OWNER_UID_BACKEND = "OWNER-0001" // يجب أن يطابق OWNER_UID في السيرفر
 
@@ -3599,16 +3598,12 @@ private fun FixedTopBar(
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.width(10.dp))
-                Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = Color.White)
+                Icon(Icons.Filled.AccountBalanceWallet, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // إشعارات مع بادج
-                BadgedBox(badge = { if (unread > 0) Badge { Text(unread.toString()) } }) {
-                    IconButton(onClick = onOpenNotices) {
-                        Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
-                    }
-                }
+                NotificationBellCentered(unread = unread, onClick = onOpenNotices)
                 Spacer(Modifier.width(8.dp))
 
                 // حالة الخادم
@@ -3664,4 +3659,39 @@ private fun NoticeCenterDialog(
             }
         }
     )
+}
+
+@Composable
+private fun NotificationBellCentered(
+    unread: Int,
+    onClick: () -> Unit
+) {
+    Box {
+        IconButton(onClick = onClick) {
+            Icon(
+                Icons.Filled.Notifications,
+                contentDescription = null,
+                tint = OnBg
+            )
+        }
+        if (unread > 0) {
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = (-2).dp, y = 2.dp)
+                    .background(Color(0xFFE53935), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = unread.toString(),
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+            }
+        }
+    }
 }

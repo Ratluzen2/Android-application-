@@ -90,6 +90,11 @@ import androidx.work.ListenableWorker
 import com.zafer.smm.ui.UpdatePromptHost
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+
 private const val OWNER_UID_BACKEND = "OWNER-0001" // يجب أن يطابق OWNER_UID في السيرفر
 
 /* =========================
@@ -1002,11 +1007,6 @@ Column(
             Tab.SUPPORT -> SupportScreen()
         }
 
-        // ✅ حالة السيرفر ثم الجرس ثم الضبط — عموديًا في أعلى يمين
-                .statusBarsPadding()
-                .padding(top = 6.dp, end = 10.dp)
-        )
-
         BottomNavBar(
             current = currentTab,
             onChange = { currentTab = it },
@@ -1159,7 +1159,9 @@ Column(
         }
 
         // الضبط
-        IconButton(onClick = onOpenSettings, modifier = Modifier.
+                IconButton(onClick = onOpenSettings) {
+                    Icon(Icons.Filled.Settings, contentDescription = null, tint = OnBg)
+                }
 /* =========================
    الشريط العلوي الثابت (Top App Bar)
    ========================= */

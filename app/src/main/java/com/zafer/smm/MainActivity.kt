@@ -1114,20 +1114,6 @@ Column(
    الشريط العلوي يمين — (عمودي)
    ========================= */
 
-    }
-}
-size(24.dp)) {
-            Icon(Icons.Filled.Settings, contentDescription = null, tint = OnBg)
-        }
-    
-
-
-/* مركز الإشعارات */
-@Composable private fun NoticeCenterDialog(
-    notices: List<AppNotice>, onClear: () -> Unit, onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
         confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
         dismissButton = { TextButton(onClick = onClear) { Text("مسح الإشعارات") } },
         title = { Text("الإشعارات") },
@@ -3587,33 +3573,6 @@ class OrderDoneCheckWorker(appContext: Context, params: WorkerParameters) : Coro
         }
     }
 }
-                    IconButton(onClick = onOpenNotices) {
-                        Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
-                    }
-                }
-                Spacer(Modifier.width(8.dp))
-
-                // حالة الخادم
-                val (txt, clr) = when (online) {
-                    true -> "متصل" to Good
-                    false -> "غير متصل" to Bad
-                    else -> "..." to Dim
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(10.dp).clip(CircleShape).background(clr))
-                    Spacer(Modifier.width(6.dp))
-                    Text(txt, color = OnBg, fontSize = 12.sp)
-                }
-                Spacer(Modifier.width(8.dp))
-
-                // الإعدادات
-                IconButton(onClick = onOpenSettings) {
-                    Icon(Icons.Filled.Settings, contentDescription = null, tint = OnBg)
-                }
-            
-        
-    
-
 
 @Composable
 private fun FixedTopBar(

@@ -12,9 +12,17 @@ android {
         applicationId "com.zafer.smm"
         minSdk 24
         targetSdk 34
-        // ⬆️ رفعنا رقم النسخة لتحديث الأيقونة على الأجهزة
-        versionCode 2
-        versionName "1.0.1"
+
+        // === Auto versioning for CI ===
+        // Read VERSION_CODE from environment (GitHub Actions). Falls back to 2 if missing/invalid.
+        def _envVcRaw = System.getenv("VERSION_CODE") ?: ""
+        def _vc = (_envVcRaw instanceof String && _envVcRaw.isInteger()) ? _envVcRaw.toInteger() : 2
+        versionCode _vc
+
+        // versionName can be passed from CI: -PversionName=...
+        def _suppliedName = project.hasProperty("versionName") ? project.getProperties().get("versionName") : null
+        versionName (_suppliedName ?: "1.0.1")
+
         vectorDrawables { useSupportLibrary true }
     }
 
@@ -28,7 +36,7 @@ android {
         }
     }
 
-    // توحيد JVM على 17
+    // Java/Kotlin toolchains
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -52,7 +60,7 @@ android {
 dependencies {
     implementation "androidx.work:work-runtime-ktx:2.9.1"
 
-    // Firebase BOM لتثبيت إصدارات متوافقة
+    // Firebase BOM (keeps Firebase libs compatible)
     implementation platform('com.google.firebase:firebase-bom:33.4.0')
     // Compose BOM
     implementation platform('androidx.compose:compose-bom:2024.06.00')
@@ -70,28 +78,28 @@ dependencies {
     implementation 'androidx.compose.foundation:foundation'
     implementation 'androidx.compose.material:material-icons-extended'
 
-    // أدوات تطوير
+    // Dev tools
     debugImplementation 'androidx.compose.ui:ui-tooling'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
 
-    // اختبارات
+    // Tests
     androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
     testImplementation 'junit:junit:4.13.2'
 
-    // Material (لعناصر View إن لزم)
+    // Material (for classic Views if needed)
     implementation 'com.google.android.material:material:1.12.0'
 
-    // الشبكة — Retrofit + OkHttp + Gson (مطابق لما في كودك)
+    // Network — Retrofit + OkHttp + Gson
     implementation 'com.squareup.retrofit2:retrofit:2.11.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.11.0'
     implementation 'com.google.code.gson:gson:2.11.0'
     implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
 
-    // إشعارات Firebase Cloud Messaging (FCM)
+    // Firebase Cloud Messaging (FCM)
     implementation 'com.google.firebase:firebase-messaging'
 
-    // DataStore لحفظ جلسة المالك
+    // DataStore for owner session
     implementation 'androidx.datastore:datastore-preferences:1.1.1'
 }

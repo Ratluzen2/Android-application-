@@ -753,7 +753,7 @@ data class AppNotice(
     val status: String? = null,
     val forOwner: Boolean = false
 )
-data class ServiceDef((
+data class ServiceDef(
     val uiKey: String,
     val serviceId: Long,
     val min: Int,

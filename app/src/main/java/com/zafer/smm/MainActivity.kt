@@ -1082,7 +1082,7 @@ Column(
     }
 }
 
-}
+
 @Composable private fun SupportScreen() {
     val uri = LocalUriHandler.current
     Column(Modifier.fillMaxSize().padding(16.dp)) {

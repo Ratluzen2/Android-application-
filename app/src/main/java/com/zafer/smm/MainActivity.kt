@@ -745,7 +745,14 @@ enum class Tab { HOME, SERVICES, WALLET, ORDERS, SUPPORT }
 data class AppNotice(
     val title: String,
     val body: String,
-    val ts: Long = System.currentTimeMillis(, val orderId: String? = null, val serviceName: String? = null, val amount: String? = null, val code: String? = null, val status: String? = null),
+    val ts: Long = System.currentTimeMillis(),
+    val orderId: String? = null,
+    val serviceName: String? = null,
+    val amount: String? = null,
+    val code: String? = null,
+    val status: String? = null,
+    val forOwner: Boolean = false
+),
     val forOwner: Boolean = false
 )
 data class ServiceDef(
@@ -3189,6 +3196,11 @@ private fun loadNotices(ctx: Context): List<AppNotice> {
                 title = o.optString("title"),
                 body = o.optString("body"),
                 ts = o.optLong("ts"),
+                orderId = o.optString("orderId", "").takeIf { it.isNotBlank() },
+                serviceName = o.optString("serviceName", "").takeIf { it.isNotBlank() },
+                amount = o.optString("amount", "").takeIf { it.isNotBlank() },
+                code = o.optString("code", "").takeIf { it.isNotBlank() },
+                status = o.optString("status", "").takeIf { it.isNotBlank() },
                 forOwner = o.optBoolean("forOwner")
             )
         }
@@ -3201,6 +3213,11 @@ private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
         o.put("title", it.title)
         o.put("body", it.body)
         o.put("ts", it.ts)
+        if (it.orderId != null) o.put("orderId", it.orderId)
+        if (it.serviceName != null) o.put("serviceName", it.serviceName)
+        if (it.amount != null) o.put("amount", it.amount)
+        if (it.code != null) o.put("code", it.code)
+        if (it.status != null) o.put("status", it.status)
         o.put("forOwner", it.forOwner)
         arr.put(o)
     }

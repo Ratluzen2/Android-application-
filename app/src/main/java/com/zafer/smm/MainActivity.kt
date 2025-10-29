@@ -227,6 +227,9 @@ private object AdminEndpoints {
     const val orderSetPrice = "/api/admin/pricing/order/set"
     const val orderClearPrice = "/api/admin/pricing/order/clear"
     const val orderSetQty = "/api/admin/pricing/order/set_qty"
+    // Announcements
+    const val announcementCreate = "/api/admin/announcement/create"
+    const val announcementLatest = "/api/public/announcements/latest"
 }
 
 /* =========================
@@ -3696,4 +3699,135 @@ private fun NotificationBellCentered(
             }
         }
     }
+}
+
+
+// =========================
+// Announcements (App-wide)
+// =========================
+data class Announcement(val title: String?, val body: String, val createdAt: Long)
+
+private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, body: String): Boolean {
+    val obj = org.json.JSONObject().put("body", body)
+    if (!title.isNullOrBlank()) obj.put("title", title)
+    val (code, _) = httpPost(AdminEndpoints.announcementCreate, obj, headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
+
+private suspend fun apiFetchLatestAnnouncement(): Announcement? {
+    val (code, txt) = httpGet(AdminEndpoints.announcementLatest)
+    if (code !in 200..299 || txt == null) return null
+    return try {
+        val o = org.json.JSONObject(txt.trim())
+        Announcement(
+            title = if (o.has("title")) o.optString("title", null) else null,
+            body = o.optString("body",""),
+            createdAt = o.optLong("created_at", 0L)
+        )
+    } catch (_: Exception) { null }
+}
+
+@Composable
+private fun HomeAnnouncementBox() {
+    val scope = rememberCoroutineScope()
+    var ann by remember { mutableStateOf<Announcement?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var err by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        loading = true; err = null
+        try {
+            val a = apiFetchLatestAnnouncement()
+            ann = a
+        } catch (e: Exception) {
+            err = "تعذر جلب الإعلان"
+        } finally {
+            loading = false
+        }
+    }
+    when {
+        loading -> {
+            Box(Modifier.fillMaxWidth().padding(16.dp)) {
+                CircularProgressIndicator(Modifier.align(Alignment.Center))
+            }
+        }
+        err != null -> {
+            Text(err!!, color = Bad, modifier = Modifier.padding(16.dp))
+        }
+        ann == null -> {
+            Text("لا توجد إعلانات حالياً", color = Dim, modifier = Modifier.padding(16.dp))
+        }
+        else -> {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = BgLifted)
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(ann!!.title ?: "إعلان مهم 📢", fontSize = 18.sp, color = OnBg, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(8.dp))
+                    Text(ann!!.body, fontSize = 16.sp, color = OnBg)
+                    Spacer(Modifier.height(8.dp))
+                    val ts = ann!!.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis()
+                    Text(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(ts)), fontSize = 12.sp, color = Dim)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminSendAnnouncementButton(token: String, onSent: () -> Unit) {
+    var show by remember { mutableStateOf(false) }
+    if (show) {
+        AdminSendAnnouncementDialog(token = token, onDismiss = { show = false }, onSent = {
+            show = false; onSent()
+        })
+    }
+    Button(onClick = { show = true }, modifier = Modifier.weight(1f)) {
+        Text("إعلان التطبيق")
+    }
+}
+
+@Composable
+private fun AdminSendAnnouncementDialog(token: String, onDismiss: () -> Unit, onSent: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var title by remember { mutableStateOf("") }
+    var body by remember { mutableStateOf("") }
+    var sending by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    AlertDialog(
+        onDismissRequest = { if (!sending) onDismiss() },
+        confirmButton = {
+            TextButton(enabled = !sending, onClick = {
+                if (body.isBlank()) { error = "النص مطلوب"; return@TextButton }
+                scope.launch {
+                    sending = true; error = null
+                    val ok = apiAdminCreateAnnouncement(token, title.ifBlank { null }, body)
+                    sending = false
+                    if (ok) onSent() else error = "فشل إرسال الإعلان"
+                }
+            }) { Text(if (sending) "جاري الإرسال..." else "إرسال") }
+        },
+        dismissButton = { TextButton(enabled = !sending, onClick = onDismiss) { Text("إلغاء") } },
+        title = { Text("إعلان التطبيق", color = OnBg) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = title, onValueChange = { title = it }, singleLine = true,
+                    label = { Text("العنوان (اختياري)") }
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = body, onValueChange = { body = it },
+                    label = { Text("نص الإعلان") },
+                    minLines = 4
+                )
+                if (error != null) {
+                    Spacer(Modifier.height(6.dp)); Text(error!!, color = Bad, fontSize = 12.sp)
+                }
+            }
+        }
+    )
 }

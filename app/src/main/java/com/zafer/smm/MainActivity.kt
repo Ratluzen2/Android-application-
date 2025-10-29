@@ -4,6 +4,10 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.IconButton
+import android.content.ClipData
+import android.content.ClipboardManager
 import androidx.compose.material3.Card
 
 import androidx.compose.foundation.layout.Arrangement
@@ -741,7 +745,7 @@ enum class Tab { HOME, SERVICES, WALLET, ORDERS, SUPPORT }
 data class AppNotice(
     val title: String,
     val body: String,
-    val ts: Long = System.currentTimeMillis(),
+    val ts: Long = System.currentTimeMillis(, val orderId: String? = null, val serviceName: String? = null, val amount: String? = null, val code: String? = null, val status: String? = null),
     val forOwner: Boolean = false
 )
 data class ServiceDef(
@@ -3839,27 +3843,29 @@ private fun NotificationBellCentered(
 
 
 // =========================
-// Firebase Messaging Service — يحفظ إشعارات FCM داخل أيقونة الجرس
+// Firebase Messaging Service — يحفظ إشعارات FCM داخل أيقونة الجرس مع التفاصيل
 // =========================
 class AppFcmService : FirebaseMessagingService() {
     override fun onMessageReceived(msg: RemoteMessage) {
         val ctx = applicationContext
-        val title = msg.data["title"] ?: msg.notification?.title ?: "إشعار"
-        val body  = msg.data["body"] ?: msg.notification?.body ?: ""
+        val d = msg.data
+        val title = d["title"] ?: msg.notification?.title ?: "إشعار"
+        val bodyTxt  = d["body"] ?: msg.notification?.body ?: ""
         try {
             val existing = loadNotices(ctx)
-            val nn = AppNotice(title = title, body = body, ts = System.currentTimeMillis(), forOwner = false)
+            val nn = AppNotice(
+                title = title,
+                body = bodyTxt,
+                ts = System.currentTimeMillis(),
+                forOwner = false,
+                orderId = d["order_id"],
+                serviceName = d["service_name"],
+                amount = d["amount"],
+                code = d["code"],
+                status = d["status"]
+            )
             saveNotices(ctx, existing + nn)
         } catch (_: Throwable) { }
-        AppNotifier.notifyNow(ctx, title, body)
-    }
-    override fun onNewToken(token: String) {
-        try {
-            val u = loadOrCreateUid(applicationContext)
-            kotlinx.coroutines.GlobalScope.launch {
-                try { apiUpdateFcmToken(u, token) } catch (_: Throwable) {}
-                try { if (loadOwnerMode(applicationContext)) apiUpdateFcmToken("OWNER-0001", token) } catch (_: Throwable) {}
-            }
-        } catch (_: Throwable) { }
+        AppNotifier.notifyNow(ctx, title, bodyTxt)
     }
 }

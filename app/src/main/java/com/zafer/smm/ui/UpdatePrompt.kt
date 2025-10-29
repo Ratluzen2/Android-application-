@@ -78,12 +78,13 @@ private data class Latest(
 
 private suspend fun fetchLatest(): Latest? = withContext(Dispatchers.IO) {
     try {
-        val url = URL(GITHUB_LATEST_API)
+        val url = URL(GITHUB_LATEST_API + "?_ts=" + System.currentTimeMillis())
         val conn = (url.openConnection() as HttpURLConnection).apply {
             connectTimeout = 10_000
             readTimeout = 10_000
             setRequestProperty("Accept", "application/vnd.github+json")
             setRequestProperty("User-Agent", "ratluzen-app")
+            setRequestProperty("Cache-Control", "no-cache")
         }
         conn.inputStream.use { stream ->
             val text = BufferedReader(InputStreamReader(stream)).use { it.readText() }
@@ -121,15 +122,24 @@ fun UpdatePromptHost(
     // One-time check on launch / composition
     LaunchedEffect(Unit) {
         val snoozeUntil = prefs.getLong(KEY_SNOOZE_UNTIL, 0L)
-        val now = System.currentTimeMillis()
-        if (now < snoozeUntil) {
-            show = false
-            return@LaunchedEffect
-        }
+val now = System.currentTimeMillis()
+// NOTE: We will fetch latest first, and if a NEWER version exists we ignore snooze.
+
 
         current = currentNumericVersion(ctx)
         val remote = fetchLatest()
         latest = remote
+        // Decide showing prompt: if remote > current => show regardless of snooze
+        if (remote != null && remote.numericTag > current) {
+            show = true
+        } else {
+            // No newer version: respect snooze and hide
+            if (now < snoozeUntil) {
+                show = false
+            } else {
+                show = false
+            }
+        }
 
         show = when {
             remote == null -> false

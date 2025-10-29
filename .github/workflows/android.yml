@@ -1,9 +1,11 @@
-name: Android Build (Unified from Release tag)
+name: Android Single APK (Unified by Release tag)
 
 on:
-  workflow_dispatch:
+  push:
+    branches: ["main"]          # يبني عند أي دفع على main
+  workflow_dispatch:            # تشغيل يدوي
   release:
-    types: [published]
+    types: [published]          # أوتوماتيك عند نشر Release (بدون رفع APK لـ Releases)
 
 env:
   PROJECT_DIR: .
@@ -15,15 +17,15 @@ jobs:
       - name: Checkout (with tags)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0          # مهم: لجلب كل التاغات
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
-      # ✅ Properly install Android SDK & cmdline-tools so sdkmanager is available
+      # ✅ يضمن توفر sdkmanager و ANDROID_SDK_ROOT
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
@@ -41,28 +43,31 @@ jobs:
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             mkdir -p "${{ env.PROJECT_DIR }}/app"
             printf '%s' "$GOOGLE_SERVICES_JSON" > "${{ env.PROJECT_DIR }}/app/google-services.json"
+            echo "google-services.json created"
+          else
+            echo "GOOGLE_SERVICES_JSON is empty (skipping)"
           fi
 
-      - name: Compute VERSION_* from latest published Release tag (fallback to latest tag)
+      - name: Compute VERSION_* from latest published Release tag (fallbacks)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          # 1) If triggered by a Release, use its tag_name
+          # 1) إذا التشغيل بسبب Release منشور
           TAG="${{ github.event.release.tag_name }}"
-          # 2) Otherwise, try latest published Release via gh (if available)
+          # 2) جرّب آخر Release منشور عبر gh (لو موجود)
           if [ -z "$TAG" ]; then
             TAG="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
           fi
-          # 3) Fallback to latest repo tag
+          # 3) آخر tag بالريبو
           if [ -z "$TAG" ]; then
             TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
           fi
-          # 4) Final fallback
+          # 4) فالس آب
           if [ -z "$TAG" ]; then TAG="v1"; fi
           VC="$(echo "$TAG" | tr -cd '0-9')"
-          echo "Using tag: $TAG (VERSION_CODE=${VC:-1})"
+          echo "Using tag: $TAG  -> VERSION_CODE=${VC:-1}"
           echo "VERSION_NAME=$TAG" >> $GITHUB_ENV
           echo "VERSION_CODE=${VC:-1}" >> $GITHUB_ENV
 
@@ -70,10 +75,10 @@ jobs:
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           chmod +x ./gradlew || true
-          ./gradlew clean :app:assembleRelease -PVERSION_NAME="$VERSION_NAME" -PVERSION_CODE="$VERSION_CODE"
+          ./gradlew clean :app:assembleRelease             -PVERSION_NAME="$VERSION_NAME" -PVERSION_CODE="$VERSION_CODE"             -PversionName="$VERSION_NAME" -PversionCode="$VERSION_CODE"
 
-      # ✅ Sign only if secrets exist; otherwise upload unsigned APK
-      - name: Prepare keystore
+      # ✅ التوقيع اختياري: يوقّع فقط إذا الأسرار موجودة
+      - name: Prepare keystore (optional)
         if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -81,7 +86,7 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\r' | base64 -d > keystore.jks
           ls -lh keystore.jks || true
 
-      - name: Align & Sign (conditional)
+      - name: Align & Sign (optional)
         if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && secrets.ANDROID_KEY_ALIAS != '' && secrets.ANDROID_KEYSTORE_PASSWORD != '' && secrets.ANDROID_KEY_PASSWORD != '' }}
         env:
           KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -94,19 +99,20 @@ jobs:
           BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n1)
           echo "Using build-tools at: $BT"
           "$BT/zipalign" -f 4 "$UNSIGNED_APK" "$RELEASE_DIR/app-release-aligned.apk"
-          "$BT/apksigner" sign             --ks keystore.jks             --ks-key-alias "$KS_ALIAS"             --ks-pass env:KS_PASS             --key-pass env:KEY_PASS             --out "$RELEASE_DIR/app-release.apk"             "$RELEASE_DIR/app-release-aligned.apk"
+          "$BT/apksigner" sign             --ks keystore.jks             --ks-key-alias "$KS_ALIAS"             --ks-pass pass:"$KS_PASS"             --key-pass pass:"$KEY_PASS"             --out "$RELEASE_DIR/app-release.apk"             "$RELEASE_DIR/app-release-aligned.apk"
           "$BT/apksigner" verify -v "$RELEASE_DIR/app-release.apk"
-          echo "SIGNED_APK=$RELEASE_DIR/app-release.apk" >> $GITHUB_ENV
+          echo "FINAL_APK=$RELEASE_DIR/app-release.apk" >> $GITHUB_ENV
 
+      # إذا ماكو توقيع، نزّل الـunsigned APK كـ Artifact
       - name: Set APK path (unsigned fallback)
-        if: ${{ env.SIGNED_APK == '' }}
+        if: ${{ env.FINAL_APK == '' }}
         run: |
           RELEASE_DIR="${{ env.PROJECT_DIR }}/app/build/outputs/apk/release"
           APK=$(ls "$RELEASE_DIR"/*-unsigned.apk | head -n 1)
-          echo "SIGNED_APK=$APK" >> $GITHUB_ENV
+          echo "FINAL_APK=$APK" >> $GITHUB_ENV
 
       - name: Upload artifact (APK only; no Releases upload)
         uses: actions/upload-artifact@v4
         with:
-          name: app-release-${{ env.VERSION_NAME }}
-          path: ${{ env.SIGNED_APK }}
+          name: app-${{ env.VERSION_NAME }}
+          path: ${{ env.FINAL_APK }}

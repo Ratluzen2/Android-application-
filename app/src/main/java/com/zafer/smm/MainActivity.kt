@@ -167,7 +167,7 @@ private fun NoticeBody(text: String) {
     if (match != null) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             SelectionContainer {
-                Text(text, color = Dim, fontSize = 12.sp, modifier = Modifier)
+                Text(text, color = Dim, fontSize = 12.sp, modifier = Modifier.weight(1f))
             }
             TextButton(onClick = {
                 val c = match.groupValues.getOrNull(1) ?: text
@@ -227,9 +227,8 @@ private object AdminEndpoints {
     const val orderSetPrice = "/api/admin/pricing/order/set"
     const val orderClearPrice = "/api/admin/pricing/order/clear"
     const val orderSetQty = "/api/admin/pricing/order/set_qty"
-    // Announcements
     const val announcementCreate = "/api/admin/announcement/create"
-    const val announcementLatest = "/api/public/announcements/latest"
+    const val announcementsList = "/api/public/announcements"
 }
 
 /* =========================
@@ -455,7 +454,7 @@ if (loading) { CircularProgressIndicator(color = Accent); return@Column }
                 Row(Modifier.fillMaxWidth()) {
                     row.forEach { c ->
                         ElevatedCard(
-                            modifier = Modifier.padding(4.dp).clickable { selectedCat = c },
+                            modifier = Modifier.weight(1f).padding(4.dp).clickable { selectedCat = c },
                             colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                         ) { Text(c, Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold) }
                     }
@@ -573,7 +572,10 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
     return@Column
 }
 
-            }
+            
+        Spacer(Modifier.width(8.dp))
+        AdminSendAnnouncementButton(token = ownerToken) { /* onSent -> could trigger refresh */ }
+}
             Spacer(Modifier.height(10.dp))
 
             LazyColumn {
@@ -1389,7 +1391,7 @@ private fun AmountGrid(
                 pair.forEach { usd ->
                     val price = String.format(java.util.Locale.getDefault(), "%.2f", priceOf(usd))
                     ElevatedCard(
-                        modifier = Modifier
+                        modifier = Modifier.weight(1f)
                             .padding(4.dp)
                             .clickable { onSelect(usd, priceOf(usd)) },
                         colors = CardDefaults.elevatedCardColors(
@@ -1525,7 +1527,7 @@ fun PackageGrid(
             Row(Modifier.fillMaxWidth()) {
                 pair.forEach { opt ->
                     ElevatedCard(
-                        modifier = Modifier
+                        modifier = Modifier.weight(1f)
                             .padding(4.dp)
                             .clickable { onSelect(opt) },
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
@@ -2082,7 +2084,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("لوحة تحكم المالك", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = OnBg, modifier = Modifier)
+            Text("لوحة تحكم المالك", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = OnBg, modifier = Modifier.weight(1f))
             IconButton(onClick = { current = "notices" }) {
                 Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
             }
@@ -2119,7 +2121,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     row.forEach { (title, key) ->
                         ElevatedButton(
                             onClick = { if (!needToken()) current = key },
-                            modifier = Modifier
+                            modifier = Modifier.weight(1f)
                                 .padding(4.dp),
                             colors = ButtonDefaults.elevatedButtonColors(
                                 containerColor = Accent.copy(alpha = 0.18f),
@@ -2497,7 +2499,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                 Row(Modifier.fillMaxWidth()) {
                     row.forEach { c ->
                         ElevatedCard(
-                            modifier = Modifier.padding(4.dp).clickable { selectedCat = c },
+                            modifier = Modifier.weight(1f).padding(4.dp).clickable { selectedCat = c },
                             colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                         ) { Text(c, Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold) }
                     }
@@ -3707,6 +3709,7 @@ private fun NotificationBellCentered(
 // =========================
 data class Announcement(val title: String?, val body: String, val createdAt: Long)
 
+
 private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, body: String): Boolean {
     val obj = org.json.JSONObject().put("body", body)
     if (!title.isNullOrBlank()) obj.put("title", title)
@@ -3714,32 +3717,39 @@ private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, bo
     return code in 200..299
 }
 
-private suspend fun apiFetchLatestAnnouncement(): Announcement? {
-    val (code, txt) = httpGet(AdminEndpoints.announcementLatest)
-    if (code !in 200..299 || txt == null) return null
+
+private suspend fun apiFetchAnnouncements(limit: Int = 50): List<Announcement> {
+    val (code, txt) = httpGet(AdminEndpoints.announcementsList + "?limit=" + limit)
+    if (code !in 200..299 || txt == null) return emptyList()
     return try {
-        val o = org.json.JSONObject(txt.trim())
-        Announcement(
-            title = if (o.has("title")) o.optString("title", null) else null,
-            body = o.optString("body",""),
-            createdAt = o.optLong("created_at", 0L)
-        )
-    } catch (_: Exception) { null }
+        val arr = org.json.JSONArray(txt.trim())
+        val out = mutableListOf<Announcement>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            out.add(
+                Announcement(
+                    title = if (o.has("title")) o.optString("title", null) else null,
+                    body = o.optString("body",""),
+                    createdAt = o.optLong("created_at", 0L)
+                )
+            )
+        }
+        out
+    } catch (_: Exception) { emptyList() }
 }
 
+
 @Composable
-private fun HomeAnnouncementBox() {
-    val scope = rememberCoroutineScope()
-    var ann by remember { mutableStateOf<Announcement?>(null) }
+private fun HomeAnnouncementsList() {
+    var list by remember { mutableStateOf<List<Announcement>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var err by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         loading = true; err = null
         try {
-            val a = apiFetchLatestAnnouncement()
-            ann = a
+            list = apiFetchAnnouncements(50)
         } catch (e: Exception) {
-            err = "تعذر جلب الإعلان"
+            err = "تعذر جلب الإعلانات"
         } finally {
             loading = false
         }
@@ -3753,28 +3763,39 @@ private fun HomeAnnouncementBox() {
         err != null -> {
             Text(err!!, color = Bad, modifier = Modifier.padding(16.dp))
         }
-        ann == null -> {
+        list.isEmpty() -> {
             Text("لا توجد إعلانات حالياً", color = Dim, modifier = Modifier.padding(16.dp))
         }
         else -> {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(16.dp)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(vertical = 8.dp)
             ) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(ann!!.title ?: "إعلان مهم 📢", fontSize = 18.sp, color = OnBg, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Text(ann!!.body, fontSize = 16.sp, color = OnBg)
-                    Spacer(Modifier.height(8.dp))
-                    val ts = ann!!.createdAt.takeIf { it > 0 } ?: System.currentTimeMillis()
-                    Text(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(ts)), fontSize = 12.sp, color = Dim)
+                items(list.size) { idx ->
+                    val ann = list[idx]
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(ann.title ?: "إعلان مهم 📢", fontSize = 18.sp, color = OnBg, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(8.dp))
+                            Text(ann.body, fontSize = 16.sp, color = OnBg)
+                            Spacer(Modifier.height(8.dp))
+                            val ts = if (ann.createdAt > 0) ann.createdAt else System.currentTimeMillis()
+                            val formatted = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                                .format(java.util.Date(ts))
+                            Text(formatted, fontSize = 12.sp, color = Dim)
+                        }
+                    }
                 }
             }
         }
     }
 }
+
 
 @Composable
 private fun AdminSendAnnouncementButton(token: String, onSent: () -> Unit) {
@@ -3788,6 +3809,7 @@ private fun AdminSendAnnouncementButton(token: String, onSent: () -> Unit) {
         Text("إعلان التطبيق")
     }
 }
+
 
 @Composable
 private fun AdminSendAnnouncementDialog(token: String, onDismiss: () -> Unit, onSent: () -> Unit) {
@@ -3830,3 +3852,4 @@ private fun AdminSendAnnouncementDialog(token: String, onDismiss: () -> Unit, on
         }
     )
 }
+

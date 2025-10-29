@@ -167,7 +167,7 @@ private fun NoticeBody(text: String) {
     if (match != null) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             SelectionContainer {
-                Text(text, color = Dim, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text(text, color = Dim, fontSize = 12.sp, modifier = Modifier)
             }
             TextButton(onClick = {
                 val c = match.groupValues.getOrNull(1) ?: text
@@ -455,7 +455,7 @@ if (loading) { CircularProgressIndicator(color = Accent); return@Column }
                 Row(Modifier.fillMaxWidth()) {
                     row.forEach { c ->
                         ElevatedCard(
-                            modifier = Modifier.weight(1f).padding(4.dp).clickable { selectedCat = c },
+                            modifier = Modifier.padding(4.dp).clickable { selectedCat = c },
                             colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                         ) { Text(c, Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold) }
                     }
@@ -1389,7 +1389,7 @@ private fun AmountGrid(
                 pair.forEach { usd ->
                     val price = String.format(java.util.Locale.getDefault(), "%.2f", priceOf(usd))
                     ElevatedCard(
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
                             .padding(4.dp)
                             .clickable { onSelect(usd, priceOf(usd)) },
                         colors = CardDefaults.elevatedCardColors(
@@ -1525,7 +1525,7 @@ fun PackageGrid(
             Row(Modifier.fillMaxWidth()) {
                 pair.forEach { opt ->
                     ElevatedCard(
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
                             .padding(4.dp)
                             .clickable { onSelect(opt) },
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
@@ -2082,7 +2082,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            Text("لوحة تحكم المالك", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = OnBg, modifier = Modifier.weight(1f))
+            Text("لوحة تحكم المالك", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = OnBg, modifier = Modifier)
             IconButton(onClick = { current = "notices" }) {
                 Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
             }
@@ -2119,7 +2119,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     row.forEach { (title, key) ->
                         ElevatedButton(
                             onClick = { if (!needToken()) current = key },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
                                 .padding(4.dp),
                             colors = ButtonDefaults.elevatedButtonColors(
                                 containerColor = Accent.copy(alpha = 0.18f),
@@ -2497,7 +2497,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                 Row(Modifier.fillMaxWidth()) {
                     row.forEach { c ->
                         ElevatedCard(
-                            modifier = Modifier.weight(1f).padding(4.dp).clickable { selectedCat = c },
+                            modifier = Modifier.padding(4.dp).clickable { selectedCat = c },
                             colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                         ) { Text(c, Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold) }
                     }
@@ -3761,8 +3761,7 @@ private fun HomeAnnouncementBox() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 8.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = BgLifted)
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Text(ann!!.title ?: "إعلان مهم 📢", fontSize = 18.sp, color = OnBg, fontWeight = FontWeight.Bold)
@@ -3785,7 +3784,7 @@ private fun AdminSendAnnouncementButton(token: String, onSent: () -> Unit) {
             show = false; onSent()
         })
     }
-    Button(onClick = { show = true }, modifier = Modifier.weight(1f)) {
+    Button(onClick = { show = true }, modifier = Modifier) {
         Text("إعلان التطبيق")
     }
 }

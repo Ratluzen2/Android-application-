@@ -1,9 +1,10 @@
-import androidx.compose.material3.Card
+
 
 @file:Suppress("UnusedImport", "SpellCheckingInspection")
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.zafer.smm
+import androidx.compose.material3.Card
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.CircularProgressIndicator

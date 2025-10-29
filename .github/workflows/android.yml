@@ -1,9 +1,11 @@
-name: Android Single APK (Tag-versioned)
+name: Android Build (from latest Release tag)
 
 on:
-  push:
-    branches: ["main"]
+  # يدويًا من Actions (مفيد من الموبايل عبر المتصفح)
   workflow_dispatch:
+  # أو تلقائيًا عند نشر Release (لا يرفع الـAPK إلى Releases)
+  release:
+    types: [published]
 
 env:
   PROJECT_DIR: .
@@ -28,51 +30,49 @@ jobs:
           yes | sdkmanager --licenses
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Create google-services.json from secret
+      - name: Create google-services.json from secret (optional)
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         run: |
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             mkdir -p "${{ env.PROJECT_DIR }}/app"
             printf '%s' "$GOOGLE_SERVICES_JSON" > "${{ env.PROJECT_DIR }}/app/google-services.json"
-            echo "google-services.json created"
-          else
-            echo "GOOGLE_SERVICES_JSON is empty (skipping)"
           fi
 
-      - name: Compute VERSION_* from latest tag
+      - name: Compute VERSION_* from latest published Release tag (fallback to latest tag)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # If this run is triggered from a tag, prefer it; otherwise, use latest repo tag if exists
-          if [ "${{ github.ref_type }}" = "tag" ] && [ -n "${{ github.ref_name }}" ]; then
-            TAG="${{ github.ref_name }}"
-          else
+          set -e
+          # أولًا جرّب نداء آخر Release منشور
+          TAG="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
+          # إذا لم يوجد Release منشور، استخدم آخر tag بالريبو
+          if [ -z "$TAG" ]; then
             TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
           fi
-          if [ -n "$TAG" ]; then
-            VC="$(echo "$TAG" | tr -cd '0-9')"
-            echo "VERSION_NAME=$TAG" >> $GITHUB_ENV
-            echo "VERSION_CODE=${VC:-1}" >> $GITHUB_ENV
-            echo "Using tag: $TAG (VERSION_CODE=$VC)"
-          else
-            echo "VERSION_NAME=main-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
-            echo "VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
-            echo "No tags found; fallback VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))"
+          # فالس آب إذا ماكو أي تاغات
+          if [ -z "$TAG" ]; then
+            TAG="v1"
           fi
+          VC="$(echo "$TAG" | tr -cd '0-9')"
+          echo "Using tag: $TAG (code=$VC)"
+          echo "VERSION_NAME=$TAG" >> $GITHUB_ENV
+          echo "VERSION_CODE=${VC:-1}" >> $GITHUB_ENV
 
-      - name: Build (assembleRelease)
+      - name: Build (assembleRelease) using unified version
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           chmod +x ./gradlew || true
           ./gradlew clean :app:assembleRelease -PVERSION_NAME="$VERSION_NAME" -PVERSION_CODE="$VERSION_CODE"
 
-      - name: Prepare keystore
+      - name: Prepare keystore (for signing)
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\r' | base64 -d > keystore.jks
           ls -lh keystore.jks
 
-      - name: Align & Sign (single final APK)
+      - name: Align & Sign (no upload to Releases)
         env:
           KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -81,24 +81,14 @@ jobs:
           set -e
           RELEASE_DIR="${{ env.PROJECT_DIR }}/app/build/outputs/apk/release"
           UNSIGNED_APK=$(ls "$RELEASE_DIR"/*-unsigned.apk | head -n 1)
-          echo "Unsigned APK: $UNSIGNED_APK"
-
           BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n1)
-          echo "Using build-tools at: $BT"
-
           "$BT/zipalign" -f 4 "$UNSIGNED_APK" "$RELEASE_DIR/app-release-aligned.apk"
-          "$BT/apksigner" sign \
-            --ks keystore.jks \
-            --ks-key-alias "$KS_ALIAS" \
-            --ks-pass env:KS_PASS \
-            --key-pass env:KEY_PASS \
-            --out "$RELEASE_DIR/app-release.apk" \
-            "$RELEASE_DIR/app-release-aligned.apk"
+          "$BT/apksigner" sign             --ks keystore.jks             --ks-key-alias "$KS_ALIAS"             --ks-pass env:KS_PASS             --key-pass env:KEY_PASS             --out "$RELEASE_DIR/app-release.apk"             "$RELEASE_DIR/app-release-aligned.apk"
           "$BT/apksigner" verify -v "$RELEASE_DIR/app-release.apk"
           ls -lh "$RELEASE_DIR"/app-release*.apk
 
-      - name: Upload artifact (APK only; no Releases upload)
+      - name: Upload artifact (APK only)
         uses: actions/upload-artifact@v4
         with:
-          name: android-release
+          name: app-release-${{ env.VERSION_NAME }}
           path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/release/app-release.apk

@@ -13,8 +13,7 @@ android {
         minSdk 24
         targetSdk 34
 
-        // === Auto versioning for CI ===
-        // Read VERSION_CODE from environment (GitHub Actions). Fallback = 2.
+        // === Auto versioning from CI (latest tag) ===
         def envVcRaw = System.getenv("VERSION_CODE")
         def vc = 2
         try {
@@ -22,36 +21,32 @@ android {
         } catch (ignored) { vc = 2 }
         versionCode vc
 
-        // versionName can be passed from CI: -PversionName=...
         def suppliedName = project.hasProperty("versionName") ? project.getProperties().get("versionName") : null
-        versionName (suppliedName ?: "1.0.1")
+        versionName (suppliedName ?: "main-0")
 
         vectorDrawables { useSupportLibrary true }
     }
 
     buildTypes {
         release {
-            // تصغير الحجم للنسخة النهائية
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
             debuggable true
-            // تأكد أن التصغير متوقف في الديباگ
             minifyEnabled false
             shrinkResources false
         }
     }
 
-    // منع إنشاء أكثر من APK (لا splits)
+    // منع إنشاء أكثر من APK
     splits {
         abi { enable false }
         density { enable false }
         language { enable false }
     }
 
-    // Java/Kotlin toolchains
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -59,9 +54,7 @@ android {
     kotlinOptions { jvmTarget = '17' }
     kotlin { jvmToolchain(17) }
 
-    buildFeatures {
-        compose true
-    }
+    buildFeatures { compose true }
 
     composeOptions {
         kotlinCompilerExtensionVersion '1.5.14'
@@ -69,12 +62,10 @@ android {
 
     packagingOptions {
         resources {
-            // إزالة ملفات رخص مكررة لتقليل الحجم
             excludes += ['/META-INF/{AL2.0,LGPL2.1}']
         }
     }
 
-    // تقليل معلومات التبعيات داخل الـAPK (اختياري لتقليل الحجم قليلاً)
     dependenciesInfo {
         includeInApk false
         includeInBundle false
@@ -84,7 +75,7 @@ android {
 dependencies {
     implementation "androidx.work:work-runtime-ktx:2.9.1"
 
-    // Firebase BOM (keeps Firebase libs compatible)
+    // Firebase BOM
     implementation platform('com.google.firebase:firebase-bom:33.4.0')
     // Compose BOM
     implementation platform('androidx.compose:compose-bom:2024.06.00')
@@ -112,7 +103,7 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.6.1'
     testImplementation 'junit:junit:4.13.2'
 
-    // Material (for classic Views if needed)
+    // Material (classic Views if needed)
     implementation 'com.google.android.material:material:1.12.0'
 
     // Network — Retrofit + OkHttp + Gson
@@ -124,6 +115,6 @@ dependencies {
     // Firebase Cloud Messaging (FCM)
     implementation 'com.google.firebase:firebase-messaging'
 
-    // DataStore for owner session
+    // DataStore
     implementation 'androidx.datastore:datastore-preferences:1.1.1'
 }

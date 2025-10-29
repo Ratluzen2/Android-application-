@@ -35,7 +35,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -101,6 +100,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Divider
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.text.style.TextAlign
@@ -1427,7 +1427,7 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
                     onValueChange = { s -> if (s.all { it.isDigit() }) qtyText = s },
                     label = { Text("الكمية") },
                     singleLine = true,
-                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                    colors = OutlinedTextFieldDefaults.colors(
                         cursorColor = Accent,
                         focusedBorderColor = Accent, unfocusedBorderColor = Dim,
                         focusedLabelColor = OnBg, unfocusedLabelColor = Dim
@@ -1438,7 +1438,7 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
                     value = link, onValueChange = { link = it },
                     label = { Text("الرابط (أرسل الرابط وليس اليوزر)") },
                     singleLine = true,
-                    colors = TextFieldDefaults.outlinedTextFieldColors(
+                    colors = OutlinedTextFieldDefaults.colors(
                         cursorColor = Accent,
                         focusedBorderColor = Accent, unfocusedBorderColor = Dim,
                         focusedLabelColor = OnBg, unfocusedLabelColor = Dim
@@ -2101,7 +2101,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                         onValueChange = { s -> if (s.all { it.isDigit() }) cardNumber = s },
                         singleLine = true,
                         label = { Text("رقم الكارت") },
-                        colors = TextFieldDefaults.outlinedTextFieldColors(
+                        colors = OutlinedTextFieldDefaults.colors(
                             cursorColor = Accent,
                             focusedBorderColor = Accent, unfocusedBorderColor = Dim,
                             focusedLabelColor = OnBg, unfocusedLabelColor = Dim
@@ -3603,7 +3603,7 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
                         onValueChange = { pass = it },
                         singleLine = true,
                         label = { Text("أدخل كلمة المرور") },
-                        colors = TextFieldDefaults.outlinedTextFieldColors(
+                        colors = OutlinedTextFieldDefaults.colors(
                             cursorColor = Accent,
                             focusedBorderColor = Accent, unfocusedBorderColor = Dim,
                             focusedLabelColor = OnBg, unfocusedLabelColor = Dim

@@ -57,7 +57,8 @@ android {
         compose true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion '1.5.15'
+        // ✅ Fix: 1.5.15 requires Kotlin 1.9.25; we use 1.9.24, so pin to 1.5.14
+        kotlinCompilerExtensionVersion '1.5.14'
     }
 }
 

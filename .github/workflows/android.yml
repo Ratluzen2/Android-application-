@@ -1,9 +1,7 @@
 name: Android Build (from latest Release tag)
 
 on:
-  # يدويًا من Actions (مفيد من الموبايل عبر المتصفح)
   workflow_dispatch:
-  # أو تلقائيًا عند نشر Release (لا يرفع الـAPK إلى Releases)
   release:
     types: [published]
 
@@ -25,10 +23,18 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Accept licenses & install build tools
+      # ✅ Install Android SDK + commandline-tools, set ANDROID_SDK_ROOT/PATH
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # (Optional) Install required packages explicitly
+      - name: Install Android packages
         run: |
-          yes | sdkmanager --licenses
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      # (Optional) Accept licenses (now sdkmanager is available)
+      - name: Accept Android licenses
+        run: yes | sdkmanager --licenses
 
       - name: Create google-services.json from secret (optional)
         env:
@@ -41,19 +47,15 @@ jobs:
 
       - name: Compute VERSION_* from latest published Release tag (fallback to latest tag)
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          # أولًا جرّب نداء آخر Release منشور
           TAG="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
-          # إذا لم يوجد Release منشور، استخدم آخر tag بالريبو
           if [ -z "$TAG" ]; then
             TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
           fi
-          # فالس آب إذا ماكو أي تاغات
-          if [ -z "$TAG" ]; then
-            TAG="v1"
-          fi
+          if [ -z "$TAG" ]; then TAG="v1"; fi
           VC="$(echo "$TAG" | tr -cd '0-9')"
           echo "Using tag: $TAG (code=$VC)"
           echo "VERSION_NAME=$TAG" >> $GITHUB_ENV
@@ -72,7 +74,7 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\r' | base64 -d > keystore.jks
           ls -lh keystore.jks
 
-      - name: Align & Sign (no upload to Releases)
+      - name: Align & Sign
         env:
           KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}

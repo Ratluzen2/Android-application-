@@ -55,7 +55,7 @@ fun UpdatePromptHost() {
             tagName = tag,
             onUpdate = {
                 val url = apkUrl ?: "https://github.com/$OWNER/$REPO/releases/latest"
-                openUrl(LocalContext.current, url)
+                openUrl(ctx, url)
             },
             onLater = {
                 // سكون ساعة (سوف يُتجاهَل تلقائيًا عند وجود إصدار أحدث)

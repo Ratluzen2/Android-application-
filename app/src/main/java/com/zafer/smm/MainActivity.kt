@@ -2246,6 +2246,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                 "فحص رصيد API"             to "provider_balance",
                             "تغيير رقم خدمات API" to "edit_svc_ids",
                 "تغيير الأسعار والكميات" to "edit_pricing",
+                "إعلان التطبيق"           to "announce",
 )
             buttons.chunked(2).forEach { row ->
                 Row(Modifier.fillMaxWidth()) {

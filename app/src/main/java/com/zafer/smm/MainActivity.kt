@@ -3836,3 +3836,30 @@ private fun NotificationBellCentered(
         }
     }
 }
+
+
+// =========================
+// Firebase Messaging Service — يحفظ إشعارات FCM داخل أيقونة الجرس
+// =========================
+class AppFcmService : FirebaseMessagingService() {
+    override fun onMessageReceived(msg: RemoteMessage) {
+        val ctx = applicationContext
+        val title = msg.data["title"] ?: msg.notification?.title ?: "إشعار"
+        val body  = msg.data["body"] ?: msg.notification?.body ?: ""
+        try {
+            val existing = loadNotices(ctx)
+            val nn = AppNotice(title = title, body = body, ts = System.currentTimeMillis(), forOwner = false)
+            saveNotices(ctx, existing + nn)
+        } catch (_: Throwable) { }
+        AppNotifier.notifyNow(ctx, title, body)
+    }
+    override fun onNewToken(token: String) {
+        try {
+            val u = loadOrCreateUid(applicationContext)
+            kotlinx.coroutines.GlobalScope.launch {
+                try { apiUpdateFcmToken(u, token) } catch (_: Throwable) {}
+                try { if (loadOwnerMode(applicationContext)) apiUpdateFcmToken("OWNER-0001", token) } catch (_: Throwable) {}
+            }
+        } catch (_: Throwable) { }
+    }
+}

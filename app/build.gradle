@@ -1,3 +1,4 @@
+
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
@@ -8,41 +9,41 @@ android {
     namespace 'com.zafer.smm'
     compileSdk 34
 
+    def verName = (project.hasProperty('VERSION_NAME') ? project.VERSION_NAME :
+            (project.hasProperty('versionName') ? project.versionName : "1.0"))
+    def verCode = (project.hasProperty('VERSION_CODE') ? project.VERSION_CODE.toInteger() :
+            (project.hasProperty('versionCode') ? project.versionCode.toInteger() : 1))
+
     defaultConfig {
         applicationId "com.zafer.smm"
         minSdk 24
         targetSdk 34
+        versionCode verCode
+        versionName verName
 
-        // === Unify versioning from Git tag (CI or local) ===
-        def nameRaw = project.findProperty("VERSION_NAME") ?: System.getenv("VERSION_NAME") ?: project.findProperty("versionName") ?: "v1"
-        def codeRaw = project.findProperty("VERSION_CODE") ?: System.getenv("VERSION_CODE") ?: project.findProperty("versionCode") ?: "1"
-        def digits = codeRaw.replaceAll("\\D", "")
-        def codeInt = digits.isEmpty() ? 1 : Integer.parseInt(digits)
-
-        versionName nameRaw   // e.g., v7
-        versionCode codeInt   // e.g., 7
+        vectorDrawables {
+            useSupportLibrary true
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
-            debuggable true
+            minifyEnabled false
         }
     }
 
-    packagingOptions {
-        resources {
-            excludes += [
-                "META-INF/AL2.0",
-                "META-INF/LGPL2.1",
-                "META-INF/LICENSE*",
-                "META-INF/NOTICE*"
-            ]
-        }
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+
+    composeOptions {
+        // Compose Compiler 1.5.15 <-> Kotlin 1.9.25
+        kotlinCompilerExtensionVersion '1.5.15'
     }
 
     compileOptions {
@@ -51,42 +52,49 @@ android {
     }
     kotlinOptions {
         jvmTarget = '17'
+        freeCompilerArgs += [
+                "-Xjvm-default=all"
+        ]
     }
 
-    buildFeatures {
-        compose true
-    }
-    composeOptions {
-        // ✅ Fix: 1.5.15 requires Kotlin 1.9.25; we use 1.9.24, so pin to 1.5.14
-        kotlinCompilerExtensionVersion '1.5.14'
+    packagingOptions {
+        resources {
+            excludes += ['/META-INF/{AL2.0,LGPL2.1}']
+        }
     }
 }
 
 dependencies {
-    implementation platform('org.jetbrains.kotlin:kotlin-bom')
-    implementation 'org.jetbrains.kotlin:kotlin-stdlib:1.9.24'
-
-    // Compose
-    implementation 'androidx.activity:activity-compose:1.9.2'
-    implementation 'androidx.compose.ui:ui:1.7.2'
-    implementation 'androidx.compose.material3:material3:1.3.0'
-    implementation 'androidx.compose.ui:ui-tooling-preview:1.7.2'
-    debugImplementation 'androidx.compose.ui:ui-tooling:1.7.2'
+    // ----- Compose BOM (align all compose artifacts) -----
+    implementation platform('androidx.compose:compose-bom:2024.10.01')
 
     implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.activity:activity-compose:1.9.2'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.6'
-    implementation 'com.google.android.material:material:1.12.0'
 
-    // Network — Retrofit + OkHttp + Gson
-    implementation 'com.squareup.retrofit2:retrofit:2.11.0'
-    implementation 'com.squareup.retrofit2:converter-gson:2.11.0'
-    implementation 'com.google.code.gson:gson:2.11.0'
-    implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
+    // Compose UI + Material3
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
 
-    // Firebase BOM + Messaging (no hardcoded version)
+    // Material Icons (extended) -> fixes missing icons like ChevronLeft/SimCard/AttachMoney/ChatBubble/AccountBalanceWallet
+    implementation 'androidx.compose.material:material-icons-extended'
+
+    // WorkManager (for OrderDoneCheckWorker)
+    implementation 'androidx.work:work-runtime-ktx:2.9.1'
+
+    // Coroutines (usually pulled in by other deps, keep explicit)
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+
+    // Firebase (Messaging for FCM token)
     implementation platform('com.google.firebase:firebase-bom:33.5.1')
-    implementation 'com.google.firebase:firebase-messaging'
+    implementation 'com.google.firebase:firebase-messaging-ktx'
+    implementation 'com.google.firebase:firebase-analytics-ktx'
 
-    // DataStore
-    implementation 'androidx.datastore:datastore-preferences:1.1.1'
+    // Play Services tasks (for Task<String> used by FCM)
+    implementation 'com.google.android.gms:play-services-tasks:18.2.0'
+
+    // Optional helpers
+    implementation 'androidx.navigation:navigation-compose:2.8.2'
 }

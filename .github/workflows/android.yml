@@ -1,9 +1,9 @@
-name: Android Single APK
+name: Android Single APK (Tag-versioned)
 
 on:
   push:
-    branches: ["main"]        # يبني عند أي دفع على main
-  workflow_dispatch:          # وتشغيل يدوي
+    branches: ["main"]
+  workflow_dispatch:
 
 env:
   PROJECT_DIR: .
@@ -15,16 +15,13 @@ jobs:
       - name: Checkout (with tags)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0        # مهم: لجلب كل التاغات
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'temurin'
           java-version: '17'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
 
       - name: Accept licenses & install build tools
         run: |
@@ -45,22 +42,28 @@ jobs:
 
       - name: Compute VERSION_* from latest tag
         run: |
-          # اجلب آخر تاغ منشور في المستودع (مثل v1749). إن لم يوجد، استخدم عدّاد التشغيل.
-          LATEST_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
-          if [ -n "$LATEST_TAG" ]; then
-            VC="$(echo "$LATEST_TAG" | tr -cd '0-9')"
-            echo "VERSION_NAME=$LATEST_TAG" >> $GITHUB_ENV
+          # If this run is triggered from a tag, prefer it; otherwise, use latest repo tag if exists
+          if [ "${{ github.ref_type }}" = "tag" ] && [ -n "${{ github.ref_name }}" ]; then
+            TAG="${{ github.ref_name }}"
+          else
+            TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          fi
+          if [ -n "$TAG" ]; then
+            VC="$(echo "$TAG" | tr -cd '0-9')"
+            echo "VERSION_NAME=$TAG" >> $GITHUB_ENV
             echo "VERSION_CODE=${VC:-1}" >> $GITHUB_ENV
-            echo "Using latest tag: $LATEST_TAG -> VC=$VC"
+            echo "Using tag: $TAG (VERSION_CODE=$VC)"
           else
             echo "VERSION_NAME=main-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
             echo "VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))" >> $GITHUB_ENV
-            echo "No tags found; fallback VC=$VERSION_CODE"
+            echo "No tags found; fallback VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))"
           fi
 
       - name: Build (assembleRelease)
         working-directory: ${{ env.PROJECT_DIR }}
-        run: gradle clean :app:assembleRelease -PversionName="$VERSION_NAME"
+        run: |
+          chmod +x ./gradlew || true
+          ./gradlew clean :app:assembleRelease -PVERSION_NAME="$VERSION_NAME" -PVERSION_CODE="$VERSION_CODE"
 
       - name: Prepare keystore
         env:
@@ -78,12 +81,19 @@ jobs:
           set -e
           RELEASE_DIR="${{ env.PROJECT_DIR }}/app/build/outputs/apk/release"
           UNSIGNED_APK=$(ls "$RELEASE_DIR"/*-unsigned.apk | head -n 1)
+          echo "Unsigned APK: $UNSIGNED_APK"
 
           BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n1)
           echo "Using build-tools at: $BT"
 
           "$BT/zipalign" -f 4 "$UNSIGNED_APK" "$RELEASE_DIR/app-release-aligned.apk"
-          "$BT/apksigner" sign --ks keystore.jks --ks-key-alias "$KS_ALIAS"             --ks-pass pass:"$KS_PASS" --key-pass pass:"$KEY_PASS"             --out "$RELEASE_DIR/app-release.apk" "$RELEASE_DIR/app-release-aligned.apk"
+          "$BT/apksigner" sign \
+            --ks keystore.jks \
+            --ks-key-alias "$KS_ALIAS" \
+            --ks-pass env:KS_PASS \
+            --key-pass env:KEY_PASS \
+            --out "$RELEASE_DIR/app-release.apk" \
+            "$RELEASE_DIR/app-release-aligned.apk"
           "$BT/apksigner" verify -v "$RELEASE_DIR/app-release.apk"
           ls -lh "$RELEASE_DIR"/app-release*.apk
 

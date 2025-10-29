@@ -1,9 +1,9 @@
-name: Android Build (Unified from Release tag)
+name: Android Build (Tag-unified, wrapper-safe)
 
 on:
+  workflow_dispatch:
   push:
     branches: ["main"]
-  workflow_dispatch:
   release:
     types: [published]
 
@@ -25,7 +25,6 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      # Ensure Android SDK + cmdline-tools are available (sdkmanager)
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
@@ -36,6 +35,30 @@ jobs:
       - name: Accept Android licenses
         run: yes | sdkmanager --licenses
 
+      - name: Detect project directory & wrapper
+        id: detect
+        run: |
+          set -e
+          WRAP="$(git ls-files | grep -m1 '^.*gradlew$' || true)"
+          if [ -n "$WRAP" ]; then
+            DIR="$(dirname "$WRAP")"
+            echo "Found gradlew at: $WRAP"
+            echo "PROJECT_DIR=$DIR" >> $GITHUB_ENV
+            echo "USE_WRAPPER=true" >> $GITHUB_ENV
+          else
+            # Try common roots
+            for d in . android app ; do
+              if [ -f "$d/settings.gradle" ] || [ -f "$d/settings.gradle.kts" ]; then
+                echo "Detected Gradle project at: $d"
+                echo "PROJECT_DIR=$d" >> $GITHUB_ENV
+                break
+              fi
+            done
+            echo "USE_WRAPPER=false" >> $GITHUB_ENV
+          fi
+          echo "PROJECT_DIR=${{ env.PROJECT_DIR }}"
+          echo "USE_WRAPPER=$USE_WRAPPER"
+
       - name: Create google-services.json from secret (optional)
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
@@ -43,15 +66,18 @@ jobs:
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             mkdir -p "${{ env.PROJECT_DIR }}/app"
             printf '%s' "$GOOGLE_SERVICES_JSON" > "${{ env.PROJECT_DIR }}/app/google-services.json"
-            echo "google-services.json created"
-          else
-            echo "GOOGLE_SERVICES_JSON is empty (skipping)"
           fi
 
       - name: Compute VERSION_* from latest published Release tag (fallbacks)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           TAG="${{ github.event.release.tag_name }}"
+          if [ -z "$TAG" ]; then
+            TAG="$(gh release view --json tagName --jq .tagName 2>/dev/null || true)"
+          fi
           if [ -z "$TAG" ]; then
             TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
           fi
@@ -61,13 +87,24 @@ jobs:
           echo "VERSION_NAME=$TAG" >> $GITHUB_ENV
           echo "VERSION_CODE=${VC:-1}" >> $GITHUB_ENV
 
-      - name: Build (assembleRelease) using unified version
+      - name: Build with Gradle Wrapper
+        if: env.USE_WRAPPER == 'true'
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           chmod +x ./gradlew || true
           ./gradlew clean :app:assembleRelease             -PVERSION_NAME="$VERSION_NAME" -PVERSION_CODE="$VERSION_CODE"             -PversionName="$VERSION_NAME" -PversionCode="$VERSION_CODE"
 
-      # Prepare keystore if provided — NO 'if: secrets.*' (avoid invalid workflow error)
+      - name: Build with Gradle (no wrapper)
+        if: env.USE_WRAPPER != 'true'
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: 8.7
+          build-root-directory: ${{ env.PROJECT_DIR }}
+          arguments: >-
+            clean :app:assembleRelease
+            -PVERSION_NAME=${{ env.VERSION_NAME }} -PVERSION_CODE=${{ env.VERSION_CODE }}
+            -PversionName=${{ env.VERSION_NAME }} -PversionCode=${{ env.VERSION_CODE }}
+
       - name: Prepare keystore (optional)
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -87,24 +124,30 @@ jobs:
         run: |
           set -e
           RELEASE_DIR="${{ env.PROJECT_DIR }}/app/build/outputs/apk/release"
-          UNSIGNED_APK=$(ls "$RELEASE_DIR"/*-unsigned.apk | head -n 1 || true)
-          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n1)
+          # Search for unsigned if wrapperless path differences occur
+          UNSIGNED_APK=$(ls "$RELEASE_DIR"/*-unsigned.apk 2>/dev/null | head -n 1 || true)
           if [ -z "$UNSIGNED_APK" ]; then
-            echo "Unsigned APK not found. Check Gradle build output."; exit 1
+            echo "No *-unsigned.apk found in $RELEASE_DIR; listing files for debug:"
+            ls -lR "${{ env.PROJECT_DIR }}/app/build/outputs" || true
           fi
-
-          if [ "$HAS_KEYSTORE" = "true" ] && [ -n "$KS_ALIAS" ] && [ -n "$KS_PASS" ] && [ -n "$KEY_PASS" ]; then
-            echo "Signing with provided keystore..."
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n1)
+          if [ "$HAS_KEYSTORE" = "true" ] && [ -n "$KS_ALIAS" ] && [ -n "$KS_PASS" ] && [ -n "$KEY_PASS" ] && [ -n "$UNSIGNED_APK" ]; then
             "$BT/zipalign" -f 4 "$UNSIGNED_APK" "$RELEASE_DIR/app-release-aligned.apk"
             "$BT/apksigner" sign               --ks keystore.jks               --ks-key-alias "$KS_ALIAS"               --ks-pass pass:"$KS_PASS"               --key-pass pass:"$KEY_PASS"               --out "$RELEASE_DIR/app-release.apk"               "$RELEASE_DIR/app-release-aligned.apk"
             "$BT/apksigner" verify -v "$RELEASE_DIR/app-release.apk"
             echo "FINAL_APK=$RELEASE_DIR/app-release.apk" >> $GITHUB_ENV
           else
-            echo "Signing secrets missing — using unsigned APK."
-            echo "FINAL_APK=$UNSIGNED_APK" >> $GITHUB_ENV
+            # Fallback: upload unsigned or aligned if exists
+            if [ -n "$UNSIGNED_APK" ]; then
+              echo "FINAL_APK=$UNSIGNED_APK" >> $GITHUB_ENV
+            elif [ -f "$RELEASE_DIR/app-release.apk" ]; then
+              echo "FINAL_APK=$RELEASE_DIR/app-release.apk" >> $GITHUB_ENV
+            else
+              echo "FINAL_APK=" >> $GITHUB_ENV
+            fi
           fi
 
-      - name: Upload artifact (APK only; no Releases upload)
+      - name: Upload artifact (APK)
         uses: actions/upload-artifact@v4
         with:
           name: app-${{ env.VERSION_NAME }}

@@ -2,26 +2,39 @@ package com.zafer.smm.ui
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
-import android.util.Log
-import androidx.compose.foundation.layout.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -29,170 +42,205 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.TimeUnit
 
-// === إعدادات المستودع على GitHub (عدّلها إذا اختلف الاسم) ===
-private const val OWNER = "Ratluzen2"
-private const val REPO  = "Android-application-"
+private const val GITHUB_LATEST_API =
+    "https://api.github.com/repos/Ratluzen2/Android-application-/releases/latest"
 
-// === مفاتيح التخزين المؤقت لميزة "لاحقًا" (ساعة واحدة) ===
 private const val PREFS_NAME = "update_prompt_prefs"
 private const val KEY_SNOOZE_UNTIL = "update_snooze_until"
 
-// رابط التحميل المباشر لآخر إصدار (اسم الملف يجب أن يكون app-release.apk داخل الـRelease)
-private val latestApkUrl: String
-    get() = "https://github.com/$OWNER/$REPO/releases/latest/download/app-release.apk"
+/** Try to read a *numeric* version from versionName first (e.g., 1747),
+ *  falling back to versionCode when versionName doesn't contain digits. */
+private fun currentNumericVersion(context: Context): Int {
+    return try {
+        val pm = context.packageManager
+        val pInfo = pm.getPackageInfo(context.packageName, 0)
+        // Extract digits from versionName like "v1711" -> 1711
+        val digitsFromName = pInfo.versionName?.let {
+            Regex("\\d+").findAll(it).joinToString("") { m -> m.value }
+        }?.takeIf { it.isNotEmpty() }?.toIntOrNull()
 
-// عنوان API لإحضار آخر إصدار
-private val latestReleaseApiUrl: String
-    get() = "https://api.github.com/repos/$OWNER/$REPO/releases/latest"
+        val code = if (Build.VERSION.SDK_INT >= 28) pInfo.longVersionCode.toInt() else pInfo.versionCode
 
-/** إحضار versionCode الحالي المثبّت على الجهاز بدون الحاجة إلى BuildConfig. */
-private fun currentVersionCode(ctx: Context): Int = try {
-    val pkgInfo = ctx.packageManager.getPackageInfo(ctx.packageName, 0)
-    if (Build.VERSION.SDK_INT >= 28) {
-        (pkgInfo.longVersionCode and 0xFFFFFFFF).toInt()
-    } else {
-        @Suppress("DEPRECATION")
-        pkgInfo.versionCode
+        when {
+            digitsFromName != null && digitsFromName > code -> digitsFromName
+            else -> code
+        }
+    } catch (e: Exception) {
+        0
     }
-} catch (_: Throwable) { 0 }
+}
 
-/** يفحص إن كان هناك تحديث جديد (باستخدام GitHub Releases) ويراعي الإرجاء لمدة ساعة عند اختيار "لاحقًا". */
-private suspend fun checkForUpdateOrNull(ctx: Context): Int? = withContext(Dispatchers.IO) {
+private data class Latest(
+    val numericTag: Int,
+    val htmlUrl: String,
+    val apkUrl: String?
+)
+
+private suspend fun fetchLatest(): Latest? = withContext(Dispatchers.IO) {
     try {
-        // احترم التأجيل لمدة ساعة
-        val prefs = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val snoozeUntil = prefs.getLong(KEY_SNOOZE_UNTIL, 0L)
-        if (System.currentTimeMillis() < snoozeUntil) return@withContext null
-
-        val url = URL(latestReleaseApiUrl)
+        val url = URL(GITHUB_LATEST_API)
         val conn = (url.openConnection() as HttpURLConnection).apply {
-            connectTimeout = 15000
-            readTimeout = 15000
-            requestMethod = "GET"
+            connectTimeout = 10_000
+            readTimeout = 10_000
             setRequestProperty("Accept", "application/vnd.github+json")
-            setRequestProperty("User-Agent", "ZaferApp-UpdateChecker")
+            setRequestProperty("User-Agent", "ratluzen-app")
         }
-        conn.connect()
-        if (conn.responseCode !in 200..299) {
-            Log.w("UpdatePrompt", "GitHub API HTTP ${conn.responseCode}")
-            return@withContext null
+        conn.inputStream.use { stream ->
+            val text = BufferedReader(InputStreamReader(stream)).use { it.readText() }
+            val obj = JSONObject(text)
+            val tag = obj.optString("tag_name") // e.g. "v1711"
+            val numeric = Regex("\\d+").findAll(tag).joinToString("") { it.value }.toIntOrNull() ?: return@withContext null
+            val html = obj.optString("html_url")
+            val assets = obj.optJSONArray("assets") ?: JSONArray()
+            var apk: String? = null
+            for (i in 0 until assets.length()) {
+                val a = assets.getJSONObject(i)
+                val name = a.optString("name")
+                if (name.endsWith(".apk", ignoreCase = true)) {
+                   apk = a.optString("browser_download_url")
+                   break
+                }
+            }
+            return@withContext Latest(numeric, html, apk)
         }
-        val body = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
-        val tagName = JSONObject(body).optString("tag_name").trim() // مثل v1711
-        val remoteVc = tagName.filter { it.isDigit() }.toIntOrNull() ?: return@withContext null
-
-        return@withContext if (remoteVc > currentVersionCode(ctx)) remoteVc else null
-    } catch (t: Throwable) {
-        Log.e("UpdatePrompt", "checkForUpdateOrNull failed", t)
+    } catch (e: Exception) {
         null
     }
 }
 
-/** ينفّذ فتح رابط التحديث في المتصفح. */
-private fun openUpdateInBrowser(ctx: Context) {
-    try {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(latestApkUrl)).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        ctx.startActivity(intent)
-    } catch (_: Throwable) {
-        // ignore
-    }
-}
-
-/** يفعّل تأجيل ظهور النافذة لمدة ساعة واحدة. */
-private fun snoozeOneHour(ctx: Context) {
-    val until = System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1)
-    ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        .edit()
-        .putLong(KEY_SNOOZE_UNTIL, until)
-        .apply()
-}
-
-/** الواجهة المنبثقة ذاتها (Dialog) — تُعرض فقط عند توفر تحديث أحدث. */
 @Composable
-fun UpdatePrompt() {
+fun UpdatePromptHost(
+    modifier: Modifier = Modifier
+) {
     val ctx = LocalContext.current
-    val currentVc = remember { currentVersionCode(ctx) }
+    val prefs = remember { ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE) }
     var show by remember { mutableStateOf(false) }
-    var remoteVc by remember { mutableIntStateOf(0) }
+    var latest by remember { mutableStateOf<Latest?>(null) }
+    var current by remember { mutableStateOf(0) }
 
+    // One-time check on launch / composition
     LaunchedEffect(Unit) {
-        val newer = checkForUpdateOrNull(ctx)
-        if (newer != null) {
-            remoteVc = newer
-            show = true
+        val snoozeUntil = prefs.getLong(KEY_SNOOZE_UNTIL, 0L)
+        val now = System.currentTimeMillis()
+        if (now < snoozeUntil) {
+            show = false
+            return@LaunchedEffect
+        }
+
+        current = currentNumericVersion(ctx)
+        val remote = fetchLatest()
+        latest = remote
+
+        show = when {
+            remote == null -> false
+            remote.numericTag > current -> true
+            else -> false
         }
     }
 
-    if (!show) return
-
-    // ألوان جذّابة للأزرار والنصوص داخل الـDialog
-    val primaryButtonColor = ButtonDefaults.buttonColors(
-        containerColor = Color(0xFF7C4DFF), // بنفسجي أنيق
-        contentColor   = Color.White
-    )
-    val laterButtonColor = ButtonDefaults.textButtonColors(
-        contentColor = Color(0xFF5C6BC0) // أزرق بنفسجي لطيف
-    )
-
-    AlertDialog(
-        onDismissRequest = {
-            // إغلاق بالنقر خارج الحوار = اعتبرها "لاحقًا" أيضاً مع تأجيل ساعة
-            snoozeOneHour(ctx)
-            show = false
-        },
-        title = {
-            Text(
-                "تحديث جديد متوفر",
-                fontWeight = FontWeight.Bold,
-                fontSize = 20.sp
-            )
-        },
-        text = {
-            Column(Modifier.fillMaxWidth()) {
-                Text(
-                    "يتوفر إصدار أحدث للتطبيق. ننصحك بالتحديث الآن للحصول على الاضافات الجديدة والخدمات الجديدة والإصلاحات.",
-                    fontSize = 15.sp,
-                    lineHeight = 20.sp
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "الإصدار الحالي: $currentVc\nالإصدار الجديد: $remoteVc",
-                    fontSize = 14.sp,
-                    color = Color(0xFF424242)
+    AnimatedVisibility(visible = show, modifier = modifier.fillMaxSize()) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(enabled = true) { /* swallow */ },
+            color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.35f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                UpdateCard(
+                    currentVersion = current,
+                    latestVersion = latest?.numericTag ?: 0,
+                    onLater = {
+                        // Snooze for 1 hour
+                        prefs.edit().putLong(
+                            KEY_SNOOZE_UNTIL,
+                            System.currentTimeMillis() + TimeUnit.HOURS.toMillis(1)
+                        ).apply()
+                        show = false
+                    },
+                    onUpdateNow = {
+                        latest?.let { l ->
+                            val openUrl = l.apkUrl ?: l.htmlUrl
+                            runCatching {
+                                ctx.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(openUrl)).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                )
+                            }
+                        }
+                    }
                 )
             }
-        },
-        confirmButton = {
+        }
+    }
+}
+
+@Composable
+private fun UpdateCard(
+    currentVersion: Int,
+    latestVersion: Int,
+    onLater: () -> Unit,
+    onUpdateNow: () -> Unit,
+) {
+    val cardBg = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f)
+    val textColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Column(
+        modifier = Modifier
+            .padding(horizontal = 20.dp)
+            .clip(RoundedCornerShape(26.dp))
+            .background(cardBg)
+            .padding(22.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = "تحديث جديد متوفر",
+            style = MaterialTheme.typography.headlineSmall.copy(
+                fontWeight = FontWeight.Bold,
+                color = textColor
+            ),
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(14.dp))
+        Text(
+            text = "يتوفر إصدار أحدث للتطبيق. ننصحك بالتحديث الآن للحصول على الاضافات الجديدة والخدمات الجديدة والإصلاحات.",
+            style = MaterialTheme.typography.bodyLarge.copy(color = textColor),
+            lineHeight = 20.sp,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(
+            text = "الإصدار الحالي: $currentVersion\nالإصدار الجديد: $latestVersion",
+            style = MaterialTheme.typography.bodyMedium.copy(color = textColor.copy(alpha = 0.85f)),
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(20.dp))
+        // Buttons
+        Column(modifier = Modifier.fillMaxWidth()) {
             Button(
-                onClick = {
-                    openUpdateInBrowser(ctx)
-                    show = false
-                },
-                shape = RoundedCornerShape(12.dp),
-                colors = primaryButtonColor
+                onClick = onUpdateNow,
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(vertical = 12.dp),
+                colors = ButtonDefaults.buttonColors()
             ) {
                 Text("تحديث الآن", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = {
-                    // لاحقًا = تأجيل لساعة
-                    snoozeOneHour(ctx)
-                    show = false
-                },
-                colors = laterButtonColor
-            ) {
-                Text("لاحقًا", fontSize = 15.sp)
-            }
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "لاحقًا",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onLater() }
+                    .padding(vertical = 10.dp),
+                color = textColor.copy(alpha = 0.9f),
+                textAlign = TextAlign.Center
+            )
         }
-    )
-}
-
-/** غلاف بسيط ليسهّل الاستدعاء من MainActivity بدون تغيير بقية الكود. */
-@Composable
-fun UpdatePromptHost() {
-    UpdatePrompt()
+    }
 }

@@ -1587,7 +1587,7 @@ private fun rememberPricingMap(keys: List<String>): Pair<Boolean, Map<String, Pu
 
 // ===== Pricing cache (no-flicker, no loader) =====
 object PricingCache {
-    private const val PREF = "pricing_cache_v1"
+    private const val PREF = "pricing_cache_v2"
     private const val KEY_JSON = "map_json"
 
     fun load(ctx: Context): MutableMap<String, PublicPricingEntry> {

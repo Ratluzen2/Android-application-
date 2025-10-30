@@ -1238,7 +1238,18 @@ private fun HomeAnnouncementsList() {
                             Spacer(Modifier.height(8.dp))
                             val ts = if (ann.createdAt > 0) ann.createdAt else System.currentTimeMillis()
                             val formatted = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
-                             data class AdminAnnouncement(val id: Long, val title: String?, val body: String, val createdAt: Long)
+                            val dateText = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(ts))
+                            Text(dateText, fontSize = 12.sp, color = Dim)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+data class AdminAnnouncement(val id: Long, val title: String?, val body: String, val createdAt: Long)
 
 private suspend fun apiAdminAnnouncementsList(token: String): List<AdminAnnouncement>? {
     val (c, t) = httpGet(AdminEndpoints.adminAnnouncementsList, mapOf("x-admin-password" to token))
@@ -1270,17 +1281,6 @@ private suspend fun apiAdminAnnouncementUpdate(token: String, id: Long, title: S
     val (c, _) = httpPost(AdminEndpoints.announcementUpdate(id), obj, mapOf("x-admin-password" to token))
     return c in 200..299
 }
-
-   .format(java.util.Date(ts))
-                            Text(formatted, fontSize = 12.sp, color = Dim)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 
 @Composable
 private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: () -> Unit = {}) {
@@ -1385,7 +1385,7 @@ val listToShow = remember(inCat, cachedMap) {
         if (ov != null) s.copy(min = ov.minQty, max = ov.maxQty, pricePerK = ov.pricePerK) else s
     }
 }
-}
+
     if (inCat.isNotEmpty()) {
 
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {

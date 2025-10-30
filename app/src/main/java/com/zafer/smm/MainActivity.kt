@@ -200,6 +200,9 @@ private const val PROVIDER_DIRECT_KEY_VALUE = "25a9ceb07be0d8b2ba88e70dcbe92e06"
 
 /** مسارات الأدمن (مطابقة للباكند الموحد) */
 private object AdminEndpoints {
+    const val adminAnnouncementsList = "/api/admin/announcements"
+    fun announcementDelete(id: Long) = "/api/admin/announcement/$id/delete"
+    fun announcementUpdate(id: Long) = "/api/admin/announcement/$id/update"
     const val pendingServices = "/api/admin/pending/services"
     const val pendingItunes   = "/api/admin/pending/itunes"
     const val pendingPubg     = "/api/admin/pending/pubg"
@@ -1235,7 +1238,40 @@ private fun HomeAnnouncementsList() {
                             Spacer(Modifier.height(8.dp))
                             val ts = if (ann.createdAt > 0) ann.createdAt else System.currentTimeMillis()
                             val formatted = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
-                                .format(java.util.Date(ts))
+                             data class AdminAnnouncement(val id: Long, val title: String?, val body: String, val createdAt: Long)
+
+private suspend fun apiAdminAnnouncementsList(token: String): List<AdminAnnouncement>? {
+    val (c, t) = httpGet(AdminEndpoints.adminAnnouncementsList, mapOf("x-admin-password" to token))
+    if (c !in 200..299 || t == null) return null
+    return try {
+        val arr = org.json.JSONArray(t.trim())
+        val out = mutableListOf<AdminAnnouncement>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            out += AdminAnnouncement(
+                id = o.optLong("id", 0L),
+                title = if (o.has("title")) o.optString("title", null) else null,
+                body = o.optString("body",""),
+                createdAt = o.optLong("created_at", 0L)
+            )
+        }
+        out
+    } catch (_: Exception) { null }
+}
+
+private suspend fun apiAdminAnnouncementDelete(token: String, id: Long): Boolean {
+    val (c, _) = httpPost(AdminEndpoints.announcementDelete(id), JSONObject(), mapOf("x-admin-password" to token))
+    return c in 200..299
+}
+
+private suspend fun apiAdminAnnouncementUpdate(token: String, id: Long, title: String?, body: String): Boolean {
+    val obj = JSONObject().put("body", body)
+    if (!title.isNullOrBlank()) obj.put("title", title)
+    val (c, _) = httpPost(AdminEndpoints.announcementUpdate(id), obj, mapOf("x-admin-password" to token))
+    return c in 200..299
+}
+
+   .format(java.util.Date(ts))
                             Text(formatted, fontSize = 12.sp, color = Dim)
                         }
                     }
@@ -1339,18 +1375,19 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
         else -> emptyList()
     }
 
-    // Overlay live pricing on top of catalog using produceState (no try/catch around composables)
-    val keys = remember(inCat, selectedCategory) { inCat.map { it.uiKey } }
-    val effectiveMap by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keys) {
-        value = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+    
+// Live pricing overlay (cache-first, no loader)
+val keys = remember(inCat, selectedCategory) { inCat.map { it.uiKey } }
+val cachedMap = rememberCachedPricing(keys)
+val listToShow = remember(inCat, cachedMap) {
+    inCat.map { s ->
+        val ov = cachedMap[s.uiKey]
+        if (ov != null) s.copy(min = ov.minQty, max = ov.maxQty, pricePerK = ov.pricePerK) else s
     }
-    val listToShow = remember(inCat, effectiveMap) {
-        inCat.map { s ->
-            val ov = effectiveMap[s.uiKey]
-            if (ov != null) s.copy(min = ov.minQty, max = ov.maxQty, pricePerK = ov.pricePerK) else s
-        }
-    }
+}
+}
     if (inCat.isNotEmpty()) {
+
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { selectedCategory = null }) {
@@ -1513,6 +1550,12 @@ data class AmountOption(val label: String, val usd: Int)
 
 private val commonAmounts = listOf(5,10,15,20,25,30,40,50,100)
 
+private fun itunesKey(usd: Int)   = "pkg.itunes.$usd"
+private fun atheerKey(usd: Int)   = "pkg.topup.atheer.$usd"
+private fun asiacellKey(usd: Int) = "pkg.topup.asiacell.$usd"
+private fun korekKey(usd: Int)    = "pkg.topup.korek.$usd"
+
+
 private fun priceForItunes(usd: Int): Double {
     // كل 5$ = 9$
     val steps = (usd / 5.0)
@@ -1528,6 +1571,90 @@ private fun priceForKorek(usd: Int): Double {
     val steps = (usd / 5.0)
     return steps * 7.0
 }
+
+@Composable
+private fun rememberPricingMap(keys: List<String>): Pair<Boolean, Map<String, PublicPricingEntry>> {
+    val loaded = remember { mutableStateOf(false) }
+    val map    = remember { mutableStateOf<Map<String, PublicPricingEntry>>(emptyMap()) }
+    LaunchedEffect(keys.joinToString(",")) {
+        loaded.value = false
+        map.value = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+        loaded.value = true
+    }
+    return loaded.value to map.value
+}
+
+
+// ===== Pricing cache (no-flicker, no loader) =====
+object PricingCache {
+    private const val PREF = "pricing_cache_v1"
+    private const val KEY_JSON = "map_json"
+
+    fun load(ctx: Context): MutableMap<String, PublicPricingEntry> {
+        return try {
+            val s = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString(KEY_JSON, null)
+            if (s.isNullOrBlank()) mutableMapOf()
+            else {
+                val obj = org.json.JSONObject(s)
+                val out = mutableMapOf<String, PublicPricingEntry>()
+                val it = obj.keys()
+                while (it.hasNext()) {
+                    val k = it.next()
+                    val o = obj.getJSONObject(k)
+                    out[k] = PublicPricingEntry(
+                        minQty = o.optInt("minQty", 0),
+                        maxQty = o.optInt("maxQty", 0),
+                        pricePerK = o.optDouble("pricePerK", 0.0),
+                        updatedAt = o.optLong("updatedAt", 0L)
+                    )
+                }
+                out
+            }
+        } catch (_: Exception) { mutableMapOf() }
+    }
+
+    fun save(ctx: Context, map: Map<String, PublicPricingEntry>) {
+        try {
+            val obj = org.json.JSONObject()
+            map.forEach { (k,v) ->
+                obj.put(k, org.json.JSONObject().apply {
+                    put("minQty", v.minQty)
+                    put("maxQty", v.maxQty)
+                    put("pricePerK", v.pricePerK)
+                    put("updatedAt", v.updatedAt)
+                })
+            }
+            ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+                .edit().putString(KEY_JSON, obj.toString()).apply()
+        } catch (_: Exception) {}
+    }
+}
+
+@Composable
+private fun rememberCachedPricing(keys: List<String>): Map<String, PublicPricingEntry> {
+    val ctx = LocalContext.current
+    // 1) show cached map immediately (no loader)
+    var map by remember { mutableStateOf<Map<String, PublicPricingEntry>>(PricingCache.load(ctx)) }
+
+    // 2) ensure all requested keys exist by refreshing from server in background
+    LaunchedEffect(keys.joinToString(",")) {
+        try {
+            val fresh = apiPublicPricingBulk(keys)
+            if (fresh.isNotEmpty()) {
+                // merge cache with fresh for requested keys
+                val merged = map.toMutableMap()
+                merged.putAll(fresh)
+                map = merged
+                PricingCache.save(ctx, merged)
+            }
+        } catch (_: Exception) {
+            // ignore network errors; keep cached view
+        }
+    }
+    // 3) return current (may update silently when fresh arrives)
+    return map
+}
+
 
 @Composable
 private fun AmountGrid(
@@ -1829,16 +1956,14 @@ fun ConfirmPackageIdDialog(
         when (selectedManualFlow) {
             "شراء رصيد ايتونز" -> {
                 AmountGrid(
-                    title = "شراء رصيد ايتونز",
-                    subtitle = "كل 5$ = 9$",
-                    amounts = commonAmounts,
-                    priceOf = { usd -> priceForItunes(usd) },
-                    onSelect = { usd, price ->
-                        pendingUsd = usd
-                        pendingPrice = price
-                    },
-                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
-                )
+    title = "شراء رصيد ايتونز",
+    subtitle = "يمكن تعديل أسعار كل قيمة من لوحة المالك",
+    amounts = commonAmounts,
+    keyOf = { usd -> itunesKey(usd) },
+    fallbackPriceOf = { usd -> priceForItunes(usd) },
+    onSelect = { usd, price -> pendingUsd = usd; pendingPrice = price },
+    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+)
             }
             "شراء رصيد اثير" -> {
                 AmountGrid(
@@ -1855,16 +1980,14 @@ fun ConfirmPackageIdDialog(
             }
             "شراء رصيد اسياسيل" -> {
                 AmountGrid(
-                    title = "شراء رصيد اسياسيل",
-                    subtitle = "كل 5$ = 7$",
-                    amounts = commonAmounts,
-                    priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
-                    onSelect = { usd, price ->
-                        pendingUsd = usd
-                        pendingPrice = price
-                    },
-                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
-                )
+    title = "شراء رصيد اسياسيل",
+    subtitle = "يمكن تعديل أسعار كل قيمة من لوحة المالك",
+    amounts = commonAmounts,
+    keyOf = { usd -> asiacellKey(usd) },
+    fallbackPriceOf = { usd -> priceForAtheerOrAsiacell(usd) },
+    onSelect = { usd, price -> pendingUsd = usd; pendingPrice = price },
+    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+)
             }
             "شراء رصيد كورك" -> {
                 AmountGrid(

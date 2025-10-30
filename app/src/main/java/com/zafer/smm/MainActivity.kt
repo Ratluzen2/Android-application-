@@ -1605,7 +1605,7 @@ object PricingCache {
                         minQty = o.optInt("minQty", 0),
                         maxQty = o.optInt("maxQty", 0),
                         pricePerK = o.optDouble("pricePerK", 0.0),
-                        updatedAt = o.optLong("updatedAt", 0L)
+                         = o.optLong("", 0L)
                     )
                 }
                 out
@@ -1621,7 +1621,7 @@ object PricingCache {
                     put("minQty", v.minQty)
                     put("maxQty", v.maxQty)
                     put("pricePerK", v.pricePerK)
-                    put("updatedAt", v.updatedAt)
+                    put("", 0L)
                 })
             }
             ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
@@ -1655,6 +1655,55 @@ private fun rememberCachedPricing(keys: List<String>): Map<String, PublicPricing
     return map
 }
 
+
+@Composable
+private fun AmountGrid(
+    title: String,
+    subtitle: String,
+    amounts: List<Int>,
+    keyOf: (Int) -> String,
+    fallbackPriceOf: (Int) -> Double,
+    onSelect: (usd: Int, price: Double) -> Unit,
+    onBack: () -> Unit
+) {
+    val keys = remember(amounts, title) { amounts.map { keyOf(it) } }
+    val map = rememberCachedPricing(keys)
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Column {
+                Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
+        val rows = amounts.chunked(2)
+        rows.forEach { pair ->
+            Row(Modifier.fillMaxWidth()) {
+                pair.forEach { usd ->
+                    val uiKey = keyOf(usd)
+                    val ov = map[uiKey]
+                    val price = ov?.pricePerK ?: fallbackPriceOf(usd)
+                    ElevatedCard(
+                        modifier = Modifier.weight(1f).padding(4.dp).clickable { onSelect(usd, price) },
+                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text("$usd$", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
+                            Spacer(Modifier.height(4.dp))
+                            val priceText = java.lang.String.format(java.util.Locale.getDefault(), "%.2f", price)
+                            Text("السعر: " + priceText + "$", color = Dim, fontSize = 12.sp)
+                        }
+                    }
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
 
 @Composable
 private fun AmountGrid(

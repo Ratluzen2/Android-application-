@@ -923,6 +923,29 @@ LaunchedEffect(loadOwnerMode(ctx)) {
     }
 }
 
+// ✅ جلب إشعارات المستخدم من الخادم ودمجها في الجرس (تمامًا مثل المالك)
+LaunchedEffect(uid) {
+    while (true) {
+        try {
+            val remoteUser = apiFetchNotificationsByUid(uid) ?: emptyList()
+            val userOnly = remoteUser.map { it.copy(forOwner = false) }
+            val before = notices.size
+            val mergedUser = mergeNotices(notices.filter { !it.forOwner }, userOnly)
+            val mergedAll = mergedUser + notices.filter { it.forOwner }
+            if (mergedAll.size != before) {
+                notices = mergedAll
+                saveNotices(ctx, notices)
+                noticeTick++
+            }
+        } catch (_: Exception) {
+            // ignore, retry
+        }
+        kotlinx.coroutines.delay(10_000)
+    }
+}
+
+
+
 
 
 
@@ -2226,10 +2249,8 @@ private fun isApiOrder(o: OrderItem): Boolean {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text("لوحة تحكم المالك", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = OnBg, modifier = Modifier.weight(1f))
-            IconButton(onClick = { current = "notices" }) {
-                Icon(Icons.Filled.Notifications, contentDescription = null, tint = OnBg)
-            }
-        }
+            // [Removed] أيقونة الجرس الصغيرة داخل شاشة المالك بناءً على طلبك
+}
         Spacer(Modifier.height(12.dp))
 
         fun needToken(): Boolean {

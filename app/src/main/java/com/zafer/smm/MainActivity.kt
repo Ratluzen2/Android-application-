@@ -1604,8 +1604,7 @@ object PricingCache {
                     out[k] = PublicPricingEntry(
                         minQty = o.optInt("minQty", 0),
                         maxQty = o.optInt("maxQty", 0),
-                        pricePerK = o.optDouble("pricePerK", 0.0),
-                         = o.optLong("", 0L)
+                        pricePerK = o.optDouble("pricePerK", 0.0)
                     )
                 }
                 out

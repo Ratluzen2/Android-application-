@@ -1838,7 +1838,7 @@ fun ConfirmPackageIdDialog(
         "قسم خدمات الودو"       -> listOf("شراء الماسات لودو", "شراء ذهب لودو")
         else -> emptyList()
     }
-    if (selectedManualFlow == null) 
+    if (selectedManualFlow == null) {
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1871,10 +1871,6 @@ fun ConfirmPackageIdDialog(
     }
 
     // ----- Manual flows UI -----
-    if (selectedManualFlow != null) {
-    }
-
-    
         when (selectedManualFlow) {
             "شراء رصيد ايتونز" -> {
                 AmountGrid(

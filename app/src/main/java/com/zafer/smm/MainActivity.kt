@@ -238,6 +238,7 @@ private object AdminEndpoints {
     const val orderSetQty = "/api/admin/pricing/order/set_qty"
     const val announcementCreate = "/api/admin/announcement/create"
     const val announcementsList = "/api/public/announcements"
+    const val announcementsAdminList = "/api/admin/announcements"
     fun announcementDelete(id: Int) = "/api/admin/announcement/$id/delete"
     fun announcementUpdate(id: Int) = "/api/admin/announcement/$id/update"
 }
@@ -1208,7 +1209,35 @@ private suspend fun apiFetchAnnouncements(limit: Int = 50): List<Announcement> {
             )
         }
         out
+    }
+
+private suspend fun apiFetchAdminAnnouncements(token: String, limit: Int = 200): List<Announcement> {
+    val path = AdminEndpoints.announcementsAdminList + "?limit=" + limit
+    val (code, txt) = httpGet(path, headers = mapOf("x-admin-password" to token))
+    if (code !in 200..299 || txt == null) return emptyList()
+    return try {
+        val arr = org.json.JSONArray(txt.trim())
+        val out = mutableListOf<Announcement>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            val idValue = if (o.has("id")) {
+                val tmp = o.optInt("id", -1)
+                if (tmp > 0) tmp else null
+            } else null
+            out.add(
+                Announcement(
+                    id = idValue,
+                    title = if (o.has("title")) o.optString("title", null) else null,
+                    body = o.optString("body",""),
+                    createdAt = o.optLong("created_at", 0L)
+                )
+            )
+        }
+        out
     } catch (_: Exception) { emptyList() }
+}
+
+ catch (_: Exception) { emptyList() }
 }
 
 
@@ -3969,7 +3998,7 @@ private fun AdminAnnouncementsList(
     LaunchedEffect(refreshKey) {
         loading = true; err = null
         try {
-            list = apiFetchAnnouncements(200).sortedByDescending { it.createdAt }
+            list = apiFetchAdminAnnouncements(token, 200).sortedByDescending { it.createdAt }
         } catch (e: Exception) {
             err = "تعذر جلب الإعلانات"
         } finally { loading = false }

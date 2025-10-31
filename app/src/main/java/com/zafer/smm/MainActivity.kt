@@ -111,6 +111,8 @@ import androidx.compose.ui.text.style.TextAlign
 
 private const val OWNER_UID_BACKEND = "OWNER-0001" // يجب أن يطابق OWNER_UID في السيرفر
 
+
+private val Dim = androidx.compose.ui.graphics.Color(0xFFADB5BD)
 /* =========================
    Notifications (system-level)
    ========================= */
@@ -236,6 +238,9 @@ private object AdminEndpoints {
     const val orderSetQty = "/api/admin/pricing/order/set_qty"
     const val announcementCreate = "/api/admin/announcement/create"
     const val announcementsList = "/api/public/announcements"
+    fun announcementDelete(id: Int) = "/api/admin/announcement/$id/delete"
+    fun announcementUpdate(id: Int) = "/api/admin/announcement/$id/update"
+}
 
 
 /* =========================
@@ -1180,7 +1185,7 @@ private suspend fun apiAdminUpdateAnnouncement(token: String, id: Int, title: St
     return code in 200..299
 }
 private suspend fun apiAdminDeleteAnnouncement(token: String, id: Int): Boolean {
-    val (code, _) = httpPost(AdminEndpoints.announcementDelete(id), org.json.JSONObject(), headers = mapOf("x-admin-password" to token))
+    val (code, _) = httpPost(AdminEndpoints.announcementDeleteete(id), org.json.JSONObject(), headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
 

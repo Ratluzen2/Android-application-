@@ -1405,7 +1405,7 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
             }
             Spacer(Modifier.height(10.dp))
 
-            inCat.forEach { svc ->
+            listToShow.forEach { svc ->
                 ElevatedCard(
                     modifier = Modifier
                         .fillMaxWidth()

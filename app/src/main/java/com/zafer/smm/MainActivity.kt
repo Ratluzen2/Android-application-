@@ -1584,34 +1584,7 @@ private fun AmountGrid(
 
 
 @Composable
-private fun AmountGridDynamic(
-    title: String,
-    subtitle: String,
-    amounts: List<Int>,
-    keyPrefix: String,
-    defaultPriceOf: (Int) -> Double,
-    onSelect: (usd: Int, price: Double) -> Unit,
-    onBack: () -> Unit
-) {
-    val overrideMap by produceState<Map<Int, Double>>(initialValue = emptyMap(), keyPrefix, amounts) {
-        value = try {
-            val keys = amounts.map { "$keyPrefix$it" }
-            val res = apiPublicPricingBulk(keys)
-            res.mapNotNull { (k, v) ->
-                val usd = k.removePrefix(keyPrefix).toIntOrNull()
-                if (usd != null) usd to v.pricePerK else null
-            }.toMap()
-        } catch (_: Throwable) { emptyMap() }
-    }
-    AmountGrid(
-        title = title,
-        subtitle = subtitle,
-        amounts = amounts,
-        priceOf = { usd -> overrideMap[usd] ?: defaultPriceOf(usd) },
-        onSelect = { usd, _ -> onSelect(usd, overrideMap[usd] ?: defaultPriceOf(usd)) },
-        onBack = onBack
-    )
-}
+
             Spacer(Modifier.width(6.dp))
             Column {
                 Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
@@ -3979,4 +3952,33 @@ class AppFcmService : FirebaseMessagingService() {
         } catch (_: Throwable) { }
         AppNotifier.notifyNow(ctx, title, bodyTxt)
     }
+}
+
+fun AmountGridDynamic(
+    title: String,
+    subtitle: String,
+    amounts: List<Int>,
+    keyPrefix: String,
+    defaultPriceOf: (Int) -> Double,
+    onSelect: (usd: Int, price: Double) -> Unit,
+    onBack: () -> Unit
+) {
+    val overrideMap by produceState<Map<Int, Double>>(initialValue = emptyMap(), keyPrefix, amounts) {
+        value = try {
+            val keys = amounts.map { "$keyPrefix$it" }
+            val res = apiPublicPricingBulk(keys)
+            res.mapNotNull { (k, v) ->
+                val usd = k.removePrefix(keyPrefix).toIntOrNull()
+                if (usd != null) usd to v.pricePerK else null
+            }.toMap()
+        } catch (_: Throwable) { emptyMap() }
+    }
+    AmountGrid(
+        title = title,
+        subtitle = subtitle,
+        amounts = amounts,
+        priceOf = { usd -> overrideMap[usd] ?: defaultPriceOf(usd) },
+        onSelect = { usd, _ -> onSelect(usd, overrideMap[usd] ?: defaultPriceOf(usd)) },
+        onBack = onBack
+    )
 }

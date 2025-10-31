@@ -3921,3 +3921,166 @@ class AppFcmService : FirebaseMessagingService() {
         AppNotifier.notifyNow(ctx, title, bodyTxt)
     }
 }
+
+
+@Composable
+private fun AdminAnnouncementsHub(
+    token: String,
+    onBack: () -> Unit
+) {
+    var screen by remember { mutableStateOf<String?>(null) } // "create" | "list"
+
+    if (screen == null) {
+        Column(Modifier.fillMaxSize().padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text("إعلانات التطبيق", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = OnBg, modifier = Modifier.weight(1f))
+                TextButton(onClick = onBack) { Text("رجوع") }
+            }
+            Spacer(Modifier.height(12.dp))
+            ElevatedButton(
+                onClick = { screen = "create" },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+            ) { Text("إنشاء إعلان") }
+            ElevatedButton(
+                onClick = { screen = "list" },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("عرض الإعلانات") }
+        }
+    } else {
+        when (screen) {
+            "create" -> AdminAnnouncementScreen(token = token, onBack = { screen = null })
+            "list" -> AdminAnnouncementsList(token = token, onBack = { screen = null })
+        }
+    }
+}
+
+@Composable
+private fun AdminAnnouncementsList(
+    token: String,
+    onBack: () -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var list by remember { mutableStateOf<List<Announcement>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var err by remember { mutableStateOf<String?>(null) }
+    var refreshKey by remember { mutableStateOf(0) }
+    var snack by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(refreshKey) {
+        loading = true; err = null
+        try {
+            list = apiFetchAnnouncements(200).sortedByDescending { it.createdAt }
+        } catch (e: Exception) {
+            err = "تعذر جلب الإعلانات"
+        } finally { loading = false }
+    }
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Text("عرض الإعلانات", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+        }
+        Spacer(Modifier.height(10.dp))
+
+        when {
+            loading -> Text("يتم التحميل", color = Dim)
+            err != null -> Text(err!!, color = Bad)
+            list.isEmpty() -> Text("لا توجد إعلانات.", color = Dim)
+            else -> {
+                LazyColumn {
+                    items(list.size) { idx ->
+                        val ann = list[idx]
+                        var showEdit by remember { mutableStateOf(false) }
+                        var showDelete by remember { mutableStateOf(false) }
+                        ElevatedCard(
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                        ) {
+                            Column(Modifier.padding(16.dp)) {
+                                Text(ann.title ?: "إعلان مهم 📢", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = OnBg)
+                                Spacer(Modifier.height(6.dp))
+                                Text(ann.body, color = OnBg)
+                                Spacer(Modifier.height(6.dp))
+                                val ts = if (ann.createdAt > 0) ann.createdAt else System.currentTimeMillis()
+                                val formatted = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+                                    .format(java.util.Date(ts))
+                                Text(formatted, fontSize = 12.sp, color = Dim)
+                                Spacer(Modifier.height(8.dp))
+                                Row {
+                                    TextButton(onClick = { showEdit = true }) { Text("تعديل الإعلان") }
+                                    Spacer(Modifier.width(6.dp))
+                                    TextButton(onClick = { showDelete = true }) { Text("حذف الإعلان") }
+                                }
+                            }
+                        }
+
+                        if (showEdit) {
+                            var title by remember { mutableStateOf(ann.title ?: "") }
+                            var body by remember { mutableStateOf(ann.body) }
+                            AlertDialog(
+                                onDismissRequest = { showEdit = false },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        val id = ann.id
+                                        if (id != null && id > 0) {
+                                            scope.launch {
+                                                val ok = apiAdminUpdateAnnouncement(token, id, title.ifBlank { null }, body)
+                                                showEdit = false
+                                                snack = if (ok) "تم الحفظ" else "فشل التعديل"
+                                                if (ok) refreshKey++
+                                            }
+                                        } else {
+                                            showEdit = false
+                                            snack = "لا يدعم الخادم تعديل هذا الإعلان (معرّف مفقود)"
+                                        }
+                                    }) { Text("حفظ") }
+                                },
+                                dismissButton = { TextButton(onClick = { showEdit = false }) { Text("إلغاء") } },
+                                title = { Text("تعديل الإعلان", color = OnBg) },
+                                text = {
+                                    Column {
+                                        OutlinedTextField(value = title, onValueChange = { title = it }, singleLine = true, label = { Text("العنوان (اختياري)") })
+                                        Spacer(Modifier.height(8.dp))
+                                        OutlinedTextField(value = body, onValueChange = { body = it }, minLines = 5, label = { Text("نص الإعلان") })
+                                    }
+                                }
+                            )
+                        }
+
+                        if (showDelete) {
+                            AlertDialog(
+                                onDismissRequest = { showDelete = false },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        val id = ann.id
+                                        if (id != null && id > 0) {
+                                            scope.launch {
+                                                val ok = apiAdminDeleteAnnouncement(token, id)
+                                                showDelete = false
+                                                snack = if (ok) "تم الحذف" else "فشل الحذف"
+                                                if (ok) refreshKey++
+                                            }
+                                        } else {
+                                            showDelete = false
+                                            snack = "لا يدعم الخادم حذف هذا الإعلان (معرّف مفقود)"
+                                        }
+                                    }) { Text("تأكيد الحذف") }
+                                },
+                                dismissButton = { TextButton(onClick = { showDelete = false }) { Text("إلغاء") } },
+                                title = { Text("تأكيد الحذف", color = OnBg) },
+                                text = { Text("هل أنت متأكد من حذف هذا الإعلان؟", color = OnBg) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        snack?.let {
+            Spacer(Modifier.height(10.dp))
+            Text(it, color = OnBg)
+            androidx.compose.runtime.LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack = null }
+        }
+    }
+}

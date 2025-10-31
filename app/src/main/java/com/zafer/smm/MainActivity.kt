@@ -503,12 +503,12 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
     var snack by remember { mutableStateOf<String?>(null) }
 
     val cats = listOf(
-
+        
         "مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
         "مشاهدات انستغرام", "لايكات انستغرام", "متابعين انستغرام", "مشاهدات بث انستا", "خدمات التليجرام",
-        "رصيد iTunes", "رصيد الهاتف",
         "ببجي", "لودو"
     )
+
     fun servicesFor(cat: String): List<ServiceDef> {
         fun hasAll(key: String, vararg words: String) = words.all { key.contains(it) }
         return servicesCatalog.filter { svc ->
@@ -588,7 +588,8 @@ if (selectedCat == "رصيد iTunes" || selectedCat == "رصيد الهاتف") 
             err2 != null -> { Text("تعذر جلب البيانات: $err2", color = Bad); return@Column }
         }
         LazyColumn {
-            items(list) { row ->
+                        val visible = list.filterNot { it.serviceName.startsWith("cat.") || it.serviceName == "cat.itunes" || it.serviceName == "cat.phone" }
+                        items(visible) { row ->
                 var showDlg by remember { mutableStateOf(false) }
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),

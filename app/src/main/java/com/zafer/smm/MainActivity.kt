@@ -726,7 +726,6 @@ private val OnBg     = Color(0xFFF2F4F7)
 private val Accent   = Color(0xFFB388FF)
 private val Good     = Color(0xFF4CAF50)
 private val Bad      = Color(0xFFE53935)
-private val Dim      = Color(0xFFAAB3BB)
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
@@ -1185,7 +1184,7 @@ private suspend fun apiAdminUpdateAnnouncement(token: String, id: Int, title: St
     return code in 200..299
 }
 private suspend fun apiAdminDeleteAnnouncement(token: String, id: Int): Boolean {
-    val (code, _) = httpPost(AdminEndpoints.announcementDeleteete(id), org.json.JSONObject(), headers = mapOf("x-admin-password" to token))
+    val (code, _) = httpPost(AdminEndpoints.announcementDelete(id), org.json.JSONObject(), headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
 

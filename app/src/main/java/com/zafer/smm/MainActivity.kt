@@ -1209,11 +1209,11 @@ private suspend fun apiFetchAnnouncements(limit: Int = 50): List<Announcement> {
             )
         }
         out
-    }
+    } catch (_: Exception) { emptyList() }
+}
 
 private suspend fun apiFetchAdminAnnouncements(token: String, limit: Int = 200): List<Announcement> {
-    val path = AdminEndpoints.announcementsAdminList + "?limit=" + limit
-    val (code, txt) = httpGet(path, headers = mapOf("x-admin-password" to token))
+    val (code, txt) = httpGet(AdminEndpoints.announcementsAdminList + "?limit=" + limit, headers = mapOf("x-admin-password" to token))
     if (code !in 200..299 || txt == null) return emptyList()
     return try {
         val arr = org.json.JSONArray(txt.trim())
@@ -1237,8 +1237,7 @@ private suspend fun apiFetchAdminAnnouncements(token: String, limit: Int = 200):
     } catch (_: Exception) { emptyList() }
 }
 
- catch (_: Exception) { emptyList() }
-}
+
 
 
 @Composable

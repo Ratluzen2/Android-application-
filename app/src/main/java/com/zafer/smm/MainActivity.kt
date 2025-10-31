@@ -237,11 +237,6 @@ private object AdminEndpoints {
     const val announcementCreate = "/api/admin/announcement/create"
     const val announcementsList = "/api/public/announcements"
 
-    const val announcementsAdminList = "/api/admin/announcements"
-    fun announcementUpdate(id: Long) = "/api/admin/announcement/" + id + "/update"
-    fun announcementDelete(id: Long) = "/api/admin/announcement/" + id + "/delete"
-}
-
 
 /* =========================
    Admin Service ID Overrides API
@@ -418,7 +413,7 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
         
         "مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
         "مشاهدات انستغرام", "لايكات انستغرام", "متابعين انستغرام", "مشاهدات بث انستا", "خدمات التليجرام",
-        "ببجي", "لودو", "ايتونز", "رصيد الهاتف"
+        "ببجي", "لودو"
     )
 
     fun servicesFor(cat: String): List<ServiceDef> {
@@ -1168,7 +1163,7 @@ Column(
 // =========================
 // Announcements (App-wide)
 // =========================
-data class Announcement(val title: String?, val body: String, val createdAt: Long)
+data class Announcement(val id: Int? = null, val title: String?, val body: String, val createdAt: Long)
 
 
 private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, body: String): Boolean {
@@ -1177,6 +1172,18 @@ private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, bo
     val (code, _) = httpPost(AdminEndpoints.announcementCreate, obj, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
+
+private suspend fun apiAdminUpdateAnnouncement(token: String, id: Int, title: String?, body: String): Boolean {
+    val obj = org.json.JSONObject().put("body", body)
+    if (!title.isNullOrBlank()) obj.put("title", title)
+    val (code, _) = httpPost(AdminEndpoints.announcementUpdate(id), obj, headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
+private suspend fun apiAdminDeleteAnnouncement(token: String, id: Int): Boolean {
+    val (code, _) = httpPost(AdminEndpoints.announcementDelete(id), org.json.JSONObject(), headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
+
 
 
 private suspend fun apiFetchAnnouncements(limit: Int = 50): List<Announcement> {
@@ -1250,41 +1257,6 @@ private fun HomeAnnouncementsList() {
     }
 }
 
-
-
-
-data class AdminAnnouncement(val id: Long, val title: String?, val body: String, val createdAt: Long)
-
-private suspend fun apiAdminListAnnouncements(token: String, limit: Int = 50): List<AdminAnnouncement>? {
-    val (code, txt) = httpGet(AdminEndpoints.announcementsAdminList + "?limit=" + limit, headers = mapOf("x-admin-password" to token))
-    if (code !in 200..299 || txt == null) return null
-    return try {
-        val arr = org.json.JSONArray(txt.trim())
-        val out = mutableListOf<AdminAnnouncement>()
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            out += AdminAnnouncement(
-                id = o.optLong("id", o.optInt("id", 0).toLong()),
-                title = if (o.has("title")) o.optString("title", null) else null,
-                body = o.optString("body",""),
-                createdAt = o.optLong("created_at", 0L)
-            )
-        }
-        out
-    } catch (_: Exception) { null }
-}
-
-private suspend fun apiAdminUpdateAnnouncement(token: String, id: Long, title: String?, body: String): Boolean {
-    val obj = org.json.JSONObject().put("body", body)
-    if (!title.isNullOrBlank()) obj.put("title", title)
-    val (code, _) = httpPost(AdminEndpoints.announcementUpdate(id), obj, headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
-
-private suspend fun apiAdminDeleteAnnouncement(token: String, id: Long): Boolean {
-    val (code, _) = httpPost(AdminEndpoints.announcementDelete(id), org.json.JSONObject(), headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
 
 @Composable
 private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: () -> Unit = {}) {
@@ -1581,9 +1553,6 @@ private fun AmountGrid(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
-
-
-
             Spacer(Modifier.width(6.dp))
             Column {
                 Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
@@ -1682,6 +1651,7 @@ val ludoGoldPackages = listOf(
     PackageOption("124550000 ذهب", 800)
 )
 
+@Composable
 /* ===== Helpers for PUBG/Ludo package overrides ===== */
 private fun extractDigits(s: String): String = s.filter { it.isDigit() }
 
@@ -1870,12 +1840,11 @@ fun ConfirmPackageIdDialog(
     if (selectedManualFlow != null) {
         when (selectedManualFlow) {
             "شراء رصيد ايتونز" -> {
-                AmountGridDynamic(
+                AmountGrid(
                     title = "شراء رصيد ايتونز",
                     subtitle = "كل 5$ = 9$",
                     amounts = commonAmounts,
-                    keyPrefix = "amt.itunes.",
-                    defaultPriceOf = { usd -> priceForItunes(usd) },
+                    priceOf = { usd -> priceForItunes(usd) },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
@@ -1884,12 +1853,11 @@ fun ConfirmPackageIdDialog(
                 )
             }
             "شراء رصيد اثير" -> {
-                AmountGridDynamic(
+                AmountGrid(
                     title = "شراء رصيد اثير",
                     subtitle = "كل 5$ = 7$",
                     amounts = commonAmounts,
-                    keyPrefix = "amt.atheer.",
-                    defaultPriceOf = { usd -> priceForAtheerOrAsiacell(usd) },
+                    priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
@@ -1898,12 +1866,11 @@ fun ConfirmPackageIdDialog(
                 )
             }
             "شراء رصيد اسياسيل" -> {
-                AmountGridDynamic(
+                AmountGrid(
                     title = "شراء رصيد اسياسيل",
                     subtitle = "كل 5$ = 7$",
                     amounts = commonAmounts,
-                    keyPrefix = "amt.atheer.",
-                    defaultPriceOf = { usd -> priceForAtheerOrAsiacell(usd) },
+                    priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
@@ -1912,12 +1879,11 @@ fun ConfirmPackageIdDialog(
                 )
             }
             "شراء رصيد كورك" -> {
-                AmountGridDynamic(
+                AmountGrid(
                     title = "شراء رصيد كورك",
                     subtitle = "كل 5$ = 7$",
                     amounts = commonAmounts,
-                    keyPrefix = "amt.korek.",
-                    defaultPriceOf = { usd -> priceForKorek(usd) },
+                    priceOf = { usd -> priceForKorek(usd) },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
@@ -2343,7 +2309,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
             }
         } else {
             when (current) {
-                "announce" -> AdminAnnouncementScreen(token = token!!, onBack = { current = null })
+                "announce" -> AdminAnnouncementsHub(token = token!!, onBack = { current = null })
                 "edit_svc_ids" -> ServiceIdEditorScreen(
                     token = token!!,
                     onBack = { current = null }
@@ -3950,34 +3916,4 @@ class AppFcmService : FirebaseMessagingService() {
         } catch (_: Throwable) { }
         AppNotifier.notifyNow(ctx, title, bodyTxt)
     }
-}
-
-@Composable
-fun AmountGridDynamic(
-    title: String,
-    subtitle: String,
-    amounts: List<Int>,
-    keyPrefix: String,
-    defaultPriceOf: (Int) -> Double,
-    onSelect: (usd: Int, price: Double) -> Unit,
-    onBack: () -> Unit
-) {
-    val overrideMap by produceState<Map<Int, Double>>(initialValue = emptyMap(), keyPrefix, amounts) {
-        value = try {
-            val keys = amounts.map { "$keyPrefix$it" }
-            val res = apiPublicPricingBulk(keys)
-            res.mapNotNull { (k, v) ->
-                val usd = k.removePrefix(keyPrefix).toIntOrNull()
-                if (usd != null) usd to v.pricePerK else null
-            }.toMap()
-        } catch (_: Throwable) { emptyMap() }
-    }
-    AmountGrid(
-        title = title,
-        subtitle = subtitle,
-        amounts = amounts,
-        priceOf = { usd -> overrideMap[usd] ?: defaultPriceOf(usd) },
-        onSelect = { usd, _ -> onSelect(usd, overrideMap[usd] ?: defaultPriceOf(usd)) },
-        onBack = onBack
-    )
 }

@@ -233,7 +233,7 @@ private object AdminEndpoints {
     const val pricingList = "/api/admin/pricing/list"
     const val pricingSet  = "/api/admin/pricing/set"
     const val pricingClear= "/api/admin/pricing/clear"
-
+    
 // Per-service (iTunes / Phone)
 const val itunesServices = "/api/admin/itunes/services"
 const val phoneServices  = "/api/admin/phone/services"
@@ -383,6 +383,86 @@ private suspend fun apiAdminClearPricing(token: String, uiKey: String): Boolean 
     val (code, _) = httpPost(AdminEndpoints.pricingClear, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
+
+
+/* =========================
+   Admin Per-Service Pricing (iTunes / Phone)
+   ========================= */
+data class AdminPerServiceRow(
+    val serviceName: String,
+    val providerServiceId: Long? = null,
+    val pricePerK: Double? = null,
+    val minQty: Int? = null,
+    val maxQty: Int? = null,
+    val mode: String? = null
+)
+
+private suspend fun apiAdminListPerService(token: String, kind: String): List<AdminPerServiceRow> {
+    val path = when(kind) {
+        "itunes" -> AdminEndpoints.itunesServices
+        "phone"  -> AdminEndpoints.phoneServices
+        else -> AdminEndpoints.itunesServices
+    }
+    val (code, txt) = httpGet(path, headers = mapOf("x-admin-password" to token))
+    if (code !in 200..299 || txt == null) return emptyList()
+    return try {
+        val out = mutableListOf<AdminPerServiceRow>()
+        val trimmed = txt.trim()
+        if (trimmed.startsWith("{")) {
+            val root = JSONObject(trimmed)
+            val arr = root.optJSONArray("list") ?: JSONArray()
+            for (i in 0 until arr.length()) {
+                val it = arr.optJSONObject(i) ?: continue
+                out += AdminPerServiceRow(
+                    serviceName = it.optString("service_name", it.optString("ui_key", "")),
+                    providerServiceId = if (it.has("provider_service_id")) it.optLong("provider_service_id") else null,
+                    pricePerK = if (it.has("price_per_k")) it.optDouble("price_per_k") else null,
+                    minQty = if (it.has("min_qty")) it.optInt("min_qty") else null,
+                    maxQty = if (it.has("max_qty")) it.optInt("max_qty") else null,
+                    mode = it.optString("mode", null)
+                )
+            }
+        } else {
+            val arr = JSONArray(trimmed)
+            for (i in 0 until arr.length()) {
+                val it = arr.optJSONObject(i) ?: continue
+                out += AdminPerServiceRow(
+                    serviceName = it.optString("service_name", it.optString("ui_key", "")),
+                    providerServiceId = if (it.has("provider_service_id")) it.optLong("provider_service_id") else null,
+                    pricePerK = if (it.has("price_per_k")) it.optDouble("price_per_k") else null,
+                    minQty = if (it.has("min_qty")) it.optInt("min_qty") else null,
+                    maxQty = if (it.has("max_qty")) it.optInt("max_qty") else null,
+                    mode = it.optString("mode", null)
+                )
+            }
+        }
+        out
+    } catch (_: Exception) { emptyList() }
+}
+
+private suspend fun apiAdminPricingServiceSet(
+    token: String,
+    serviceName: String,
+    pricePerK: Double,
+    minQty: Int,
+    maxQty: Int,
+    mode: String
+): Boolean {
+    val body = JSONObject()
+        .put("service_name", serviceName)
+        .put("price_per_k", pricePerK)
+        .put("min_qty", minQty)
+        .put("max_qty", maxQty)
+        .put("mode", mode)
+    val (code, _) = httpPost(AdminEndpoints.pricingServiceSet, body, headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
+
+private suspend fun apiAdminPricingServiceClear(token: String, serviceName: String): Boolean {
+    val body = JSONObject().put("service_name", serviceName)
+    val (code, _) = httpPost(AdminEndpoints.pricingServiceClear, body, headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
 /* =========================
    Public Pricing (read-only for client)
    ========================= */
@@ -427,7 +507,9 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
         "مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
         "مشاهدات انستغرام", "لايكات انستغرام", "متابعين انستغرام", "مشاهدات بث انستا", "خدمات التليجرام",
         "ببجي", "لودو"
-    , "رصيد iTunes", "رصيد الهاتف")fun servicesFor(cat: String): List<ServiceDef> {
+    )
+
+    fun servicesFor(cat: String): List<ServiceDef> {
         fun hasAll(key: String, vararg words: String) = words.all { key.contains(it) }
         return servicesCatalog.filter { svc ->
             val k = svc.uiKey
@@ -486,6 +568,99 @@ if (loading) { CircularProgressIndicator(color = Accent); return@Column }
                 Spacer(Modifier.width(6.dp))
                 Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
 
+
+// ====== iTunes / Phone per-service editor ======
+if (selectedCat == "رصيد iTunes" || selectedCat == "رصيد الهاتف") {
+    val kind = if (selectedCat == "رصيد iTunes") "itunes" else "phone"
+    var list by remember { mutableStateOf<List<AdminPerServiceRow>>(emptyList()) }
+    var loading2 by remember { mutableStateOf(true) }
+    var err2 by remember { mutableStateOf<String?>(null) }
+    var refresh2 by remember { mutableStateOf(0) }
+    var snack2 by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(refresh2, kind) {
+        loading2 = true; err2 = null
+        try { list = apiAdminListPerService(token, kind) } catch (e: Exception) { err2 = e.message }
+        loading2 = false
+    }
+    Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
+        when {
+            loading2 -> { CircularProgressIndicator(color = Accent); return@Column }
+            err2 != null -> { Text("تعذر جلب البيانات: $err2", color = Bad); return@Column }
+        }
+        LazyColumn {
+            items(list) { row ->
+                var showDlg by remember { mutableStateOf(false) }
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(row.serviceName, fontWeight = FontWeight.SemiBold, color = OnBg)
+                        val pp = row.pricePerK?.let { v -> "السعر/ألف: ${"%.2f".format(v)}" } ?: "السعر/ألف: (افتراضي)"
+                        val qn = "الكمية: ${row.minQty ?: "-"} إلى ${row.maxQty ?: "-"}"
+                        val md = "الوضع: ${row.mode ?: "per_k"}"
+                        Spacer(Modifier.height(4.dp))
+                        Text("$pp  •  $qn  •  $md", color = Dim, fontSize = 12.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Row {
+                            TextButton(onClick = { showDlg = true }) { Text("تعديل") }
+                            Spacer(Modifier.width(6.dp))
+                            TextButton(onClick = {
+                                scope.launch {
+                                    val ok = apiAdminPricingServiceClear(token, row.serviceName)
+                                    if (ok) { refresh2++ ; snack2 = "تم حذف التعديل" } else snack2 = "فشل حذف التعديل"
+                                }
+                            }) { Text("حذف التعديل") }
+                        }
+                    }
+                }
+                if (showDlg) {
+                    var mode by remember { mutableStateOf(row.mode ?: "per_k") }
+                    var price by remember { mutableStateOf(TextFieldValue(row.pricePerK?.toString() ?: "")) }
+                    var min by remember { mutableStateOf(TextFieldValue(row.minQty?.toString() ?: "")) }
+                    var max by remember { mutableStateOf(TextFieldValue(row.maxQty?.toString() ?: "")) }
+                    AlertDialog(
+                        onDismissRequest = { showDlg = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                scope.launch {
+                                    val p = price.text.toDoubleOrNull() ?: 0.0
+                                    val mn = min.text.toIntOrNull() ?: 0
+                                    val mx = max.text.toIntOrNull() ?: mn
+                                    val ok = apiAdminPricingServiceSet(token, row.serviceName, p, mn, mx, mode)
+                                    if (ok) { showDlg = false; refresh2++; snack2 = "تم الحفظ" } else snack2 = "فشل الحفظ"
+                                }
+                            }) { Text("حفظ") }
+                        },
+                        dismissButton = { TextButton(onClick = { showDlg = false }) { Text("إلغاء") } },
+                        title = { Text("تعديل: ${row.serviceName}") },
+                        text = {
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("الوضع:", modifier = Modifier.width(80.dp))
+                                    Row {
+                                        OutlinedButton(onClick = { mode = "per_k" }, enabled = mode != "per_k") { Text("per_k") }
+                                        Spacer(Modifier.width(6.dp))
+                                        OutlinedButton(onClick = { mode = "flat" }, enabled = mode != "flat") { Text("flat") }
+                                    }
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("السعر/ألف") }, singleLine = true)
+                                Spacer(Modifier.height(6.dp))
+                                OutlinedTextField(value = min, onValueChange = { min = it }, label = { Text("الحد الأدنى") }, singleLine = true)
+                                Spacer(Modifier.height(6.dp))
+                                OutlinedTextField(value = max, onValueChange = { max = it }, label = { Text("الحد الأقصى") }, singleLine = true)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+        snack2?.let { Text(it, color = OnBg); LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack2 = null } }
+    }
+    return@Column
+}
+
 /* PUBG/Ludo Orders Editor */
 if (selectedCat == "ببجي" || selectedCat == "لودو") {
     // عرض باقات ببجي/لودو وتعديل السعر والكمية بشكل مخصص لكل باقة
@@ -529,7 +704,7 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
 
             var open by remember { mutableStateOf(false) }
             ElevatedCard(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { show = true },
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
             ) {
                 Column(Modifier.padding(16.dp)) {
@@ -600,7 +775,7 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                     val ov  = overrides[key]
                     val has = ov != null
                     ElevatedCard(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { show = true },
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Column(Modifier.padding(16.dp)) {
@@ -747,331 +922,6 @@ fun AppTheme(content: @Composable () -> Unit) {
     )
 }
 
-
-
-/* =========================
-   Admin Per-Service Pricing (iTunes / Phone Balance)
-   ========================= */
-data class AdminPerServiceRow(
-    val serviceName: String,
-    val providerServiceId: Long? = null,
-    val pricePerK: Double? = null,
-    val minQty: Int? = null,
-    val maxQty: Int? = null,
-    val mode: String? = null
-)
-
-private suspend fun apiAdminListPerService(token: String, kind: String): List<AdminPerServiceRow> {
-    val path = when(kind) {
-        "itunes" -> AdminEndpoints.itunesServices
-        "phone"  -> AdminEndpoints.phoneServices
-        else -> AdminEndpoints.itunesServices
-    }
-    val (code, txt) = httpGet(path, headers = mapOf("x-admin-password" to token))
-    if (code !in 200..299 || txt == null) return emptyList()
-    return try {
-        val out = mutableListOf<AdminPerServiceRow>()
-        val trimmed = txt.trim()
-        if (trimmed.startsWith("{")) {
-            val root = JSONObject(trimmed)
-            val arr = root.optJSONArray("list") ?: JSONArray()
-            for (i in 0 until arr.length()) {
-                val it = arr.optJSONObject(i) ?: continue
-                out += AdminPerServiceRow(
-                    serviceName = it.optString("service_name", it.optString("ui_key", "")),
-                    providerServiceId = if (it.has("provider_service_id")) it.optLong("provider_service_id") else null,
-                    pricePerK = if (it.has("price_per_k")) it.optDouble("price_per_k") else null,
-                    minQty = if (it.has("min_qty")) it.optInt("min_qty") else null,
-                    maxQty = if (it.has("max_qty")) it.optInt("max_qty") else null,
-                    mode = it.optString("mode", null)
-                )
-            }
-        } else {
-            val arr = JSONArray(trimmed)
-            for (i in 0 until arr.length()) {
-                val it = arr.optJSONObject(i) ?: continue
-                out += AdminPerServiceRow(
-                    serviceName = it.optString("service_name", it.optString("ui_key", "")),
-                    providerServiceId = if (it.has("provider_service_id")) it.optLong("provider_service_id") else null,
-                    pricePerK = if (it.has("price_per_k")) it.optDouble("price_per_k") else null,
-                    minQty = if (it.has("min_qty")) it.optInt("min_qty") else null,
-                    maxQty = if (it.has("max_qty")) it.optInt("max_qty") else null,
-                    mode = it.optString("mode", null)
-                )
-            }
-        }
-        out
-    } catch (_: Exception) { emptyList() }
-}
-
-private suspend fun apiAdminPricingServiceSet(
-    token: String,
-    serviceName: String,
-    pricePerK: Double,
-    minQty: Int,
-    maxQty: Int,
-    mode: String
-): Boolean {
-    val body = JSONObject()
-        .put("service_name", serviceName)
-        .put("price_per_k", pricePerK)
-        .put("min_qty", minQty)
-        .put("max_qty", maxQty)
-        .put("mode", mode)
-    val (code, _) = httpPost(AdminEndpoints.pricingServiceSet, body, headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
-
-private suspend fun apiAdminPricingServiceClear(token: String, serviceName: String): Boolean {
-    val body = JSONObject().put("service_name", serviceName)
-    val (code, _) = httpPost(AdminEndpoints.pricingServiceClear, body, headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
-
-@Composable
-private fun PerServiceEditorList(
-    title: String,
-    kind: String,
-    token: String,
-    onBack: () -> Unit
-) {
-    val scope = rememberCoroutineScope()
-    var loading by remember { mutableStateOf(true) }
-    var err by remember { mutableStateOf<String?>(null) }
-    var list by remember { mutableStateOf<List<AdminPerServiceRow>>(emptyList()) }
-    var refresh by remember { mutableStateOf(0) }
-    var snack by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(refresh, kind) {
-        loading = true; err = null
-        try {
-            list = apiAdminListPerService(token, kind)
-        } catch (e: Exception) { err = e.message }
-        loading = false
-    }
-
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg)
-            }
-            Spacer(Modifier.width(6.dp))
-            Text(title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
-        }
-
-        when {
-            loading -> { Spacer(Modifier.height(24.dp)); CircularProgressIndicator(color = Accent); return@Column }
-            err != null -> { Spacer(Modifier.height(8.dp)); Text("تعذر جلب البيانات: $err", color = Bad); return@Column }
-        }
-
-        LazyColumn {
-            items(list) { itRow ->
-                var show by remember { mutableStateOf(false) }
-                ElevatedCard(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { show = true },
-                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(itRow.serviceName, fontWeight = FontWeight.SemiBold, color = OnBg)
-                        val pp = itRow.pricePerK?.let { v -> "السعر/ألف: ${"%.2f".format(v)}" } ?: "السعر/ألف: (افتراضي)"
-                        val qn = "الكمية: ${itRow.minQty ?: "-"} إلى ${itRow.maxQty ?: "-"}"
-                        val md = "الوضع: ${itRow.mode ?: "per_k"}"
-                        Spacer(Modifier.height(4.dp))
-                        Text("$pp  •  $qn  •  $md", color = Dim, fontSize = 12.sp)
-                        Spacer(Modifier.height(8.dp))
-                        Row {
-                            TextButton(onClick = { show = true }) { Text("تعديل") }
-                            Spacer(Modifier.width(6.dp))
-                            TextButton(onClick = {
-                                scope.launch {
-                                    val ok = apiAdminPricingServiceClear(token, itRow.serviceName)
-                                    if (ok) { refresh++ ; snack = "تم الحذف" } else snack = "فشل الحذف"
-                                }
-                            }) { Text("مسح") }
-                        }
-                    }
-                }
-
-                if (show) {
-                    var mode by remember { mutableStateOf(itRow.mode ?: "per_k") }
-                    var price by remember { mutableStateOf(TextFieldValue(itRow.pricePerK?.toString() ?: "")) }
-                    var min by remember { mutableStateOf(TextFieldValue(itRow.minQty?.toString() ?: "")) }
-                    var max by remember { mutableStateOf(TextFieldValue(itRow.maxQty?.toString() ?: "")) }
-                    AlertDialog(
-                        onDismissRequest = { show = false },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                scope.launch {
-                                    val p = price.text.toDoubleOrNull() ?: 0.0
-                                    val mn = min.text.toIntOrNull() ?: 0
-                                    val mx = max.text.toIntOrNull() ?: mn
-                                    val ok = apiAdminPricingServiceSet(token, itRow.serviceName, p, mn, mx, mode)
-                                    if (ok) { show = false; refresh++; snack = "تم الحفظ" } else snack = "فشل الحفظ"
-                                }
-                            }) { Text("حفظ") }
-                        },
-                        dismissButton = { TextButton(onClick = { show = false }) { Text("إلغاء") } },
-                        title = { Text("تعديل: ${itRow.serviceName}") },
-                        text = {
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("الوضع:", modifier = Modifier.width(80.dp))
-                                    var idx by remember { mutableStateOf(if (mode == "flat") 1 else 0) }
-                                    SegmentedButtons(
-                                        options = listOf("per_k", "flat"),
-                                        selectedIndex = idx,
-                                        onSelected = { i -> idx = i; mode = if (i == 1) "flat" else "per_k" }
-                                    )
-                                }
-                                Spacer(Modifier.height(6.dp))
-                                OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("السعر/ألف") }, singleLine = true)
-                                Spacer(Modifier.height(6.dp))
-                                OutlinedTextField(value = min, onValueChange = { min = it }, label = { Text("الحد الأدنى") }, singleLine = true)
-                                Spacer(Modifier.height(6.dp))
-                                OutlinedTextField(value = max, onValueChange = { max = it }, label = { Text("الحد الأقصى") }, singleLine = true)
-                            }
-                        }
-                    )
-                }
-            }
-        }
-
-        snack?.let {
-            Spacer(Modifier.height(10.dp))
-            Text(it, color = OnBg)
-            LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack = null }
-        }
-    }
-}
-
-
-/* =========================
-   Admin Per-Service Pricing (iTunes / Phone Balance)
-   ========================= */
-data class AdminPerServiceRow(
-    val serviceName: String,
-    val providerServiceId: Long? = null,
-    val pricePerK: Double? = null,
-    val minQty: Int? = null,
-    val maxQty: Int? = null,
-    val mode: String? = null
-)
-
-@Composable
-private fun PerServiceEditorList(
-    title: String,
-    kind: String,
-    token: String,
-    onBack: () -> Unit
-) {
-    val scope = rememberCoroutineScope()
-    var loading by remember { mutableStateOf(true) }
-    var err by remember { mutableStateOf<String?>(null) }
-    var list by remember { mutableStateOf<List<AdminPerServiceRow>>(emptyList()) }
-    var refresh by remember { mutableStateOf(0) }
-    var snack by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(refresh, kind) {
-        loading = true; err = null
-        try {
-            list = apiAdminListPerService(token, kind)
-        } catch (e: Exception) { err = e.message }
-        loading = false
-    }
-
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg)
-            }
-            Spacer(Modifier.width(6.dp))
-            Text(title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
-        }
-
-        when {
-            loading -> { Spacer(Modifier.height(24.dp)); CircularProgressIndicator(color = Accent); return@Column }
-            err != null -> { Spacer(Modifier.height(8.dp)); Text("تعذر جلب البيانات: $err", color = Bad); return@Column }
-        }
-
-        LazyColumn {
-            items(list) { itRow ->
-                var show by remember { mutableStateOf(false) }
-                ElevatedCard(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { show = true },
-                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(itRow.serviceName, fontWeight = FontWeight.SemiBold, color = OnBg)
-                        val pp = itRow.pricePerK?.let { v -> "السعر/ألف: ${"%.2f".format(v)}" } ?: "السعر/ألف: (افتراضي)"
-                        val qn = "الكمية: ${itRow.minQty ?: "-"} إلى ${itRow.maxQty ?: "-"}"
-                        val md = "الوضع: ${itRow.mode ?: "per_k"}"
-                        Spacer(Modifier.height(4.dp))
-                        Text("$pp  •  $qn  •  $md", color = Dim, fontSize = 12.sp)
-                        Spacer(Modifier.height(8.dp))
-                        Row {
-                            TextButton(onClick = { show = true }) { Text("تعديل") }
-                            Spacer(Modifier.width(6.dp))
-                            TextButton(onClick = {
-                                scope.launch {
-                                    val ok = apiAdminPricingServiceClear(token, itRow.serviceName)
-                                    if (ok) { refresh++ ; snack = "تم حذف التعديل" } else snack = "فشل حذف التعديل"
-                                }
-                            }) { Text("حذف التعديل") }
-                        }
-                    }
-                }
-
-                if (show) {
-                    var mode by remember { mutableStateOf(itRow.mode ?: "per_k") }
-                    var price by remember { mutableStateOf(TextFieldValue(itRow.pricePerK?.toString() ?: "")) }
-                    var min by remember { mutableStateOf(TextFieldValue(itRow.minQty?.toString() ?: "")) }
-                    var max by remember { mutableStateOf(TextFieldValue(itRow.maxQty?.toString() ?: "")) }
-                    AlertDialog(
-                        onDismissRequest = { show = false },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                scope.launch {
-                                    val p = price.text.toDoubleOrNull() ?: 0.0
-                                    val mn = min.text.toIntOrNull() ?: 0
-                                    val mx = max.text.toIntOrNull() ?: mn
-                                    val ok = apiAdminPricingServiceSet(token, itRow.serviceName, p, mn, mx, mode)
-                                    if (ok) { show = false; refresh++; snack = "تم الحفظ" } else snack = "فشل الحفظ"
-                                }
-                            }) { Text("حفظ") }
-                        },
-                        dismissButton = { TextButton(onClick = { show = false }) { Text("إلغاء") } },
-                        title = { Text("تعديل: ${itRow.serviceName}") },
-                        text = {
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("الوضع:", modifier = Modifier.width(80.dp))
-                                    var idx by remember { mutableStateOf(if (mode == "flat") 1 else 0) }
-                                    SegmentedButtons(
-                                        options = listOf("per_k", "flat"),
-                                        selectedIndex = idx,
-                                        onSelected = { i -> idx = i; mode = if (i == 1) "flat" else "per_k" }
-                                    )
-                                }
-                                Spacer(Modifier.height(6.dp))
-                                OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("السعر/ألف") }, singleLine = true)
-                                Spacer(Modifier.height(6.dp))
-                                OutlinedTextField(value = min, onValueChange = { min = it }, label = { Text("الحد الأدنى") }, singleLine = true)
-                                Spacer(Modifier.height(6.dp))
-                                OutlinedTextField(value = max, onValueChange = { max = it }, label = { Text("الحد الأقصى") }, singleLine = true)
-                            }
-                        }
-                    )
-                }
-            }
-        }
-
-        snack?.let {
-            Spacer(Modifier.height(10.dp))
-            Text(it, color = OnBg)
-            LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack = null }
-        }
-    }
-}
 /* =========================
    نماذج/حالات
    ========================= */
@@ -1875,17 +1725,7 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
                 Text("السعر التقريبي: $price\$", fontWeight = FontWeight.SemiBold, color = OnBg)
                 Spacer(Modifier.height(4.dp))
                 Text("رصيدك الحالي: ${userBalance?.let { "%.2f".format(it) } ?: ""}\$", color = Dim, fontSize = 12.sp)
-            
-                                    Spacer(Modifier.height(12.dp))
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                        TextButton(onClick = {
-                                            scope.launch {
-                                                val ok = apiAdminPricingServiceClear(token, itRow.serviceName)
-                                                if (ok) { show = false; refresh++; snack = "تم حذف التعديل" } else snack = "فشل حذف التعديل"
-                                            }
-                                        }) { Text("حذف التعديل") }
-                                    }
-    }
+            }
         }
     )
 }
@@ -2563,7 +2403,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             else -> LazyColumn {
                 items(orders!!) { o ->
                     ElevatedCard(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { show = true },
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Column(Modifier.padding(16.dp)) {
@@ -2870,7 +2710,7 @@ if (itemFilter == null || itemFilter.invoke(item)) {
                         SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(o.createdAt))
                     } else ""
                     ElevatedCard(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { show = true },
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Column(Modifier.padding(16.dp)) {
@@ -3072,7 +2912,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                     val curId = overrides[svc.uiKey] ?: baseId
                     val hasOverride = overrides.containsKey(svc.uiKey)
                     ElevatedCard(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { show = true },
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Column(Modifier.padding(16.dp)) {
@@ -3180,7 +3020,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                         SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(c.createdAt))
                     } else ""
                     ElevatedCard(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { show = true },
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Column(Modifier.padding(16.dp)) {
@@ -3382,7 +3222,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
             else -> LazyColumn {
                 items(rows!!) { (u, state, bal) ->
                     ElevatedCard(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { show = true },
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -4362,7 +4202,7 @@ private fun AdminAnnouncementsList(
                         var showEdit by remember { mutableStateOf(false) }
                         var showDelete by remember { mutableStateOf(false) }
                         ElevatedCard(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { show = true },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                             colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                         ) {
                             Column(Modifier.padding(16.dp)) {

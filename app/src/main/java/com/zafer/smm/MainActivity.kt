@@ -233,13 +233,6 @@ private object AdminEndpoints {
     const val pricingList = "/api/admin/pricing/list"
     const val pricingSet  = "/api/admin/pricing/set"
     const val pricingClear= "/api/admin/pricing/clear"
-    
-// Per-service (iTunes / Phone)
-const val itunesServices = "/api/admin/itunes/services"
-const val phoneServices  = "/api/admin/phone/services"
-const val pricingServiceSet   = "/api/admin/pricing/service/set"
-const val pricingServiceClear = "/api/admin/pricing/service/clear"
-
     const val orderSetPrice = "/api/admin/pricing/order/set"
     const val orderClearPrice = "/api/admin/pricing/order/clear"
     const val orderSetQty = "/api/admin/pricing/order/set_qty"
@@ -383,86 +376,6 @@ private suspend fun apiAdminClearPricing(token: String, uiKey: String): Boolean 
     val (code, _) = httpPost(AdminEndpoints.pricingClear, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
-
-
-/* =========================
-   Admin Per-Service Pricing (iTunes / Phone)
-   ========================= */
-data class AdminPerServiceRow(
-    val serviceName: String,
-    val providerServiceId: Long? = null,
-    val pricePerK: Double? = null,
-    val minQty: Int? = null,
-    val maxQty: Int? = null,
-    val mode: String? = null
-)
-
-private suspend fun apiAdminListPerService(token: String, kind: String): List<AdminPerServiceRow> {
-    val path = when(kind) {
-        "itunes" -> AdminEndpoints.itunesServices
-        "phone"  -> AdminEndpoints.phoneServices
-        else -> AdminEndpoints.itunesServices
-    }
-    val (code, txt) = httpGet(path, headers = mapOf("x-admin-password" to token))
-    if (code !in 200..299 || txt == null) return emptyList()
-    return try {
-        val out = mutableListOf<AdminPerServiceRow>()
-        val trimmed = txt.trim()
-        if (trimmed.startsWith("{")) {
-            val root = JSONObject(trimmed)
-            val arr = root.optJSONArray("list") ?: JSONArray()
-            for (i in 0 until arr.length()) {
-                val it = arr.optJSONObject(i) ?: continue
-                out += AdminPerServiceRow(
-                    serviceName = it.optString("service_name", it.optString("ui_key", "")),
-                    providerServiceId = if (it.has("provider_service_id")) it.optLong("provider_service_id") else null,
-                    pricePerK = if (it.has("price_per_k")) it.optDouble("price_per_k") else null,
-                    minQty = if (it.has("min_qty")) it.optInt("min_qty") else null,
-                    maxQty = if (it.has("max_qty")) it.optInt("max_qty") else null,
-                    mode = it.optString("mode", null)
-                )
-            }
-        } else {
-            val arr = JSONArray(trimmed)
-            for (i in 0 until arr.length()) {
-                val it = arr.optJSONObject(i) ?: continue
-                out += AdminPerServiceRow(
-                    serviceName = it.optString("service_name", it.optString("ui_key", "")),
-                    providerServiceId = if (it.has("provider_service_id")) it.optLong("provider_service_id") else null,
-                    pricePerK = if (it.has("price_per_k")) it.optDouble("price_per_k") else null,
-                    minQty = if (it.has("min_qty")) it.optInt("min_qty") else null,
-                    maxQty = if (it.has("max_qty")) it.optInt("max_qty") else null,
-                    mode = it.optString("mode", null)
-                )
-            }
-        }
-        out
-    } catch (_: Exception) { emptyList() }
-}
-
-private suspend fun apiAdminPricingServiceSet(
-    token: String,
-    serviceName: String,
-    pricePerK: Double,
-    minQty: Int,
-    maxQty: Int,
-    mode: String
-): Boolean {
-    val body = JSONObject()
-        .put("service_name", serviceName)
-        .put("price_per_k", pricePerK)
-        .put("min_qty", minQty)
-        .put("max_qty", maxQty)
-        .put("mode", mode)
-    val (code, _) = httpPost(AdminEndpoints.pricingServiceSet, body, headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
-
-private suspend fun apiAdminPricingServiceClear(token: String, serviceName: String): Boolean {
-    val body = JSONObject().put("service_name", serviceName)
-    val (code, _) = httpPost(AdminEndpoints.pricingServiceClear, body, headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
 /* =========================
    Public Pricing (read-only for client)
    ========================= */
@@ -506,7 +419,7 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
         
         "مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
         "مشاهدات انستغرام", "لايكات انستغرام", "متابعين انستغرام", "مشاهدات بث انستا", "خدمات التليجرام",
-        "ببجي", "لودو", "رصيد iTunes", "رصيد الهاتف"
+        "ببجي", "لودو"
     )
 
     fun servicesFor(cat: String): List<ServiceDef> {
@@ -568,131 +481,39 @@ if (loading) { CircularProgressIndicator(color = Accent); return@Column }
                 Spacer(Modifier.width(6.dp))
                 Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
 
-
-// ====== iTunes / Phone per-service editor ======
-if (selectedCat == "رصيد iTunes" || selectedCat == "رصيد الهاتف") {
-    val kind = if (selectedCat == "رصيد iTunes") "itunes" else "phone"
-    var list by remember { mutableStateOf<List<AdminPerServiceRow>>(emptyList()) }
-    var loading2 by remember { mutableStateOf(true) }
-    var err2 by remember { mutableStateOf<String?>(null) }
-    var refresh2 by remember { mutableStateOf(0) }
-    var snack2 by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(refresh2, kind) {
-        loading2 = true; err2 = null
-        try { list = apiAdminListPerService(token, kind) } catch (e: Exception) { err2 = e.message }
-        loading2 = false
-    }
-    Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
-        when {
-            loading2 -> { CircularProgressIndicator(color = Accent); return@Column }
-            err2 != null -> { Text("تعذر جلب البيانات: $err2", color = Bad); return@Column }
-        }
-        LazyColumn {
-                        val visible = list.filterNot { it.serviceName.startsWith("cat.") || it.serviceName == "cat.itunes" || it.serviceName == "cat.phone" }
-                        items(visible) { row ->
-                var showDlg by remember { mutableStateOf(false) }
-                ElevatedCard(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(row.serviceName, fontWeight = FontWeight.SemiBold, color = OnBg)
-                        val pp = row.pricePerK?.let { v -> "السعر: ${"%.2f".format(v)}" } ?: "السعر: (افتراضي)"
-                        val qn = "الكمية: ${row.minQty ?: "-"} إلى ${row.maxQty ?: "-"}"
-                        val md = "الوضع: ${row.mode ?: "per_k"}"
-                        Spacer(Modifier.height(4.dp))
-                        Text("$pp  •  $qn  •  $md", color = Dim, fontSize = 12.sp)
-                        Spacer(Modifier.height(8.dp))
-                        Row {
-                            TextButton(onClick = { showDlg = true }) { Text("تعديل") }
-                            Spacer(Modifier.width(6.dp))
-                            TextButton(onClick = {
-                                scope.launch {
-                                    val ok = apiAdminPricingServiceClear(token, row.serviceName)
-                                    if (ok) { refresh2++ ; snack2 = "تم حذف التعديل" } else snack2 = "فشل حذف التعديل"
-                                }
-                            }) { Text("حذف التعديل") }
-                        }
-                    }
-                }
-                if (showDlg) {
-                    var mode by remember { mutableStateOf(row.mode ?: "per_k") }
-                    var price by remember { mutableStateOf(TextFieldValue(row.pricePerK?.toString() ?: "")) }
-                    var min by remember { mutableStateOf(TextFieldValue(row.minQty?.toString() ?: "")) }
-                    var max by remember { mutableStateOf(TextFieldValue(row.maxQty?.toString() ?: "")) }
-                    AlertDialog(
-                        onDismissRequest = { showDlg = false },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                scope.launch {
-                                    val p = price.text.toDoubleOrNull() ?: 0.0
-                                    val mn = min.text.toIntOrNull() ?: 0
-                                    val mx = mn
-                                    val ok = apiAdminPricingServiceSet(token, row.serviceName, p, mn, mx, mode)
-                                    if (ok) { showDlg = false; refresh2++; snack2 = "تم الحفظ" } else snack2 = "فشل الحفظ"
-                                }
-                            }) { Text("حفظ") }
-                        },
-                        dismissButton = { TextButton(onClick = { showDlg = false }) { Text("إلغاء") } },
-                        title = { Text("تعديل: ${row.serviceName}") },
-                        text = {
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("الوضع:", modifier = Modifier.width(80.dp))
-                                    Row {
-                                        OutlinedButton(onClick = { mode = "per_k" }, enabled = mode != "per_k") { Text("per_k") }
-                                        Spacer(Modifier.width(6.dp))
-                                        OutlinedButton(onClick = { mode = "flat" }, enabled = mode != "flat") { Text("flat") }
-                                    }
-                                }
-                                Spacer(Modifier.height(6.dp))
-                                OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("السعر") }, singleLine = true)
-                                Spacer(Modifier.height(6.dp))
-                                OutlinedTextField(value = min, onValueChange = { min = it }, label = { Text("الكمية") }, singleLine = true)
-                            }
-                        }
-                    )
-                }
-            }
-        }
-        snack2?.let { Text(it, color = OnBg); LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack2 = null } }
-    }
-    return@Column
-}
-
 /* PUBG/Ludo Orders Editor */
 if (selectedCat == "ببجي" || selectedCat == "لودو") {
     // عرض باقات ببجي/لودو وتعديل السعر والكمية بشكل مخصص لكل باقة
-    data class GamePkgSpec(val key: String, val title: String, val defQty: Int, val defPrice: Double)
+    data class PkgSpec(val key: String, val title: String, val defQty: Int, val defPrice: Double)
     val scope = rememberCoroutineScope()
 
-    val pkgs: List<GamePkgSpec> = if (selectedCat == "ببجي") listOf(
-        GamePkgSpec("pkg.pubg.60",   "60 شدة",    60,    2.0),
-        GamePkgSpec("pkg.pubg.325",  "325 شدة",   325,   9.0),
-        GamePkgSpec("pkg.pubg.660",  "660 شدة",   660,   15.0),
-        GamePkgSpec("pkg.pubg.1800", "1800 شدة",  1800,  40.0),
-        GamePkgSpec("pkg.pubg.3850", "3850 شدة",  3850,  55.0),
-        GamePkgSpec("pkg.pubg.8100", "8100 شدة",  8100,  100.0),
-        GamePkgSpec("pkg.pubg.16200","16200 شدة", 16200, 185.0)
+    val pkgs: List<PkgSpec> = if (selectedCat == "ببجي") listOf(
+        PkgSpec("pkg.pubg.60",   "60 شدة",    60,    2.0),
+        PkgSpec("pkg.pubg.325",  "325 شدة",   325,   9.0),
+        PkgSpec("pkg.pubg.660",  "660 شدة",   660,   15.0),
+        PkgSpec("pkg.pubg.1800", "1800 شدة",  1800,  40.0),
+        PkgSpec("pkg.pubg.3850", "3850 شدة",  3850,  55.0),
+        PkgSpec("pkg.pubg.8100", "8100 شدة",  8100,  100.0),
+        PkgSpec("pkg.pubg.16200","16200 شدة", 16200, 185.0)
     ) else listOf(
         // Diamonds
-        GamePkgSpec("pkg.ludo.diamonds.810",     "810 الماسة",       810,     5.0),
-        GamePkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
-        GamePkgSpec("pkg.ludo.diamonds.5080",    "5080 الماسة",      5080,    20.0),
-        GamePkgSpec("pkg.ludo.diamonds.12750",   "12750 الماسة",     12750,   35.0),
-        GamePkgSpec("pkg.ludo.diamonds.27200",   "27200 الماسة",     27200,   85.0),
-        GamePkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
-        GamePkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
-        GamePkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),
+        PkgSpec("pkg.ludo.diamonds.810",     "810 الماسة",       810,     5.0),
+        PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
+        PkgSpec("pkg.ludo.diamonds.5080",    "5080 الماسة",      5080,    20.0),
+        PkgSpec("pkg.ludo.diamonds.12750",   "12750 الماسة",     12750,   35.0),
+        PkgSpec("pkg.ludo.diamonds.27200",   "27200 الماسة",     27200,   85.0),
+        PkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
+        PkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
+        PkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),
         // Gold
-        GamePkgSpec("pkg.ludo.gold.66680",       "66680 ذهب",        66680,   5.0),
-        GamePkgSpec("pkg.ludo.gold.219500",      "219500 ذهب",       219500,  10.0),
-        GamePkgSpec("pkg.ludo.gold.1443000",     "1443000 ذهب",      1443000, 20.0),
-        GamePkgSpec("pkg.ludo.gold.3627000",     "3627000 ذهب",      3627000, 35.0),
-        GamePkgSpec("pkg.ludo.gold.9830000",     "9830000 ذهب",      9830000, 85.0),
-        GamePkgSpec("pkg.ludo.gold.24835000",    "24835000 ذهب",     24835000,165.0),
-        GamePkgSpec("pkg.ludo.gold.74550000",    "74550000 ذهب",     74550000,475.0),
-        GamePkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",    124550000,800.0)
+        PkgSpec("pkg.ludo.gold.66680",       "66680 ذهب",        66680,   5.0),
+        PkgSpec("pkg.ludo.gold.219500",      "219500 ذهب",       219500,  10.0),
+        PkgSpec("pkg.ludo.gold.1443000",     "1443000 ذهب",      1443000, 20.0),
+        PkgSpec("pkg.ludo.gold.3627000",     "3627000 ذهب",      3627000, 35.0),
+        PkgSpec("pkg.ludo.gold.9830000",     "9830000 ذهب",      9830000, 85.0),
+        PkgSpec("pkg.ludo.gold.24835000",    "24835000 ذهب",     24835000,165.0),
+        PkgSpec("pkg.ludo.gold.74550000",    "74550000 ذهب",     74550000,475.0),
+        PkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",    124550000,800.0)
     )
 
     LazyColumn {
@@ -781,7 +602,7 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                             Text(key, fontWeight = FontWeight.SemiBold, color = OnBg)
                             Spacer(Modifier.height(4.dp))
                             val tip = if (has) " (معدل)" else " (افتراضي)"
-                            Text("السعر: ${ov?.pricePerK ?: svc.pricePerK}  •  الكمية: ${ov?.minQty ?: svc.min}  •  —: ${ov?.maxQty ?: svc.max}$tip", color = Dim, fontSize = 12.sp)
+                            Text("السعر/ألف: ${ov?.pricePerK ?: svc.pricePerK}  •  الحد الأدنى: ${ov?.minQty ?: svc.min}  •  الحد الأقصى: ${ov?.maxQty ?: svc.max}$tip", color = Dim, fontSize = 12.sp)
                             Spacer(Modifier.height(8.dp))
                             Row {
                                 TextButton(onClick = { showEdit = true }) { Text("تعديل") }
@@ -809,7 +630,7 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                                     scope.launch {
                                         val p = price.text.toDoubleOrNull() ?: 0.0
                                         val mn = min.text.toIntOrNull() ?: 0
-                                        val mx = mn
+                                        val mx = max.text.toIntOrNull() ?: mn
                                         val ok = apiAdminSetPricing(token, key, p, mn, mx, mode = "flat")
                                         if (ok) { snack = "تم الحفظ"; showEdit = false; refreshKey++ } else snack = "فشل الحفظ"
                                     }
@@ -821,7 +642,9 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                                 Column {
                                     OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("السعر المباشر") }, singleLine = true)
                                     Spacer(Modifier.height(6.dp))
-                                    OutlinedTextField(value = min, onValueChange = { min = it }, label = { Text("الكمية") }, singleLine = true)
+                                    OutlinedTextField(value = min, onValueChange = { min = it }, label = { Text("الحد الأدنى") }, singleLine = true)
+                                    Spacer(Modifier.height(6.dp))
+                                    OutlinedTextField(value = max, onValueChange = { max = it }, label = { Text("الحد الأقصى") }, singleLine = true)
                                 }
                             }
                         )

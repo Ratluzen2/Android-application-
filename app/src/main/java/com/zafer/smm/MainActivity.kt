@@ -1577,6 +1577,7 @@ private fun priceForKorek(usd: Int): Double {
 private fun AmountGrid(
     title: String,
     subtitle: String,
+    labelSuffix: String = "",
     amounts: List<Int>,
     priceOf: (Int) -> Double,
     onSelect: (usd: Int, price: Double) -> Unit,
@@ -1608,7 +1609,7 @@ private fun AmountGrid(
                         )
                     ) {
                         Column(Modifier.padding(16.dp)) {
-                            Text("$usd$", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
+                            Text("$usd${"$"}${if (labelSuffix.isNotBlank()) labelSuffix else ""}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
                             Spacer(Modifier.height(4.dp))
                             Text("السعر: $price$", color = Dim, fontSize = 12.sp)
                         }
@@ -1837,6 +1838,7 @@ fun ConfirmPackageIdDialog(
         "قسم خدمات الودو"       -> listOf("شراء الماسات لودو", "شراء ذهب لودو")
         else -> emptyList()
     }
+    if (selectedManualFlow == null) 
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1870,11 +1872,15 @@ fun ConfirmPackageIdDialog(
 
     // ----- Manual flows UI -----
     if (selectedManualFlow != null) {
+    }
+
+    
         when (selectedManualFlow) {
             "شراء رصيد ايتونز" -> {
                 AmountGrid(
                     title = "شراء رصيد ايتونز",
                     subtitle = "كل 5$ = 9$",
+                    labelSuffix = "ايتونز",
                     amounts = commonAmounts,
                     priceOf = { usd -> priceForItunes(usd) },
                     onSelect = { usd, price ->
@@ -1888,6 +1894,7 @@ fun ConfirmPackageIdDialog(
                 AmountGrid(
                     title = "شراء رصيد اثير",
                     subtitle = "كل 5$ = 7$",
+                    labelSuffix = "اثير",
                     amounts = commonAmounts,
                     priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
                     onSelect = { usd, price ->
@@ -1901,6 +1908,7 @@ fun ConfirmPackageIdDialog(
                 AmountGrid(
                     title = "شراء رصيد اسياسيل",
                     subtitle = "كل 5$ = 7$",
+                    labelSuffix = "اسياسيل",
                     amounts = commonAmounts,
                     priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
                     onSelect = { usd, price ->
@@ -1914,6 +1922,7 @@ fun ConfirmPackageIdDialog(
                 AmountGrid(
                     title = "شراء رصيد كورك",
                     subtitle = "كل 5$ = 7$",
+                    labelSuffix = "كورك",
                     amounts = commonAmounts,
                     priceOf = { usd -> priceForKorek(usd) },
                     onSelect = { usd, price ->

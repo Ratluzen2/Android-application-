@@ -121,7 +121,7 @@ object AppNotifier {
     private const val CHANNEL_NAME = "App Alerts"
     private const val CHANNEL_DESC = "User orders, balance updates, and general alerts"
 
-fun ensureChannel(ctx: android.content.Context) {
+    fun ensureChannel(ctx: android.content.Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val ch = NotificationChannel(
                 CHANNEL_ID,
@@ -137,7 +137,7 @@ fun ensureChannel(ctx: android.content.Context) {
         }
     }
 
-fun requestPermissionIfNeeded(activity: androidx.activity.ComponentActivity) {
+    fun requestPermissionIfNeeded(activity: androidx.activity.ComponentActivity) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ActivityCompat.checkSelfPermission(activity, "android.permission.POST_NOTIFICATIONS")
                 != PackageManager.PERMISSION_GRANTED) {
@@ -146,7 +146,7 @@ fun requestPermissionIfNeeded(activity: androidx.activity.ComponentActivity) {
         }
     }
 
-fun notifyNow(ctx: android.content.Context, title: String, body: String) {
+    fun notifyNow(ctx: android.content.Context, title: String, body: String) {
         ensureChannel(ctx)
         val tapIntent = Intent(ctx, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -189,12 +189,6 @@ private fun NoticeBody(text: String) {
         }
     }
 }
-
-// proxy wrappers for AppNotifier (accessible from other files like MyFirebaseService.kt)
-fun ensureChannel(ctx: android.content.Context) = AppNotifier.ensureChannel(ctx)
-fun requestPermissionIfNeeded(activity: androidx.activity.ComponentActivity) = AppNotifier.requestPermissionIfNeeded(activity)
-fun notifyNow(ctx: android.content.Context, title: String, body: String) = AppNotifier.notifyNow(ctx, title, body)
-
 
 /* =========================
    إعدادات الخادم
@@ -509,36 +503,163 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
     var snack by remember { mutableStateOf<String?>(null) }
 
     val cats = listOf(
-        
+
         "مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
         "مشاهدات انستغرام", "لايكات انستغرام", "متابعين انستغرام", "مشاهدات بث انستا", "خدمات التليجرام",
-        "ببجي", "لودو", "رصيد iTunes", "رصيد الهاتف"
+        "رصيد iTunes", "رصيد الهاتف",
+        "ببجي", "لودو"
     )
-
-fun servicesFor(cat: String): List<ServiceDef> {
-    fun hasAll(key: String, vararg words: String) = words.all { key.contains(it) }
-    return servicesCatalog.filter { svc ->
-        val k = svc.uiKey
-        when (cat) {
-            "مشاهدات تيكتوك"   -> hasAll(k, "مشاهدات", "تيكتوك")
-            "لايكات تيكتوك"     -> hasAll(k, "لايكات", "تيكتوك")
-            "متابعين تيكتوك"    -> hasAll(k, "متابعين", "تيكتوك")
-            "مشاهدات بث تيكتوك" -> hasAll(k, "مشاهدات", "بث", "تيكتوك")
-            "رفع سكور تيكتوك"   -> hasAll(k, "رفع", "سكور")
-            "مشاهدات انستغرام"  -> hasAll(k, "مشاهدات", "انستغرام")
-            "لايكات انستغرام"    -> hasAll(k, "لايكات", "انستغرام")
-            "متابعين انستغرام"   -> hasAll(k, "متابعين", "انستغرام")
-            "مشاهدات بث انستا"   -> hasAll(k, "مشاهدات", "بث", "انستا")
-            "خدمات التليجرام"    -> k.contains("تيليجرام") || k.contains("التليجرام") || k.contains("تلي")
-            "ببجي"               -> k.contains("ببجي", ignoreCase = true)
-            "لودو"               -> k.contains("لودو", ignoreCase = true)
-            "رصيد iTunes"        -> k.contains("ايتونز") || k.contains("iTunes", ignoreCase = true)
-            "رصيد الهاتف"        -> k.contains("رصيد") || k.contains("الهاتف")
-            else -> false
+    fun servicesFor(cat: String): List<ServiceDef> {
+        fun hasAll(key: String, vararg words: String) = words.all { key.contains(it) }
+        return servicesCatalog.filter { svc ->
+            val k = svc.uiKey
+            when (cat) {
+                "مشاهدات تيكتوك"   -> hasAll(k, "مشاهدات", "تيكتوك")
+                "لايكات تيكتوك"     -> hasAll(k, "لايكات", "تيكتوك")
+                "متابعين تيكتوك"    -> hasAll(k, "متابعين", "تيكتوك")
+                "مشاهدات بث تيكتوك" -> hasAll(k, "مشاهدات", "بث", "تيكتوك")
+                "رفع سكور تيكتوك"   -> hasAll(k, "رفع", "سكور", "تيكتوك") || hasAll(k, "رفع", "سكور", "بث") || hasAll(k, "رفع", "سكور", "بث")
+                "مشاهدات انستغرام"  -> hasAll(k, "مشاهدات", "انستغرام")
+                "لايكات انستغرام"    -> hasAll(k, "لايكات", "انستغرام")
+                "متابعين انستغرام"   -> hasAll(k, "متابعين", "انستغرام")
+                "مشاهدات بث انستا"   -> hasAll(k, "مشاهدات", "بث", "انستا")
+                "خدمات التليجرام"    -> k.contains("تيليجرام") || k.contains("التليجرام") || k.contains("تلي")
+                else -> false
+            }
         }
     }
-}
 
+    LaunchedEffect(refreshKey) {
+        loading = true; err = null
+        try { overrides = apiAdminListPricing(token) } catch (t: Throwable) { err = t.message }
+        loading = false
+    }
+
+    val ctx = LocalContext.current
+    val Dim = Color(0xFFADB5BD)
+
+    Column(Modifier.fillMaxSize().background(Bg).padding(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Text("تغيير الأسعار والكميات", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
+        }
+        
+if (loading) { CircularProgressIndicator(color = Accent); return@Column }
+        snack?.let { s -> Snackbar(Modifier.fillMaxWidth()) { Text(s) }; LaunchedEffect(s) { kotlinx.coroutines.delay(2000); snack = null } }
+        err?.let { e -> Text("تعذر جلب البيانات: $e", color = Bad); return@Column }
+
+        if (selectedCat == null) {
+            cats.chunked(2).forEach { row ->
+                Row(Modifier.fillMaxWidth()) {
+                    row.forEach { c ->
+                        ElevatedCard(
+                            modifier = Modifier.weight(1f).padding(4.dp).clickable { selectedCat = c },
+                            colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                        ) { Text(c, Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold) }
+                    }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+        } else {
+            val list = servicesFor(selectedCat!!)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { selectedCat = null }) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+                Spacer(Modifier.width(6.dp))
+                Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
+
+
+// ====== iTunes / Phone per-service editor ======
+if (selectedCat == "رصيد iTunes" || selectedCat == "رصيد الهاتف") {
+    val kind = if (selectedCat == "رصيد iTunes") "itunes" else "phone"
+    var list by remember { mutableStateOf<List<AdminPerServiceRow>>(emptyList()) }
+    var loading2 by remember { mutableStateOf(true) }
+    var err2 by remember { mutableStateOf<String?>(null) }
+    var refresh2 by remember { mutableStateOf(0) }
+    var snack2 by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(refresh2, kind) {
+        loading2 = true; err2 = null
+        try { list = apiAdminListPerService(token, kind) } catch (e: Exception) { err2 = e.message }
+        loading2 = false
+    }
+    Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
+        when {
+            loading2 -> { CircularProgressIndicator(color = Accent); return@Column }
+            err2 != null -> { Text("تعذر جلب البيانات: $err2", color = Bad); return@Column }
+        }
+        LazyColumn {
+            items(list) { row ->
+                var showDlg by remember { mutableStateOf(false) }
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(row.serviceName, fontWeight = FontWeight.SemiBold, color = OnBg)
+                        val pp = row.pricePerK?.let { v -> "السعر/ألف: ${"%.2f".format(v)}" } ?: "السعر/ألف: (افتراضي)"
+                        val qn = "الكمية: ${row.minQty ?: "-"} إلى ${row.maxQty ?: "-"}"
+                        val md = "الوضع: ${row.mode ?: "per_k"}"
+                        Spacer(Modifier.height(4.dp))
+                        Text("$pp  •  $qn  •  $md", color = Dim, fontSize = 12.sp)
+                        Spacer(Modifier.height(8.dp))
+                        Row {
+                            TextButton(onClick = { showDlg = true }) { Text("تعديل") }
+                            Spacer(Modifier.width(6.dp))
+                            TextButton(onClick = {
+                                scope.launch {
+                                    val ok = apiAdminPricingServiceClear(token, row.serviceName)
+                                    if (ok) { refresh2++ ; snack2 = "تم حذف التعديل" } else snack2 = "فشل حذف التعديل"
+                                }
+                            }) { Text("حذف التعديل") }
+                        }
+                    }
+                }
+                if (showDlg) {
+                    var mode by remember { mutableStateOf(row.mode ?: "per_k") }
+                    var price by remember { mutableStateOf(TextFieldValue(row.pricePerK?.toString() ?: "")) }
+                    var min by remember { mutableStateOf(TextFieldValue(row.minQty?.toString() ?: "")) }
+                    var max by remember { mutableStateOf(TextFieldValue(row.maxQty?.toString() ?: "")) }
+                    AlertDialog(
+                        onDismissRequest = { showDlg = false },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                scope.launch {
+                                    val p = price.text.toDoubleOrNull() ?: 0.0
+                                    val mn = min.text.toIntOrNull() ?: 0
+                                    val mx = max.text.toIntOrNull() ?: mn
+                                    val ok = apiAdminPricingServiceSet(token, row.serviceName, p, mn, mx, mode)
+                                    if (ok) { showDlg = false; refresh2++; snack2 = "تم الحفظ" } else snack2 = "فشل الحفظ"
+                                }
+                            }) { Text("حفظ") }
+                        },
+                        dismissButton = { TextButton(onClick = { showDlg = false }) { Text("إلغاء") } },
+                        title = { Text("تعديل: ${row.serviceName}") },
+                        text = {
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("الوضع:", modifier = Modifier.width(80.dp))
+                                    Row {
+                                        OutlinedButton(onClick = { mode = "per_k" }, enabled = mode != "per_k") { Text("per_k") }
+                                        Spacer(Modifier.width(6.dp))
+                                        OutlinedButton(onClick = { mode = "flat" }, enabled = mode != "flat") { Text("flat") }
+                                    }
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("السعر/ألف") }, singleLine = true)
+                                Spacer(Modifier.height(6.dp))
+                                OutlinedTextField(value = min, onValueChange = { min = it }, label = { Text("الحد الأدنى") }, singleLine = true)
+                                Spacer(Modifier.height(6.dp))
+                                OutlinedTextField(value = max, onValueChange = { max = it }, label = { Text("الحد الأقصى") }, singleLine = true)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+        snack2?.let { Text(it, color = OnBg); LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack2 = null } }
+    }
+    return@Column
+}
 
 /* PUBG/Ludo Orders Editor */
 if (selectedCat == "ببجي" || selectedCat == "لودو") {
@@ -632,13 +753,78 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                     title = { Text("تعديل: ${p.title}") },
                     text  = {
                         Column {
-                            
-OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("السعر/ألف") }, singleLine = true)
-Spacer(Modifier.height(6.dp))
-OutlinedTextField(value = min, onValueChange = { min = it }, label = { Text("الحد الأدنى") }, singleLine = true)
-Spacer(Modifier.height(6.dp))
-OutlinedTextField(value = max, onValueChange = { max = it }, label = { Text("الحد الأقصى") }, singleLine = true)
- }, singleLine = true)
+                            OutlinedTextField(value = priceTxt, onValueChange = { priceTxt = it }, label = { Text("السعر") }, singleLine = true)
+                            Spacer(Modifier.height(6.dp))
+                            OutlinedTextField(value = qtyTxt, onValueChange = { qtyTxt = it }, label = { Text("الكمية") }, singleLine = true)
+                        }
+                    }
+                )
+            }
+        }
+    }
+    return@Column
+}
+
+            }
+            Spacer(Modifier.height(10.dp))
+
+            LazyColumn {
+                items(list) { svc ->
+                    var showEdit by remember { mutableStateOf(false) }
+                    val key = svc.uiKey
+                    val ov  = overrides[key]
+                    val has = ov != null
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(key, fontWeight = FontWeight.SemiBold, color = OnBg)
+                            Spacer(Modifier.height(4.dp))
+                            val tip = if (has) " (معدل)" else " (افتراضي)"
+                            Text("السعر/ألف: ${ov?.pricePerK ?: svc.pricePerK}  •  الحد الأدنى: ${ov?.minQty ?: svc.min}  •  الحد الأقصى: ${ov?.maxQty ?: svc.max}$tip", color = Dim, fontSize = 12.sp)
+                            Spacer(Modifier.height(8.dp))
+                            Row {
+                                TextButton(onClick = { showEdit = true }) { Text("تعديل") }
+                                Spacer(Modifier.width(6.dp))
+                                if (has) {
+                                    TextButton(onClick = {
+                                        scope.launch {
+                                            val ok = apiAdminClearPricing(token, key)
+                                            if (ok) { snack = "تم حذف التعديل"; refreshKey++ } else snack = "فشل الحذف"
+                                        }
+                                    }) { Text("حذف التعديل") }
+                                }
+                            }
+                        }
+                    }
+
+                    if (showEdit) {
+                        var price by remember { mutableStateOf(TextFieldValue((ov?.pricePerK ?: svc.pricePerK).toString())) }
+                        var min by remember { mutableStateOf(TextFieldValue((ov?.minQty ?: svc.min).toString())) }
+                        var max by remember { mutableStateOf(TextFieldValue((ov?.maxQty ?: svc.max).toString())) }
+                        AlertDialog(
+                            onDismissRequest = { showEdit = false },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    scope.launch {
+                                        val p = price.text.toDoubleOrNull() ?: 0.0
+                                        val mn = min.text.toIntOrNull() ?: 0
+                                        val mx = max.text.toIntOrNull() ?: mn
+                                        val ok = apiAdminSetPricing(token, key, p, mn, mx, mode = "flat")
+                                        if (ok) { snack = "تم الحفظ"; showEdit = false; refreshKey++ } else snack = "فشل الحفظ"
+                                    }
+                                }) { Text("حفظ") }
+                            },
+                            dismissButton = { TextButton(onClick = { showEdit = false }) { Text("إلغاء") } },
+                            title = { Text("تعديل: $key") },
+                            text = {
+                                Column {
+                                    OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("السعر المباشر") }, singleLine = true)
+                                    Spacer(Modifier.height(6.dp))
+                                    OutlinedTextField(value = min, onValueChange = { min = it }, label = { Text("الحد الأدنى") }, singleLine = true)
+                                    Spacer(Modifier.height(6.dp))
+                                    OutlinedTextField(value = max, onValueChange = { max = it }, label = { Text("الحد الأقصى") }, singleLine = true)
                                 }
                             }
                         )
@@ -2640,7 +2826,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
         "خدمات التليجرام"
     )
 
-fun servicesFor(cat: String): List<ServiceDef> {
+    fun servicesFor(cat: String): List<ServiceDef> {
         fun hasAll(key: String, vararg words: String) = words.all { key.contains(it) }
         return servicesCatalog.filter { svc ->
             val k = svc.uiKey

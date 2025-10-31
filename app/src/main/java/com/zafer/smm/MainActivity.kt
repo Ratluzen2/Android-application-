@@ -121,7 +121,7 @@ object AppNotifier {
     private const val CHANNEL_NAME = "App Alerts"
     private const val CHANNEL_DESC = "User orders, balance updates, and general alerts"
 
-    fun ensureChannel(ctx: android.content.Context) {
+un ensureChannel(ctx: android.content.Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val ch = NotificationChannel(
                 CHANNEL_ID,
@@ -137,7 +137,7 @@ object AppNotifier {
         }
     }
 
-    fun requestPermissionIfNeeded(activity: androidx.activity.ComponentActivity) {
+un requestPermissionIfNeeded(activity: androidx.activity.ComponentActivity) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ActivityCompat.checkSelfPermission(activity, "android.permission.POST_NOTIFICATIONS")
                 != PackageManager.PERMISSION_GRANTED) {
@@ -146,7 +146,7 @@ object AppNotifier {
         }
     }
 
-    fun notifyNow(ctx: android.content.Context, title: String, body: String) {
+un notifyNow(ctx: android.content.Context, title: String, body: String) {
         ensureChannel(ctx)
         val tapIntent = Intent(ctx, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -506,10 +506,10 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
         
         "مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
         "مشاهدات انستغرام", "لايكات انستغرام", "متابعين انستغرام", "مشاهدات بث انستا", "خدمات التليجرام",
-        "ببجي", "لودو"
+        "ببجي", "لودو", "رصيد iTunes", "رصيد الهاتف"
     )
 
-    fun servicesFor(cat: String): List<ServiceDef> {
+un servicesFor(cat: String): List<ServiceDef> {
         fun hasAll(key: String, vararg words: String) = words.all { key.contains(it) }
         return servicesCatalog.filter { svc ->
             val k = svc.uiKey
@@ -2826,7 +2826,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
         "خدمات التليجرام"
     )
 
-    fun servicesFor(cat: String): List<ServiceDef> {
+un servicesFor(cat: String): List<ServiceDef> {
         fun hasAll(key: String, vararg words: String) = words.all { key.contains(it) }
         return servicesCatalog.filter { svc ->
             val k = svc.uiKey

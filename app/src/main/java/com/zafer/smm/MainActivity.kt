@@ -236,12 +236,10 @@ private object AdminEndpoints {
     const val orderSetQty = "/api/admin/pricing/order/set_qty"
     const val announcementCreate = "/api/admin/announcement/create"
     const val announcementsList = "/api/public/announcements"
-    // Admin announcements (manage)
     const val announcementsAdminList = "/api/admin/announcements"
-    fun announcementUpdate(id: Long) = "/api/admin/announcement/$id/update"
-    fun announcementDelete(id: Long) = "/api/admin/announcement/$id/delete"
+    fun announcementUpdate(id: Long) = "/api/admin/announcement/" + id + "/update"
+    fun announcementDelete(id: Long) = "/api/admin/announcement/" + id + "/delete"
 }
-
 
 /* =========================
    Admin Service ID Overrides API
@@ -404,7 +402,6 @@ private suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, Public
     } catch (_: Exception) { emptyMap() }
 }
 
-
 @Composable
 private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -416,6 +413,7 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
     var snack by remember { mutableStateOf<String?>(null) }
 
     val cats = listOf(
+        
         "مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
         "مشاهدات انستغرام", "لايكات انستغرام", "متابعين انستغرام", "مشاهدات بث انستا", "خدمات التليجرام",
         "ببجي", "لودو", "ايتونز", "رصيد الهاتف"
@@ -430,7 +428,7 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
                 "لايكات تيكتوك"     -> hasAll(k, "لايكات", "تيكتوك")
                 "متابعين تيكتوك"    -> hasAll(k, "متابعين", "تيكتوك")
                 "مشاهدات بث تيكتوك" -> hasAll(k, "مشاهدات", "بث", "تيكتوك")
-                "رفع سكور تيكتوك"   -> hasAll(k, "رفع", "سكور", "تيكتوك") || hasAll(k, "رفع", "سكور", "بث")
+                "رفع سكور تيكتوك"   -> hasAll(k, "رفع", "سكور", "تيكتوك") || hasAll(k, "رفع", "سكور", "بث") || hasAll(k, "رفع", "سكور", "بث")
                 "مشاهدات انستغرام"  -> hasAll(k, "مشاهدات", "انستغرام")
                 "لايكات انستغرام"    -> hasAll(k, "لايكات", "انستغرام")
                 "متابعين انستغرام"   -> hasAll(k, "متابعين", "انستغرام")
@@ -456,8 +454,8 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
             Spacer(Modifier.width(6.dp))
             Text("تغيير الأسعار والكميات", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
         }
-
-        if (loading) { CircularProgressIndicator(color = Accent); return@Column }
+        
+if (loading) { CircularProgressIndicator(color = Accent); return@Column }
         snack?.let { s -> Snackbar(Modifier.fillMaxWidth()) { Text(s) }; LaunchedEffect(s) { kotlinx.coroutines.delay(2000); snack = null } }
         err?.let { e -> Text("تعذر جلب البيانات: $e", color = Bad); return@Column }
 
@@ -473,311 +471,123 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
                     if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
             }
-            return@Column
-        }
+        } else {
+            val list = servicesFor(selectedCat!!)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { selectedCat = null }) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+                Spacer(Modifier.width(6.dp))
+                Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { selectedCat = null }) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
-        }
-        Spacer(Modifier.height(10.dp))
+/* PUBG/Ludo Orders Editor */
+if (selectedCat == "ببجي" || selectedCat == "لودو") {
+    // عرض باقات ببجي/لودو وتعديل السعر والكمية بشكل مخصص لكل باقة
+    data class PkgSpec(val key: String, val title: String, val defQty: Int, val defPrice: Double)
+    val scope = rememberCoroutineScope()
 
-        // ===== PUBG / Ludo specialized editors =====
-        if (selectedCat == "ببجي" || selectedCat == "لودو") {
-            data class PkgSpec(val key: String, val title: String, val defQty: Int, val defPrice: Double)
-            val pkgs: List<PkgSpec> = if (selectedCat == "ببجي") listOf(
-                PkgSpec("pkg.pubg.60",   "60 شدة",    60,    2.0),
-                PkgSpec("pkg.pubg.325",  "325 شدة",   325,   9.0),
-                PkgSpec("pkg.pubg.660",  "660 شدة",   660,   15.0),
-                PkgSpec("pkg.pubg.1800", "1800 شدة",  1800,  40.0),
-                PkgSpec("pkg.pubg.3850", "3850 شدة",  3850,  55.0),
-                PkgSpec("pkg.pubg.8100", "8100 شدة",  8100,  100.0),
-                PkgSpec("pkg.pubg.16200","16200 شدة", 16200, 185.0)
-            ) else listOf(
-                PkgSpec("pkg.ludo.diamonds.810",     "810 الماسة",       810,     5.0),
-                PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
-                PkgSpec("pkg.ludo.diamonds.5080",    "5080 الماسة",      5080,    20.0),
-                PkgSpec("pkg.ludo.diamonds.12750",   "12750 الماسة",     12750,   35.0),
-                PkgSpec("pkg.ludo.diamonds.27200",   "27200 الماسة",     27200,   85.0),
-                PkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
-                PkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
-                PkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),
-                PkgSpec("pkg.ludo.gold.66680",       "66680 ذهب",        66680,   5.0),
-                PkgSpec("pkg.ludo.gold.219500",      "219500 ذهب",      219500,  10.0),
-                PkgSpec("pkg.ludo.gold.1443000",     "1443000 ذهب",     1443000, 20.0),
-                PkgSpec("pkg.ludo.gold.3627000",     "3627000 ذهب",     3627000, 35.0),
-                PkgSpec("pkg.ludo.gold.9830000",     "9830000 ذهب",     9830000, 85.0),
-                PkgSpec("pkg.ludo.gold.24835000",    "24835000 ذهب",    24835000,165.0),
-                PkgSpec("pkg.ludo.gold.74550000",    "74550000 ذهب",    74550000,475.0),
-                PkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",   124550000,800.0)
-            )
-            LazyColumn {
-                items(pkgs) { p ->
-                    val ov = overrides[p.key]
-                    val curPrice = ov?.pricePerK ?: p.defPrice
-                    val curQty   = if (ov != null && ov.minQty > 0) ov.minQty else p.defQty
+    val pkgs: List<PkgSpec> = if (selectedCat == "ببجي") listOf(
+        PkgSpec("pkg.pubg.60",   "60 شدة",    60,    2.0),
+        PkgSpec("pkg.pubg.325",  "325 شدة",   325,   9.0),
+        PkgSpec("pkg.pubg.660",  "660 شدة",   660,   15.0),
+        PkgSpec("pkg.pubg.1800", "1800 شدة",  1800,  40.0),
+        PkgSpec("pkg.pubg.3850", "3850 شدة",  3850,  55.0),
+        PkgSpec("pkg.pubg.8100", "8100 شدة",  8100,  100.0),
+        PkgSpec("pkg.pubg.16200","16200 شدة", 16200, 185.0)
+    ) else listOf(
+        // Diamonds
+        PkgSpec("pkg.ludo.diamonds.810",     "810 الماسة",       810,     5.0),
+        PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
+        PkgSpec("pkg.ludo.diamonds.5080",    "5080 الماسة",      5080,    20.0),
+        PkgSpec("pkg.ludo.diamonds.12750",   "12750 الماسة",     12750,   35.0),
+        PkgSpec("pkg.ludo.diamonds.27200",   "27200 الماسة",     27200,   85.0),
+        PkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
+        PkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
+        PkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),
+        // Gold
+        PkgSpec("pkg.ludo.gold.66680",       "66680 ذهب",        66680,   5.0),
+        PkgSpec("pkg.ludo.gold.219500",      "219500 ذهب",       219500,  10.0),
+        PkgSpec("pkg.ludo.gold.1443000",     "1443000 ذهب",      1443000, 20.0),
+        PkgSpec("pkg.ludo.gold.3627000",     "3627000 ذهب",      3627000, 35.0),
+        PkgSpec("pkg.ludo.gold.9830000",     "9830000 ذهب",      9830000, 85.0),
+        PkgSpec("pkg.ludo.gold.24835000",    "24835000 ذهب",     24835000,165.0),
+        PkgSpec("pkg.ludo.gold.74550000",    "74550000 ذهب",     74550000,475.0),
+        PkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",    124550000,800.0)
+    )
 
-                    var open by remember { mutableStateOf(false) }
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
-                    ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(p.title, fontWeight = FontWeight.SemiBold, color = OnBg)
-                            Spacer(Modifier.height(4.dp))
-                            Text("الكمية الحالية: $curQty  •  السعر الحالي: ${"%.2f".format(curPrice)}", color = Dim, fontSize = 12.sp)
-                            Spacer(Modifier.height(8.dp))
-                            Row {
-                                TextButton(onClick = { open = true }) { Text("تعديل") }
-                                Spacer(Modifier.width(6.dp))
-                                if (ov != null) {
-                                    TextButton(onClick = {
-                                        scope.launch {
-                                            val ok = apiAdminClearPricing(token, p.key)
-                                            if (ok) { snack = "تم حذف التعديل"; refreshKey++ } else snack = "فشل الحذف"
-                                        }
-                                    }) { Text("حذف التعديل") }
-                                }
-                            }
-                        }
-                    }
+    LazyColumn {
+        items(pkgs) { p ->
+            val ov = overrides[p.key]
+            val curPrice = ov?.pricePerK ?: p.defPrice
+            val curQty   = if (ov != null && ov.minQty > 0) ov.minQty else p.defQty
 
-                    if (open) {
-                        var priceTxt by remember { mutableStateOf(TextFieldValue(curPrice.toString())) }
-                        var qtyTxt   by remember { mutableStateOf(TextFieldValue(curQty.toString())) }
-                        AlertDialog(
-                            onDismissRequest = { open = false },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    scope.launch {
-                                        val newPrice = priceTxt.text.toDoubleOrNull() ?: 0.0
-                                        val newQty   = qtyTxt.text.toIntOrNull() ?: 0
-                                        val ok = apiAdminSetPricing(token, p.key, newPrice, newQty, newQty, mode = "package")
-                                        if (ok) { snack = "تم الحفظ"; open = false; refreshKey++ } else snack = "فشل الحفظ"
-                                    }
-                                }) { Text("حفظ") }
-                            },
-                            dismissButton = { TextButton(onClick = { open = false }) { Text("إلغاء") } },
-                            title = { Text("تعديل: ${p.title}") },
-                            text  = {
-                                Column {
-                                    OutlinedTextField(value = priceTxt, onValueChange = { priceTxt = it }, label = { Text("السعر") }, singleLine = true)
-                                    Spacer(Modifier.height(6.dp))
-                                    OutlinedTextField(value = qtyTxt, onValueChange = { qtyTxt = it }, label = { Text("الكمية") }, singleLine = true)
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-            return@Column
-        }
-
-        // ===== iTunes pricing editor =====
-        if (selectedCat == "ايتونز") {
-            data class Denom(val usd: Int) { val key get() = "amt.itunes.$usd" }
-            val denoms = listOf(5,10,15,20,25,30,40,50,100).map { Denom(it) }
-            LazyColumn {
-                items(denoms) { d ->
-                    val ov = overrides[d.key]
-                    val defPrice = priceForItunes(d.usd)
-                    val curPrice = ov?.pricePerK ?: defPrice
-                    var open by remember { mutableStateOf(false) }
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
-                    ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text("iTunes ${d.usd}$", fontWeight = FontWeight.SemiBold, color = OnBg)
-                            Spacer(Modifier.height(4.dp))
-                            Text("السعر الحالي: ${"%.2f".format(curPrice)}", color = Dim, fontSize = 12.sp)
-                            Spacer(Modifier.height(8.dp))
-                            Row {
-                                TextButton(onClick = { open = true }) { Text("تعديل") }
-                                Spacer(Modifier.width(6.dp))
-                                if (ov != null) {
-                                    TextButton(onClick = {
-                                        scope.launch {
-                                            val ok = apiAdminClearPricing(token, d.key)
-                                            if (ok) { snack = "تم حذف التعديل"; refreshKey++ } else snack = "فشل الحذف"
-                                        }
-                                    }) { Text("حذف التعديل") }
-                                }
-                            }
-                        }
-                    }
-                    if (open) {
-                        var priceTxt by remember { mutableStateOf(TextFieldValue(curPrice.toString())) }
-                        AlertDialog(
-                            onDismissRequest = { open = false },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    scope.launch {
-                                        val newPrice = priceTxt.text.toDoubleOrNull() ?: 0.0
-                                        val ok = apiAdminSetPricing(token, d.key, newPrice, d.usd, d.usd, mode = "package")
-                                        if (ok) { snack = "تم الحفظ"; open = false; refreshKey++ } else snack = "فشل الحفظ"
-                                    }
-                                }) { Text("حفظ") }
-                            },
-                            dismissButton = { TextButton(onClick = { open = false }) { Text("إلغاء") } },
-                            title = { Text("تعديل: iTunes ${d.usd}$") },
-                            text  = {
-                                Column {
-                                    OutlinedTextField(value = priceTxt, onValueChange = { priceTxt = it }, label = { Text("السعر") }, singleLine = true)
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-            return@Column
-        }
-
-        // ===== Phone balance pricing editor (Atheer, Asiacell, Korek) =====
-        if (selectedCat == "رصيد الهاتف") {
-            data class Denom(val brand: String, val usd: Int) {
-                val key get() = when (brand) {
-                    "أثير" -> "amt.atheer.$usd"
-                    "أسيا سيل" -> "amt.asiacell.$usd"
-                    else -> "amt.korek.$usd"
-                }
-                val def get() = when (brand) {
-                    "أثير" -> priceForAtheerOrAsiacell(usd)
-                    "أسيا سيل" -> priceForAtheerOrAsiacell(usd)
-                    else -> priceForKorek(usd)
-                }
-            }
-            val brands = listOf("أثير", "أسيا سيل", "كورك")
-            LazyColumn {
-                brands.forEach { br ->
-                    item {
-                        Text(br, fontWeight = FontWeight.Bold, color = OnBg, fontSize = 16.sp, modifier = Modifier.padding(vertical = 8.dp))
-                    }
-                    items(listOf(5,10,15,20,25,30,40,50,100).map { Denom(br, it) }) { d ->
-                        val ov = overrides[d.key]
-                        val curPrice = ov?.pricePerK ?: d.def
-                        var open by remember { mutableStateOf(false) }
-                        ElevatedCard(
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                            colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
-                        ) {
-                            Column(Modifier.padding(16.dp)) {
-                                Text("${br} ${d.usd}$", fontWeight = FontWeight.SemiBold, color = OnBg)
-                                Spacer(Modifier.height(4.dp))
-                                Text("السعر الحالي: ${"%.2f".format(curPrice)}", color = Dim, fontSize = 12.sp)
-                                Spacer(Modifier.height(8.dp))
-                                Row {
-                                    TextButton(onClick = { open = true }) { Text("تعديل") }
-                                    Spacer(Modifier.width(6.dp))
-                                    if (ov != null) {
-                                        TextButton(onClick = {
-                                            scope.launch {
-                                                val ok = apiAdminClearPricing(token, d.key)
-                                                if (ok) { snack = "تم حذف التعديل"; refreshKey++ } else snack = "فشل الحذف"
-                                            }
-                                        }) { Text("حذف التعديل") }
-                                    }
-                                }
-                            }
-                        }
-                        if (open) {
-                            var priceTxt by remember { mutableStateOf(TextFieldValue(curPrice.toString())) }
-                            AlertDialog(
-                                onDismissRequest = { open = false },
-                                confirmButton = {
-                                    TextButton(onClick = {
-                                        scope.launch {
-                                            val newPrice = priceTxt.text.toDoubleOrNull() ?: 0.0
-                                            val ok = apiAdminSetPricing(token, d.key, newPrice, d.usd, d.usd, mode = "package")
-                                            if (ok) { snack = "تم الحفظ"; open = false; refreshKey++ } else snack = "فشل الحفظ"
-                                        }
-                                    }) { Text("حفظ") }
-                                },
-                                dismissButton = { TextButton(onClick = { open = false }) { Text("إلغاء") } },
-                                title = { Text("تعديل: ${br} ${d.usd}$") },
-                                text  = {
-                                    Column {
-                                        OutlinedTextField(value = priceTxt, onValueChange = { priceTxt = it }, label = { Text("السعر") }, singleLine = true)
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-            return@Column
-        }
-
-        // ===== Default SMM services editor =====
-        val list = servicesFor(selectedCat!!)
-        LazyColumn {
-            items(list) { svc ->
-                var showEdit by remember { mutableStateOf(false) }
-                val key = svc.uiKey
-                val ov  = overrides[key]
-                val has = ov != null
-                ElevatedCard(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(key, fontWeight = FontWeight.SemiBold, color = OnBg)
-                        Spacer(Modifier.height(4.dp))
-                        val tip = if (has) " (معدل)" else " (افتراضي)"
-                        Text("السعر/ألف: ${ov?.pricePerK ?: svc.pricePerK}  •  الحد الأدنى: ${ov?.minQty ?: svc.min}  •  الحد الأقصى: ${ov?.maxQty ?: svc.max}$tip", color = Dim, fontSize = 12.sp)
-                        Spacer(Modifier.height(8.dp))
-                        Row {
-                            TextButton(onClick = { showEdit = true }) { Text("تعديل") }
-                            Spacer(Modifier.width(6.dp))
-                            if (has) {
-                                TextButton(onClick = {
-                                    scope.launch {
-                                        val ok = apiAdminClearPricing(token, key)
-                                        if (ok) { snack = "تم حذف التعديل"; refreshKey++ } else snack = "فشل الحذف"
-                                    }
-                                }) { Text("حذف التعديل") }
-                            }
-                        }
-                    }
-                }
-
-                if (showEdit) {
-                    var price by remember { mutableStateOf(TextFieldValue((ov?.pricePerK ?: svc.pricePerK).toString())) }
-                    var min by remember { mutableStateOf(TextFieldValue((ov?.minQty ?: svc.min).toString())) }
-                    var max by remember { mutableStateOf(TextFieldValue((ov?.maxQty ?: svc.max).toString())) }
-                    AlertDialog(
-                        onDismissRequest = { showEdit = false },
-                        confirmButton = {
+            var open by remember { mutableStateOf(false) }
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(p.title, fontWeight = FontWeight.SemiBold, color = OnBg)
+                    Spacer(Modifier.height(4.dp))
+                    Text("الكمية الحالية: $curQty  •  السعر الحالي: ${"%.2f".format(curPrice)}", color = Dim, fontSize = 12.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Row {
+                        TextButton(onClick = { open = true }) { Text("تعديل") }
+                        Spacer(Modifier.width(6.dp))
+                        if (ov != null) {
                             TextButton(onClick = {
                                 scope.launch {
-                                    val p = price.text.toDoubleOrNull() ?: 0.0
-                                    val mn = min.text.toIntOrNull() ?: 0
-                                    val mx = max.text.toIntOrNull() ?: mn
-                                    val ok = apiAdminSetPricing(token, key, p, mn, mx, mode = "flat")
-                                    if (ok) { snack = "تم الحفظ"; showEdit = false; refreshKey++ } else snack = "فشل الحفظ"
+                                    val ok = apiAdminClearPricing(token, p.key)
+                                    if (ok) { snack = "تم حذف التعديل"; refreshKey++ } else snack = "فشل الحذف"
                                 }
-                            }) { Text("حفظ") }
-                        },
-                        dismissButton = { TextButton(onClick = { showEdit = false }) { Text("إلغاء") } },
-                        title = { Text("تعديل: $key") },
-                        text = {
-                            Column {
-                                OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("السعر المباشر") }, singleLine = true)
-                                Spacer(Modifier.height(6.dp))
-                                OutlinedTextField(value = min, onValueChange = { min = it }, label = { Text("الحد الأدنى") }, singleLine = true)
-                                Spacer(Modifier.height(6.dp))
-                                OutlinedTextField(value = max, onValueChange = { max = it }, label = { Text("الحد الأقصى") }, singleLine = true)
-                            }
+                            }) { Text("حذف التعديل") }
                         }
-                    )
+                    }
                 }
+            }
+
+            if (open) {
+                var priceTxt by remember { mutableStateOf(TextFieldValue(curPrice.toString())) }
+                var qtyTxt   by remember { mutableStateOf(TextFieldValue(curQty.toString())) }
+                AlertDialog(
+                    onDismissRequest = { open = false },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            scope.launch {
+                                val newPrice = priceTxt.text.toDoubleOrNull() ?: 0.0
+                                val newQty   = qtyTxt.text.toIntOrNull() ?: 0
+                                val ok = apiAdminSetPricing(
+                                    token = token,
+                                    uiKey = p.key,
+                                    pricePerK = newPrice,
+                                    minQty = newQty,
+                                    maxQty = newQty,
+                                    mode = "package"
+                                )
+                                if (ok) { snack = "تم الحفظ"; open = false; refreshKey++ } else snack = "فشل الحفظ"
+                            }
+                        }) { Text("حفظ") }
+                    },
+                    dismissButton = { TextButton(onClick = { open = false }) { Text("إلغاء") } },
+                    title = { Text("تعديل: ${p.title}") },
+                    text  = {
+                        Column {
+                            OutlinedTextField(value = priceTxt, onValueChange = { priceTxt = it }, label = { Text("السعر") }, singleLine = true)
+                            Spacer(Modifier.height(6.dp))
+                            OutlinedTextField(value = qtyTxt, onValueChange = { qtyTxt = it }, label = { Text("الكمية") }, singleLine = true)
+                        }
+                    }
+                )
             }
         }
     }
+    return@Column
 }
 
+            }
 
+            val effectiveMap = effectiveMapState.value
+            if (effectiveMap == null) {
+                Box(Modifier.fillMaxSize()) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
+                return@Column
             }
             Spacer(Modifier.height(10.dp))
 
@@ -1370,6 +1180,7 @@ private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, bo
     if (!title.isNullOrBlank()) obj.put("title", title)
     val (code, _) = httpPost(AdminEndpoints.announcementCreate, obj, headers = mapOf("x-admin-password" to token))
     return code in 200..299
+
 data class AdminAnnouncement(val id: Long, val title: String?, val body: String, val createdAt: Long)
 
 private suspend fun apiAdminListAnnouncements(token: String, limit: Int = 50): List<AdminAnnouncement>? {
@@ -1402,6 +1213,8 @@ private suspend fun apiAdminDeleteAnnouncement(token: String, id: Long): Boolean
     val (code, _) = httpPost(AdminEndpoints.announcementDelete(id), org.json.JSONObject(), headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
+
+
 }
 
 
@@ -1477,7 +1290,6 @@ private fun HomeAnnouncementsList() {
 }
 
 
-
 @Composable
 private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
@@ -1485,19 +1297,6 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
     var body by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-
-    // Manage existing
-    var list by remember { mutableStateOf<List<AdminAnnouncement>?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var reloadKey by remember { mutableStateOf(0) }
-    var snack by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(reloadKey) {
-        loading = true
-        list = try { apiAdminListAnnouncements(token) } catch (_: Throwable) { null }
-        loading = false
-    }
-
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text("إعلان التطبيق", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = OnBg, modifier = Modifier.weight(1f))
@@ -1522,84 +1321,94 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
                     sending = true; error = null
                     val ok = apiAdminCreateAnnouncement(token, title.ifBlank { null }, body)
                     sending = false
-                    if (ok) { title = ""; body = ""; onSent(); reloadKey++; snack = "تم إرسال الإعلان" } else { error = "فشل إرسال الإعلان" }
+                    if (ok) { onSent(); onBack() } else { error = "فشل إرسال الإعلان" }
                 }
             },
             enabled = !sending
         ) { Text(if (sending) "جاري الإرسال..." else "إرسال") }
+    }
 
-        Spacer(Modifier.height(16.dp))
-        Divider()
-        Spacer(Modifier.height(8.dp))
-        Text("الإعلانات الحالية", fontWeight = FontWeight.SemiBold, color = OnBg)
 
-        when {
-            loading -> { Spacer(Modifier.height(8.dp)); CircularProgressIndicator() }
-            list == null -> { Spacer(Modifier.height(8.dp)); Text("تعذر جلب القائمة (قد لا يكون المسار مدعومًا في الباكند).", color = Bad) }
-            list!!.isEmpty() -> { Spacer(Modifier.height(8.dp)); Text("لا توجد إعلانات.", color = Dim) }
-            else -> {
-                LazyColumn {
-                    items(list!!) { a ->
-                        var editOpen by remember { mutableStateOf(false) }
-                        ElevatedCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp),
-                            colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
-                        ) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(a.title ?: "إعلان مهم 📢", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                                Spacer(Modifier.height(4.dp))
-                                Text(a.body)
-                                Spacer(Modifier.height(6.dp))
-                                Row {
-                                    TextButton(onClick = { editOpen = true }) { Text("تعديل") }
-                                    Spacer(Modifier.width(8.dp))
-                                    TextButton(onClick = {
-                                        val scope2 = rememberCoroutineScope()
-                                        scope2.launch {
-                                            val ok = apiAdminDeleteAnnouncement(token, a.id)
-                                            snack = if (ok) "تم الحذف" else "فشل الحذف"
-                                            if (ok) reloadKey++
-                                        }
-                                    }) { Text("حذف") }
+Spacer(Modifier.height(16.dp))
+Divider()
+Spacer(Modifier.height(8.dp))
+Text("الإعلانات الحالية", fontWeight = FontWeight.SemiBold, color = OnBg)
+
+var list by remember { mutableStateOf<List<AdminAnnouncement>?>(null) }
+var loading by remember { mutableStateOf(true) }
+var reloadKey by remember { mutableStateOf(0) }
+var snack2 by remember { mutableStateOf<String?>(null) }
+
+LaunchedEffect(reloadKey) {
+    loading = true
+    list = try { apiAdminListAnnouncements(token) } catch (_: Throwable) { null }
+    loading = false
+}
+
+when {
+    loading -> { Spacer(Modifier.height(8.dp)); CircularProgressIndicator() }
+    list == null -> { Spacer(Modifier.height(8.dp)); Text("تعذر جلب القائمة (تحقق من مسارات الباكند).", color = Bad) }
+    list!!.isEmpty() -> { Spacer(Modifier.height(8.dp)); Text("لا توجد إعلانات.", color = Dim) }
+    else -> {
+        LazyColumn {
+            items(list!!) { a ->
+                var editOpen by remember { mutableStateOf(false) }
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(a.title ?: "إعلان", fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(4.dp))
+                        Text(a.body)
+                        Spacer(Modifier.height(6.dp))
+                        Row {
+                            TextButton(onClick = { editOpen = true }) { Text("تعديل") }
+                            Spacer(Modifier.width(8.dp))
+                            val scope2 = rememberCoroutineScope()
+                            TextButton(onClick = {
+                                scope2.launch {
+                                    val ok = apiAdminDeleteAnnouncement(token, a.id)
+                                    snack2 = if (ok) "تم الحذف" else "فشل الحذف"
+                                    if (ok) reloadKey++
                                 }
-                            }
-                        }
-                        if (editOpen) {
-                            var t by remember { mutableStateOf(a.title ?: "") }
-                            var b by remember { mutableStateOf(a.body) }
-                            AlertDialog(
-                                onDismissRequest = { editOpen = false },
-                                confirmButton = {
-                                    val scope2 = rememberCoroutineScope()
-                                    TextButton(onClick = {
-                                        scope2.launch {
-                                            val ok = apiAdminUpdateAnnouncement(token, a.id, t.ifBlank { null }, b)
-                                            snack = if (ok) "تم الحفظ" else "فشل الحفظ"
-                                            if (ok) { editOpen = false; reloadKey++ }
-                                        }
-                                    }) { Text("حفظ") }
-                                },
-                                dismissButton = { TextButton(onClick = { editOpen = false }) { Text("إلغاء") } },
-                                title = { Text("تعديل الإعلان", color = OnBg) },
-                                text = {
-                                    Column {
-                                        OutlinedTextField(value = t, onValueChange = { t = it }, singleLine = true, label = { Text("العنوان (اختياري)") })
-                                        Spacer(Modifier.height(6.dp))
-                                        OutlinedTextField(value = b, onValueChange = { b = it }, label = { Text("النص") }, minLines = 4)
-                                    }
-                                }
-                            )
+                            }) { Text("حذف") }
                         }
                     }
                 }
+                if (editOpen) {
+                    var t by remember { mutableStateOf(a.title ?: "") }
+                    var b by remember { mutableStateOf(a.body) }
+                    AlertDialog(
+                        onDismissRequest = { editOpen = false },
+                        confirmButton = {
+                            val scope3 = rememberCoroutineScope()
+                            TextButton(onClick = {
+                                scope3.launch {
+                                    val ok = apiAdminUpdateAnnouncement(token, a.id, t.ifBlank { null }, b)
+                                    snack2 = if (ok) "تم الحفظ" else "فشل الحفظ"
+                                    if (ok) { editOpen = false; reloadKey++ }
+                                }
+                            }) { Text("حفظ") }
+                        },
+                        dismissButton = { TextButton(onClick = { editOpen = false }) { Text("إلغاء") } },
+                        title = { Text("تعديل الإعلان") },
+                        text = {
+                            Column {
+                                OutlinedTextField(value = t, onValueChange = { t = it }, singleLine = true, label = { Text("العنوان (اختياري)") })
+                                Spacer(Modifier.height(6.dp))
+                                OutlinedTextField(value = b, onValueChange = { b = it }, label = { Text("النص") }, minLines = 4)
+                            }
+                        }
+                    )
+                }
             }
         }
-        snack?.let { Spacer(Modifier.height(8.dp)); Text(it, color = OnBg) }
+        snack2?.let { Spacer(Modifier.height(8.dp)); Text(it, color = OnBg) }
     }
 }
 
+}
 
 
 /* =========================
@@ -1657,7 +1466,10 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
 
     // Overlay live pricing on top of catalog using produceState (no try/catch around composables)
     val keys = remember(inCat, selectedCategory) { inCat.map { it.uiKey } }
-    val effectiveMap by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keys) {
+    val effectiveMapState = produceState<Map<String, PublicPricingEntry>?>(initialValue = null, keys) {
+        // Load overrides before showing list to avoid flashing old values
+        // When done, state becomes non-null (may be empty map if no overrides)
+    
         value = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
     }
     val listToShow = remember(inCat, effectiveMap) {
@@ -1675,9 +1487,15 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
                 Spacer(Modifier.width(6.dp))
                 Text(selectedCategory!!, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
             }
+
+            val effectiveMap = effectiveMapState.value
+            if (effectiveMap == null) {
+                Box(Modifier.fillMaxSize()) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
+                return@Column
+            }
             Spacer(Modifier.height(10.dp))
 
-            listToShow.forEach { svc ->
+            inCat.forEach { svc ->
                 ElevatedCard(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1857,6 +1675,36 @@ private fun AmountGrid(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+
+@Composable
+private fun AmountGridDynamic(
+    title: String,
+    subtitle: String,
+    amounts: List<Int>,
+    keyPrefix: String,
+    defaultPriceOf: (Int) -> Double,
+    onSelect: (usd: Int, price: Double) -> Unit,
+    onBack: () -> Unit
+) {
+    val overrideMap by produceState<Map<Int, Double>>(initialValue = emptyMap(), keyPrefix, amounts) {
+        value = try {
+            val keys = amounts.map { "$keyPrefix$it" }
+            val res = apiPublicPricingBulk(keys)
+            res.mapNotNull { (k, v) ->
+                val usd = k.removePrefix(keyPrefix).toIntOrNull()
+                if (usd != null) usd to v.pricePerK else null
+            }.toMap()
+        } catch (_: Throwable) { emptyMap() }
+    }
+    AmountGrid(
+        title = title,
+        subtitle = subtitle,
+        amounts = amounts,
+        priceOf = { usd -> overrideMap[usd] ?: defaultPriceOf(usd) },
+        onSelect = { usd, _ -> onSelect(usd, overrideMap[usd] ?: defaultPriceOf(usd)) },
+        onBack = onBack
+    )
+}
             Spacer(Modifier.width(6.dp))
             Column {
                 Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
@@ -1890,37 +1738,6 @@ private fun AmountGrid(
             }
         }
     }
-}
-@Composable
-private fun AmountGridDynamic(
-    title: String,
-    subtitle: String,
-    amounts: List<Int>,
-    keyPrefix: String,
-    defaultPriceOf: (Int) -> Double,
-    onSelect: (usd: Int, price: Double) -> Unit,
-    onBack: () -> Unit
-) {
-    // Fetch overrides for e.g. "amt.itunes.5", "amt.asiacell.10", etc.
-    val overrideMap by produceState<Map<Int, Double>>(initialValue = emptyMap(), keyPrefix, amounts) {
-        value = try {
-            val keys = amounts.map { "$keyPrefix$it" }
-            val res = apiPublicPricingBulk(keys)
-            // Map USD amount to explicit price
-            res.mapNotNull { (k, v) ->
-                val usd = k.removePrefix(keyPrefix).toIntOrNull()
-                if (usd != null) usd to v.pricePerK else null
-            }.toMap()
-        } catch (_: Throwable) { emptyMap() }
-    }
-    AmountGrid(
-        title = title,
-        subtitle = subtitle,
-        amounts = amounts,
-        priceOf = { usd -> overrideMap[usd] ?: defaultPriceOf(usd) },
-        onSelect = { usd, _ -> onSelect(usd, overrideMap[usd] ?: defaultPriceOf(usd)) },
-        onBack = onBack
-    )
 }
 
 @Composable
@@ -3029,6 +2846,12 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                 }
                 Spacer(Modifier.width(6.dp))
                 Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
+            }
+
+            val effectiveMap = effectiveMapState.value
+            if (effectiveMap == null) {
+                Box(Modifier.fillMaxSize()) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
+                return@Column
             }
             Spacer(Modifier.height(10.dp))
 

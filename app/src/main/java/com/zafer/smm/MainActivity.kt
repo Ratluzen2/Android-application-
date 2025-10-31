@@ -236,10 +236,12 @@ private object AdminEndpoints {
     const val orderSetQty = "/api/admin/pricing/order/set_qty"
     const val announcementCreate = "/api/admin/announcement/create"
     const val announcementsList = "/api/public/announcements"
+
     const val announcementsAdminList = "/api/admin/announcements"
     fun announcementUpdate(id: Long) = "/api/admin/announcement/" + id + "/update"
     fun announcementDelete(id: Long) = "/api/admin/announcement/" + id + "/delete"
 }
+
 
 /* =========================
    Admin Service ID Overrides API
@@ -582,12 +584,6 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
     return@Column
 }
 
-            }
-
-            val effectiveMap = effectiveMapState.value
-            if (effectiveMap == null) {
-                Box(Modifier.fillMaxSize()) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
-                return@Column
             }
             Spacer(Modifier.height(10.dp))
 
@@ -1180,41 +1176,6 @@ private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, bo
     if (!title.isNullOrBlank()) obj.put("title", title)
     val (code, _) = httpPost(AdminEndpoints.announcementCreate, obj, headers = mapOf("x-admin-password" to token))
     return code in 200..299
-
-data class AdminAnnouncement(val id: Long, val title: String?, val body: String, val createdAt: Long)
-
-private suspend fun apiAdminListAnnouncements(token: String, limit: Int = 50): List<AdminAnnouncement>? {
-    val (code, txt) = httpGet(AdminEndpoints.announcementsAdminList + "?limit=" + limit, headers = mapOf("x-admin-password" to token))
-    if (code !in 200..299 || txt == null) return null
-    return try {
-        val arr = org.json.JSONArray(txt.trim())
-        val out = mutableListOf<AdminAnnouncement>()
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            out += AdminAnnouncement(
-                id = o.optLong("id", o.optInt("id", 0).toLong()),
-                title = if (o.has("title")) o.optString("title", null) else null,
-                body = o.optString("body",""),
-                createdAt = o.optLong("created_at", 0L)
-            )
-        }
-        out
-    } catch (_: Exception) { null }
-}
-
-private suspend fun apiAdminUpdateAnnouncement(token: String, id: Long, title: String?, body: String): Boolean {
-    val obj = org.json.JSONObject().put("body", body)
-    if (!title.isNullOrBlank()) obj.put("title", title)
-    val (code, _) = httpPost(AdminEndpoints.announcementUpdate(id), obj, headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
-
-private suspend fun apiAdminDeleteAnnouncement(token: String, id: Long): Boolean {
-    val (code, _) = httpPost(AdminEndpoints.announcementDelete(id), org.json.JSONObject(), headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
-
-
 }
 
 
@@ -1290,6 +1251,41 @@ private fun HomeAnnouncementsList() {
 }
 
 
+
+
+data class AdminAnnouncement(val id: Long, val title: String?, val body: String, val createdAt: Long)
+
+private suspend fun apiAdminListAnnouncements(token: String, limit: Int = 50): List<AdminAnnouncement>? {
+    val (code, txt) = httpGet(AdminEndpoints.announcementsAdminList + "?limit=" + limit, headers = mapOf("x-admin-password" to token))
+    if (code !in 200..299 || txt == null) return null
+    return try {
+        val arr = org.json.JSONArray(txt.trim())
+        val out = mutableListOf<AdminAnnouncement>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getJSONObject(i)
+            out += AdminAnnouncement(
+                id = o.optLong("id", o.optInt("id", 0).toLong()),
+                title = if (o.has("title")) o.optString("title", null) else null,
+                body = o.optString("body",""),
+                createdAt = o.optLong("created_at", 0L)
+            )
+        }
+        out
+    } catch (_: Exception) { null }
+}
+
+private suspend fun apiAdminUpdateAnnouncement(token: String, id: Long, title: String?, body: String): Boolean {
+    val obj = org.json.JSONObject().put("body", body)
+    if (!title.isNullOrBlank()) obj.put("title", title)
+    val (code, _) = httpPost(AdminEndpoints.announcementUpdate(id), obj, headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
+
+private suspend fun apiAdminDeleteAnnouncement(token: String, id: Long): Boolean {
+    val (code, _) = httpPost(AdminEndpoints.announcementDelete(id), org.json.JSONObject(), headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
+
 @Composable
 private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
@@ -1327,87 +1323,6 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
             enabled = !sending
         ) { Text(if (sending) "جاري الإرسال..." else "إرسال") }
     }
-
-
-Spacer(Modifier.height(16.dp))
-Divider()
-Spacer(Modifier.height(8.dp))
-Text("الإعلانات الحالية", fontWeight = FontWeight.SemiBold, color = OnBg)
-
-var list by remember { mutableStateOf<List<AdminAnnouncement>?>(null) }
-var loading by remember { mutableStateOf(true) }
-var reloadKey by remember { mutableStateOf(0) }
-var snack2 by remember { mutableStateOf<String?>(null) }
-
-LaunchedEffect(reloadKey) {
-    loading = true
-    list = try { apiAdminListAnnouncements(token) } catch (_: Throwable) { null }
-    loading = false
-}
-
-when {
-    loading -> { Spacer(Modifier.height(8.dp)); CircularProgressIndicator() }
-    list == null -> { Spacer(Modifier.height(8.dp)); Text("تعذر جلب القائمة (تحقق من مسارات الباكند).", color = Bad) }
-    list!!.isEmpty() -> { Spacer(Modifier.height(8.dp)); Text("لا توجد إعلانات.", color = Dim) }
-    else -> {
-        LazyColumn {
-            items(list!!) { a ->
-                var editOpen by remember { mutableStateOf(false) }
-                ElevatedCard(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
-                ) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(a.title ?: "إعلان", fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(4.dp))
-                        Text(a.body)
-                        Spacer(Modifier.height(6.dp))
-                        Row {
-                            TextButton(onClick = { editOpen = true }) { Text("تعديل") }
-                            Spacer(Modifier.width(8.dp))
-                            val scope2 = rememberCoroutineScope()
-                            TextButton(onClick = {
-                                scope2.launch {
-                                    val ok = apiAdminDeleteAnnouncement(token, a.id)
-                                    snack2 = if (ok) "تم الحذف" else "فشل الحذف"
-                                    if (ok) reloadKey++
-                                }
-                            }) { Text("حذف") }
-                        }
-                    }
-                }
-                if (editOpen) {
-                    var t by remember { mutableStateOf(a.title ?: "") }
-                    var b by remember { mutableStateOf(a.body) }
-                    AlertDialog(
-                        onDismissRequest = { editOpen = false },
-                        confirmButton = {
-                            val scope3 = rememberCoroutineScope()
-                            TextButton(onClick = {
-                                scope3.launch {
-                                    val ok = apiAdminUpdateAnnouncement(token, a.id, t.ifBlank { null }, b)
-                                    snack2 = if (ok) "تم الحفظ" else "فشل الحفظ"
-                                    if (ok) { editOpen = false; reloadKey++ }
-                                }
-                            }) { Text("حفظ") }
-                        },
-                        dismissButton = { TextButton(onClick = { editOpen = false }) { Text("إلغاء") } },
-                        title = { Text("تعديل الإعلان") },
-                        text = {
-                            Column {
-                                OutlinedTextField(value = t, onValueChange = { t = it }, singleLine = true, label = { Text("العنوان (اختياري)") })
-                                Spacer(Modifier.height(6.dp))
-                                OutlinedTextField(value = b, onValueChange = { b = it }, label = { Text("النص") }, minLines = 4)
-                            }
-                        }
-                    )
-                }
-            }
-        }
-        snack2?.let { Spacer(Modifier.height(8.dp)); Text(it, color = OnBg) }
-    }
-}
-
 }
 
 
@@ -1466,10 +1381,7 @@ when {
 
     // Overlay live pricing on top of catalog using produceState (no try/catch around composables)
     val keys = remember(inCat, selectedCategory) { inCat.map { it.uiKey } }
-    val effectiveMapState = produceState<Map<String, PublicPricingEntry>?>(initialValue = null, keys) {
-        // Load overrides before showing list to avoid flashing old values
-        // When done, state becomes non-null (may be empty map if no overrides)
-    
+    val effectiveMap by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keys) {
         value = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
     }
     val listToShow = remember(inCat, effectiveMap) {
@@ -1486,12 +1398,6 @@ when {
                 }
                 Spacer(Modifier.width(6.dp))
                 Text(selectedCategory!!, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-            }
-
-            val effectiveMap = effectiveMapState.value
-            if (effectiveMap == null) {
-                Box(Modifier.fillMaxSize()) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
-                return@Column
             }
             Spacer(Modifier.height(10.dp))
 
@@ -1675,6 +1581,7 @@ private fun AmountGrid(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+
 
 @Composable
 private fun AmountGridDynamic(
@@ -2846,12 +2753,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                 }
                 Spacer(Modifier.width(6.dp))
                 Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
-            }
-
-            val effectiveMap = effectiveMapState.value
-            if (effectiveMap == null) {
-                Box(Modifier.fillMaxSize()) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
-                return@Column
             }
             Spacer(Modifier.height(10.dp))
 

@@ -569,99 +569,130 @@ if (loading) { CircularProgressIndicator(color = Accent); return@Column }
                 Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
 
 
-// ====== iTunes / Phone per-service editor ======
+
+// ====== iTunes / Phone package-style editor (matches PUBG dialog) ======
 if (selectedCat == "رصيد iTunes" || selectedCat == "رصيد الهاتف") {
-    val kind = if (selectedCat == "رصيد iTunes") "itunes" else "phone"
-    var list by remember { mutableStateOf<List<AdminPerServiceRow>>(emptyList()) }
-    var loading2 by remember { mutableStateOf(true) }
-    var err2 by remember { mutableStateOf<String?>(null) }
-    var refresh2 by remember { mutableStateOf(0) }
-    var snack2 by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(refresh2, kind) {
-        loading2 = true; err2 = null
-        try { list = apiAdminListPerService(token, kind) } catch (e: Exception) { err2 = e.message }
-        loading2 = false
-    }
-    Column(Modifier.fillMaxSize().padding(top = 12.dp)) {
-        when {
-            loading2 -> { CircularProgressIndicator(color = Accent); return@Column }
-            err2 != null -> { Text("تعذر جلب البيانات: $err2", color = Bad); return@Column }
+    data class PkgSpec(val key: String, val title: String, val defQty: Int, val defPrice: Double)
+
+    fun itunesPkgs() = listOf(
+        PkgSpec("pkg.itunes.5",   "5$",   5,  priceForItunes(5)),
+        PkgSpec("pkg.itunes.10",  "10$",  10, priceForItunes(10)),
+        PkgSpec("pkg.itunes.15",  "15$",  15, priceForItunes(15)),
+        PkgSpec("pkg.itunes.20",  "20$",  20, priceForItunes(20)),
+        PkgSpec("pkg.itunes.25",  "25$",  25, priceForItunes(25)),
+        PkgSpec("pkg.itunes.30",  "30$",  30, priceForItunes(30)),
+        PkgSpec("pkg.itunes.40",  "40$",  40, priceForItunes(40)),
+        PkgSpec("pkg.itunes.50",  "50$",  50, priceForItunes(50)),
+        PkgSpec("pkg.itunes.100", "100$", 100, priceForItunes(100))
+    )
+
+    fun phoneGroup(title: String, prefix: String): Pair<String, List<PkgSpec>> {
+        fun priceOf(x: Int) = priceForAtheerOrAsiacell(x) // نفس سعر أثير/آسيا/كورك الافتراضي 5=>7
+        val list = listOf(5,10,15,20,25,30,40,50,100).map { usd ->
+            PkgSpec("$prefix$usd", "$usd$", usd, priceOf(usd))
         }
-        LazyColumn {
-                        val visible = list.filterNot { it.serviceName.startsWith("cat.") || it.serviceName == "cat.itunes" || it.serviceName == "cat.phone" }
-                        items(visible) { row ->
-                var showDlg by remember { mutableStateOf(false) }
+        return title to list
+    }
+
+    val groups: List<Pair<String, List<PkgSpec>>> =
+        if (selectedCat == "رصيد iTunes") {
+            listOf("رصيد iTunes" to itunesPkgs())
+        } else {
+            listOf(
+                phoneGroup("شراء رصيد أثير",   "pkg.phone.atheer."),
+                phoneGroup("شراء رصيد اسياسيل", "pkg.phone.asiacell."),
+                phoneGroup("شراء رصيد كورك",    "pkg.phone.korek.")
+            )
+        }
+
+    // قراءة التعديلات الحالية (نفس آلية ببجي: ui_key من /api/admin/pricing/list)
+    val overrides = overrides // نستخدم الموجودة أعلاه (apiAdminListPricing)
+
+    Column(Modifier.fillMaxWidth()) {
+        groups.forEach { (title, pkgs) ->
+            Text(title, fontWeight = FontWeight.SemiBold, color = OnBg, modifier = Modifier.padding(vertical = 8.dp))
+            pkgs.forEach { p ->
+                val ov = overrides[p.key]
+                val curPrice = ov?.pricePerK ?: p.defPrice
+                val curQty   = ov?.minQty ?: p.defQty
+                var open by remember { mutableStateOf(false) }
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
                 ) {
                     Column(Modifier.padding(16.dp)) {
-                        Text(row.serviceName, fontWeight = FontWeight.SemiBold, color = OnBg)
-                        val pp = row.pricePerK?.let { v -> "السعر/ألف: ${"%.2f".format(v)}" } ?: "السعر/ألف: (افتراضي)"
-                        val qn = "الكمية: ${row.minQty ?: "-"} إلى ${row.maxQty ?: "-"}"
-                        val md = "الوضع: ${row.mode ?: "per_k"}"
+                        Text(p.title, fontWeight = FontWeight.SemiBold, color = OnBg)
                         Spacer(Modifier.height(4.dp))
-                        Text("$pp  •  $qn  •  $md", color = Dim, fontSize = 12.sp)
+                        Text("السعر الحالي: ${"%.2f".format(curPrice)}\$ • الكمية: $curQty", color = Dim, fontSize = 12.sp)
                         Spacer(Modifier.height(8.dp))
                         Row {
-                            TextButton(onClick = { showDlg = true }) { Text("تعديل") }
+                            TextButton(onClick = { open = true }) { Text("تعديل") }
                             Spacer(Modifier.width(6.dp))
                             TextButton(onClick = {
                                 scope.launch {
-                                    val ok = apiAdminPricingServiceClear(token, row.serviceName)
-                                    if (ok) { refresh2++ ; snack2 = "تم حذف التعديل" } else snack2 = "فشل حذف التعديل"
+                                    val ok = apiAdminClearPricing(token, p.key)
+                                    if (ok) { snack = "تم حذف التعديل"; refreshKey++ } else snack = "فشل حذف التعديل"
                                 }
                             }) { Text("حذف التعديل") }
                         }
                     }
                 }
-                if (showDlg) {
-                    var mode by remember { mutableStateOf(row.mode ?: "per_k") }
-                    var price by remember { mutableStateOf(TextFieldValue(row.pricePerK?.toString() ?: "")) }
-                    var min by remember { mutableStateOf(TextFieldValue(row.minQty?.toString() ?: "")) }
-                    var max by remember { mutableStateOf(TextFieldValue(row.maxQty?.toString() ?: "")) }
+                if (open) {
+                    var priceTxt by remember { mutableStateOf(TextFieldValue(curPrice.toString())) }
+                    var qtyTxt   by remember { mutableStateOf(TextFieldValue(curQty.toString())) }
                     AlertDialog(
-                        onDismissRequest = { showDlg = false },
+                        onDismissRequest = { open = false },
                         confirmButton = {
                             TextButton(onClick = {
                                 scope.launch {
-                                    val p = price.text.toDoubleOrNull() ?: 0.0
-                                    val mn = min.text.toIntOrNull() ?: 0
-                                    val mx = max.text.toIntOrNull() ?: mn
-                                    val ok = apiAdminPricingServiceSet(token, row.serviceName, p, mn, mx, mode)
-                                    if (ok) { showDlg = false; refresh2++; snack2 = "تم الحفظ" } else snack2 = "فشل الحفظ"
+                                    val newPrice = priceTxt.text.toDoubleOrNull() ?: 0.0
+                                    val newQty   = qtyTxt.text.toIntOrNull() ?: 0
+                                    val ok = apiAdminSetPricing(
+                                        token = token,
+                                        uiKey = p.key,
+                                        pricePerK = newPrice,
+                                        minQty = newQty,
+                                        maxQty = newQty,
+                                        mode = "package"
+                                    )
+                                    if (ok) { snack = "تم الحفظ"; open = false; refreshKey++ } else snack = "فشل الحفظ"
                                 }
                             }) { Text("حفظ") }
                         },
-                        dismissButton = { TextButton(onClick = { showDlg = false }) { Text("إلغاء") } },
-                        title = { Text("تعديل: ${row.serviceName}") },
-                        text = {
+                        dismissButton = { TextButton(onClick = { open = false }) { Text("إلغاء") } },
+                        title = { Text("تعديل: ${p.title}") },
+                        text  = {
                             Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("الوضع:", modifier = Modifier.width(80.dp))
-                                    Row {
-                                        OutlinedButton(onClick = { mode = "per_k" }, enabled = mode != "per_k") { Text("per_k") }
-                                        Spacer(Modifier.width(6.dp))
-                                        OutlinedButton(onClick = { mode = "flat" }, enabled = mode != "flat") { Text("flat") }
-                                    }
-                                }
+                                OutlinedTextField(
+                                    value = priceTxt, onValueChange = { priceTxt = it },
+                                    label = { Text("السعر") }, singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        cursorColor = Accent,
+                                        focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                                        focusedLabelColor = OnBg, unfocusedLabelColor = Dim
+                                    )
+                                )
                                 Spacer(Modifier.height(6.dp))
-                                OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("السعر/ألف") }, singleLine = true)
-                                Spacer(Modifier.height(6.dp))
-                                OutlinedTextField(value = min, onValueChange = { min = it }, label = { Text("الحد الأدنى") }, singleLine = true)
-                                Spacer(Modifier.height(6.dp))
-                                OutlinedTextField(value = max, onValueChange = { max = it }, label = { Text("الحد الأقصى") }, singleLine = true)
+                                OutlinedTextField(
+                                    value = qtyTxt, onValueChange = { qtyTxt = it },
+                                    label = { Text("الكمية") }, singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        cursorColor = Accent,
+                                        focusedBorderColor = Accent, unfocusedBorderColor = Dim,
+                                        focusedLabelColor = OnBg, unfocusedLabelColor = Dim
+                                    )
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text("هذا النمط مطابق لببجي/لودو. يتم تطبيق التعديل فوراً على واجهة المستخدم.", color = Dim, fontSize = 12.sp)
                             }
                         }
                     )
                 }
             }
         }
-        snack2?.let { Text(it, color = OnBg); LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack2 = null } }
     }
     return@Column
 }
-
 /* PUBG/Ludo Orders Editor */
 if (selectedCat == "ببجي" || selectedCat == "لودو") {
     // عرض باقات ببجي/لودو وتعديل السعر والكمية بشكل مخصص لكل باقة
@@ -1868,6 +1899,29 @@ val ludoGoldPackages = listOf(
 /* ===== Helpers for PUBG/Ludo package overrides ===== */
 private fun extractDigits(s: String): String = s.filter { it.isDigit() }
 
+
+@Composable
+private fun amountsWithOverrides(
+    base: List<Int>,
+    keyPrefix: String,
+    defaultPriceOf: (Int) -> Double
+): Pair<List<Int>, Map<Int, Double>> {
+    val res by produceState(initialValue = Pair(base, emptyMap<Int, Double>()), base) {
+        val keys = base.map { "$keyPrefix$it" }
+        val map = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+        val amounts = mutableListOf<Int>()
+        val prices = mutableMapOf<Int, Double>()
+        for (usd in base) {
+            val ov = map["$keyPrefix$usd"]
+            val newAmt = ov?.minQty?.takeIf { it > 0 } ?: usd
+            val newPrice = ov?.pricePerK ?: defaultPriceOf(usd)
+            amounts += newAmt
+            prices[newAmt] = newPrice
+        }
+        value = Pair(amounts, prices)
+    }
+    return res
+}
 @Composable
 private fun packagesWithOverrides(
     base: List<PackageOption>,
@@ -2052,12 +2106,14 @@ fun ConfirmPackageIdDialog(
     // ----- Manual flows UI -----
     if (selectedManualFlow != null) {
         when (selectedManualFlow) {
+            
             "شراء رصيد ايتونز" -> {
+                val (amts, prices) = amountsWithOverrides(commonAmounts, "pkg.itunes.", ::priceForItunes)
                 AmountGrid(
                     title = "شراء رصيد ايتونز",
-                    subtitle = "كل 5$ = 9$",
-                    amounts = commonAmounts,
-                    priceOf = { usd -> priceForItunes(usd) },
+                    subtitle = "يمكن للمالك تعديل الأسعار والكميات",
+                    amounts = amts,
+                    priceOf = { usd -> prices[usd] ?: priceForItunes(usd) },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
@@ -2065,12 +2121,14 @@ fun ConfirmPackageIdDialog(
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
                 )
             }
+                
             "شراء رصيد اثير" -> {
+                val (amts, prices) = amountsWithOverrides(commonAmounts, "pkg.phone.atheer.", ::priceForAtheerOrAsiacell)
                 AmountGrid(
                     title = "شراء رصيد اثير",
-                    subtitle = "كل 5$ = 7$",
-                    amounts = commonAmounts,
-                    priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
+                    subtitle = "يمكن للمالك تعديل الأسعار والكميات",
+                    amounts = amts,
+                    priceOf = { usd -> prices[usd] ?: priceForAtheerOrAsiacell(usd) },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
@@ -2078,12 +2136,14 @@ fun ConfirmPackageIdDialog(
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
                 )
             }
+                
             "شراء رصيد اسياسيل" -> {
+                val (amts, prices) = amountsWithOverrides(commonAmounts, "pkg.phone.asiacell.", ::priceForAtheerOrAsiacell)
                 AmountGrid(
                     title = "شراء رصيد اسياسيل",
-                    subtitle = "كل 5$ = 7$",
-                    amounts = commonAmounts,
-                    priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
+                    subtitle = "يمكن للمالك تعديل الأسعار والكميات",
+                    amounts = amts,
+                    priceOf = { usd -> prices[usd] ?: priceForAtheerOrAsiacell(usd) },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
@@ -2091,12 +2151,14 @@ fun ConfirmPackageIdDialog(
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
                 )
             }
+                
             "شراء رصيد كورك" -> {
+                val (amts, prices) = amountsWithOverrides(commonAmounts, "pkg.phone.korek.", ::priceForKorek)
                 AmountGrid(
                     title = "شراء رصيد كورك",
-                    subtitle = "كل 5$ = 7$",
-                    amounts = commonAmounts,
-                    priceOf = { usd -> priceForKorek(usd) },
+                    subtitle = "يمكن للمالك تعديل الأسعار والكميات",
+                    amounts = amts,
+                    priceOf = { usd -> prices[usd] ?: priceForKorek(usd) },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
@@ -2104,7 +2166,7 @@ fun ConfirmPackageIdDialog(
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
                 )
             }
-            "شحن شدات ببجي" -> {
+                "شحن شدات ببجي" -> {
                 PackageGrid(
                     title = "شحن شدات ببجي",
                     subtitle = "اختر الباقة",

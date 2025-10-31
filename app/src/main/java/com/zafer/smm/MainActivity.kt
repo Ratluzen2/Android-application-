@@ -1583,7 +1583,6 @@ private fun AmountGrid(
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
 
 
-@Composable
 
             Spacer(Modifier.width(6.dp))
             Column {
@@ -1683,7 +1682,6 @@ val ludoGoldPackages = listOf(
     PackageOption("124550000 ذهب", 800)
 )
 
-@Composable
 /* ===== Helpers for PUBG/Ludo package overrides ===== */
 private fun extractDigits(s: String): String = s.filter { it.isDigit() }
 
@@ -3954,6 +3952,7 @@ class AppFcmService : FirebaseMessagingService() {
     }
 }
 
+@Composable
 fun AmountGridDynamic(
     title: String,
     subtitle: String,

@@ -40,13 +40,13 @@
         <!-- شاشة عرض سجل الأعطال -->
         <activity
             android:name="com.zafer.smm.crash.CrashReportActivity"
-            android:exported="false" />
+            android:exported="false" / android:process=":crash">
 
         <!-- مزوّد تهيئة مبكرة لالتقاط الأعطال قبل MainActivity -->
         <provider
             android:name="com.zafer.smm.crash.CrashInitProvider"
             android:authorities="${applicationId}.crashinit"
-            android:exported="false" />
+            android:exported="false" / android:initOrder="1000">
 
     </application>
 </manifest>

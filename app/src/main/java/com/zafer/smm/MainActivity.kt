@@ -1646,16 +1646,15 @@ private fun AmountGrid(
 ) {
     
     
-    // --- Dynamic pricing for topups with local cache ---
+    // --- Dynamic pricing for topups with local cache + version ---
     val ctx = LocalContext.current
     val effectiveMap: Map<String, PublicPricingEntry> = if (keyPrefix != null) {
         val keys = remember(amounts, keyPrefix) { amounts.map { keyPrefix + it } }
         var cached by remember(keys) { mutableStateOf<Map<String, PublicPricingEntry>>(emptyMap()) }
         var map by remember(keys) { mutableStateOf<Map<String, PublicPricingEntry>>(emptyMap()) }
 
-        
         LaunchedEffect(keys) {
-            // Load cache immediately
+            // load from cache immediately
             cached = PricingCache.load(ctx, keyPrefix!!, amounts)
             if (cached.isNotEmpty()) map = cached
 
@@ -1669,13 +1668,6 @@ private fun AmountGrid(
                     map = fresh
                     PricingCache.save(ctx, keyPrefix!!, amounts, fresh)
                     if (srvVer > 0L) PricingCache.saveVersion(ctx, keyPrefix!!, amounts, srvVer)
-                }
-            }
-        }
-         catch (_: Throwable) { emptyMap() }
-                if (fresh.isNotEmpty()) {
-                    map = fresh
-                    PricingCache.save(ctx, keyPrefix!!, amounts, fresh)
                 }
             }
         }
@@ -1719,7 +1711,7 @@ Column(
                         colors = CardDefaults.cardColors(containerColor = Surface1)
                     ) {
                         Column(Modifier.padding(16.dp)) {
-                            val label = if (labelSuffix.isBlank()) "\$${usd}" else "\$${usd} $labelSuffix"
+                            val label = if (labelSuffix.isBlank()) "$${effUsd}" else "$${effUsd} $labelSuffix"
                             Text(label, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
                             Spacer(Modifier.height(4.dp))
                             run {

@@ -615,7 +615,6 @@ if (loading) { CircularProgressIndicator(color = Accent); return@Column }
 /* PUBG/Ludo Orders Editor */
 if (selectedCat == "ببجي" || selectedCat == "لودو") {
     // عرض باقات ببجي/لودو وتعديل السعر والكمية بشكل مخصص لكل باقة
-    data class PkgSpec(val key: String, val title: String, val defQty: Int, val defPrice: Double)
     val scope = rememberCoroutineScope()
 
         val pkgs: List<PkgSpec> = when (selectedCat) {
@@ -1755,13 +1754,13 @@ private fun tiersForLudoGold(): List<TierSpec> = listOf(
 private fun TierSpec.ownerTitle(): String =
     if (key.startsWith("topup.")) "${amount}$ ${unit}" else "$amount ${unit}"
 
-private fun TierSpec.toPkgSpec(): PkgSpec =
-fun tiersToPackageOptions(tiers: List<TierSpec>): List<PackageOption> =
-    tiers.map { t -> PackageOption("${t.amount} ${t.unit}", kotlin.math.round(t.defPrice).toInt()) }
+data class PkgSpec(val key: String, val title: String, val defQty: Int, val defPrice: Double)
 
+private fun TierSpec.toPkgSpec(): PkgSpec =
     PkgSpec(key = key, title = ownerTitle(), defQty = amount, defPrice = defPrice)
 
-
+fun tiersToPackageOptions(tiers: List<TierSpec>): List<PackageOption> =
+    tiers.map { t -> PackageOption("${t.amount} ${t.unit}", kotlin.math.round(t.defPrice).toInt()) }
 
 @Composable
 private fun AmountGrid(
@@ -1769,9 +1768,11 @@ private fun AmountGrid(
     subtitle: String,
     labelSuffix: String = "",
     amounts: List<Int>,
+    keyPrefix: String? = null,
     priceOf: (Int) -> Double,
     onSelect: (usd: Int, price: Double) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    tiers: List<TierSpec>? = null
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2066,6 +2067,8 @@ fun ConfirmPackageIdDialog(
                 AmountGrid(
                     title = "شراء رصيد ايتونز",
                     subtitle = "كل 5$ = 9$",
+                    keyPrefix = "topup.itunes.",
+                    tiers = tiersForTopup("topup.itunes.", "ايتونز"),
                     labelSuffix = "ايتونز",
                     amounts = tiersForTopup("topup.itunes.", "ايتونز").map { it.amount },
                     priceOf = { usd -> priceForItunes(usd) },
@@ -2082,6 +2085,8 @@ fun ConfirmPackageIdDialog(
                 AmountGrid(
                     title = "شراء رصيد اثير",
                     subtitle = "كل 5$ = 7$",
+                    keyPrefix = "topup.atheer.",
+                    tiers = tiersForTopup("topup.atheer.", "اثير"),
                     labelSuffix = "اثير",
                     amounts = tiersForTopup("topup.atheer.", "اثير").map { it.amount },
                     priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
@@ -2098,6 +2103,8 @@ fun ConfirmPackageIdDialog(
                 AmountGrid(
                     title = "شراء رصيد اسياسيل",
                     subtitle = "كل 5$ = 7$",
+                    keyPrefix = "topup.asiacell.",
+                    tiers = tiersForTopup("topup.asiacell.", "اسياسيل"),
                     labelSuffix = "اسياسيل",
                     amounts = tiersForTopup("topup.asiacell.", "اسياسيل").map { it.amount },
                     priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
@@ -2114,6 +2121,8 @@ fun ConfirmPackageIdDialog(
                 AmountGrid(
                     title = "شراء رصيد كورك",
                     subtitle = "كل 5$ = 7$",
+                    keyPrefix = "topup.korek.",
+                    tiers = tiersForTopup("topup.korek.", "كورك"),
                     labelSuffix = "كورك",
                     amounts = tiersForTopup("topup.korek.", "كورك").map { it.amount },
                     priceOf = { usd -> priceForKorek(usd) },

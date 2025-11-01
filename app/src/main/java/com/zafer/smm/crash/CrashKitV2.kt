@@ -182,7 +182,7 @@ private fun CrashReportScreen(ctx: Context) {
                             .verticalScroll(rememberScrollState())
                     )
                 }
-            }}
+            }
         }
     }
 }
@@ -191,3 +191,5 @@ class CrashReportActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { MaterialTheme { CrashReportScreen(this@CrashReportActivity) } }
+}
+}

@@ -482,13 +482,11 @@ if (loading) { CircularProgressIndicator(color = Accent); return@Column }
                 Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
 
 /* PUBG/Ludo Orders Editor */
-if (selectedCat == "ببجي" || selectedCat == "لودو") {
+if (selectedCat in listOf("ببجي","لودو","ايتونز","أثير","اسياسيل","كورك")) {
     // عرض باقات ببجي/لودو وتعديل السعر والكمية بشكل مخصص لكل باقة
     data class PkgSpec(val key: String, val title: String, val defQty: Int, val defPrice: Double)
     val scope = rememberCoroutineScope()
-
-    
-    val pkgs: List<PkgSpec> = when (selectedCat) {
+val pkgs: List<PkgSpec> = when (selectedCat) {
         "ببجي" -> listOf(
             PkgSpec("pkg.pubg.60",   "60 شدة",    60,    2.0),
             PkgSpec("pkg.pubg.325",  "325 شدة",   325,   9.0),
@@ -519,19 +517,37 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
             PkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",    124550000,800.0)
         )
         "ايتونز" -> commonAmounts.map { usd ->
-            PkgSpec("topup.itunes.$" + "usd", "${usd}$ ايتونز", usd, priceForItunes(usd))
+            PkgSpec("topup.itunes.$" + "usd", "${usd}$ ايتونز", usd, usd.toDouble())
         }
         "أثير" -> commonAmounts.map { usd ->
-            PkgSpec("topup.atheer.$" + "usd", "${usd}$ اثير", usd, priceForAtheerOrAsiacell(usd))
+            PkgSpec("topup.atheer.$" + "usd", "${usd}$ اثير", usd, usd.toDouble())
         }
         "اسياسيل" -> commonAmounts.map { usd ->
-            PkgSpec("topup.asiacell.$" + "usd", "${usd}$ اسياسيل", usd, priceForAtheerOrAsiacell(usd))
+            PkgSpec("topup.asiacell.$" + "usd", "${usd}$ اسياسيل", usd, usd.toDouble())
         }
         "كورك" -> commonAmounts.map { usd ->
-            PkgSpec("topup.korek.$" + "usd", "${usd}$ كورك", usd, priceForKorek(usd))
+            PkgSpec("topup.korek.$" + "usd", "${usd}$ كورك", usd, usd.toDouble())
         }
         else -> emptyList()
-    }
+}
+    ,
+        PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
+        PkgSpec("pkg.ludo.diamonds.5080",    "5080 الماسة",      5080,    20.0),
+        PkgSpec("pkg.ludo.diamonds.12750",   "12750 الماسة",     12750,   35.0),
+        PkgSpec("pkg.ludo.diamonds.27200",   "27200 الماسة",     27200,   85.0),
+        PkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
+        PkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
+        PkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),
+        // Gold
+        PkgSpec("pkg.ludo.gold.66680",       "66680 ذهب",        66680,   5.0),
+        PkgSpec("pkg.ludo.gold.219500",      "219500 ذهب",       219500,  10.0),
+        PkgSpec("pkg.ludo.gold.1443000",     "1443000 ذهب",      1443000, 20.0),
+        PkgSpec("pkg.ludo.gold.3627000",     "3627000 ذهب",      3627000, 35.0),
+        PkgSpec("pkg.ludo.gold.9830000",     "9830000 ذهب",      9830000, 85.0),
+        PkgSpec("pkg.ludo.gold.24835000",    "24835000 ذهب",     24835000,165.0),
+        PkgSpec("pkg.ludo.gold.74550000",    "74550000 ذهب",     74550000,475.0),
+        PkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",    124550000,800.0)
+    )
 
     LazyColumn {
         items(pkgs) { p ->
@@ -1572,22 +1588,15 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
    ========================= */
 data class AmountOption(val label: String, val usd: Int)
 
-private val commonAmounts = listOf(5,10,15,20,25,30,40,50,100)
-
+private
 private fun priceForItunes(usd: Int): Double {
-    // كل 5$ = 9$
-    val steps = (usd / 5.0)
-    return steps * 9.0
+    return usd.toDouble()
 }
 private fun priceForAtheerOrAsiacell(usd: Int): Double {
-    // كل 5$ = 7$
-    val steps = (usd / 5.0)
-    return steps * 7.0
+    return usd.toDouble()
 }
 private fun priceForKorek(usd: Int): Double {
-    // كل 5$ = 7$
-    val steps = (usd / 5.0)
-    return steps * 7.0
+    return usd.toDouble()
 }
 
 @Composable
@@ -1601,7 +1610,13 @@ private fun AmountGrid(
     onSelect: (usd: Int, price: Double) -> Unit,
     onBack: () -> Unit
 ) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+            .padding(bottom = 100.dp)
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
             Spacer(Modifier.width(6.dp))
@@ -1610,50 +1625,33 @@ private fun AmountGrid(
                 if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 12.sp)
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
 
-        
-        // Build effective pricing with optional overrides (bulk)
-        val keyList = remember(amounts, keyPrefix) { if (keyPrefix != null) amounts.map { "$keyPrefix$it" } else emptyList() }
-        val effectiveMap by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keyList) {
-            value = try { apiPublicPricingBulk(keyList) } catch (_: Throwable) { emptyMap() }
-        }
-
-        data class Amt(val usd: Int, val price: Double)
-        val effectiveAmts = remember(amounts, effectiveMap) {
-            amounts.map { usd0 ->
-                val ov = if (keyPrefix != null) effectiveMap["${'$'}keyPrefix${'$'}usd0"] else null
-                val effUsd = ov?.minQty?.takeIf { it > 0 } ?: usd0
-                val effPrice = ov?.pricePerK ?: priceOf(usd0)
-                Amt(effUsd, effPrice)
-            }
-        }
-
-        val rows = effectiveAmts.chunked(2)
-        rows.forEach { pair ->
+        amounts.chunked(2).forEach { pair ->
             Row(Modifier.fillMaxWidth()) {
-                pair.forEach { item ->
-                    val price = String.format(java.util.Locale.getDefault(), "%.2f", item.price)
+                pair.forEach { usd ->
+                    val price = priceOf(usd)
                     ElevatedCard(
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
                             .padding(4.dp)
-                            .clickable { onSelect(item.usd, item.price) },
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = Surface1,
-                            contentColor = OnBg
-                        )
+                            .clickable { onSelect(usd, price) },
+                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
                     ) {
                         Column(Modifier.padding(16.dp)) {
-                            Text("${'$'}{item.usd}${'$'}${if (labelSuffix.isNotBlank()) labelSuffix else ""}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
+                            val label = if (labelSuffix.isBlank()) "${'$'}usd${'$'}" else "${'$'}usd${'$'} $labelSuffix"
+                            Text(label, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
                             Spacer(Modifier.height(4.dp))
-                            Text("السعر: ${'$'}price${'$'}", color = Dim, fontSize = 12.sp)
+                            Text("السعر: ${'$'}${'$'}price", color = Dim, fontSize = 12.sp)
                         }
                     }
                 }
                 if (pair.size == 1) Spacer(Modifier.weight(1f).padding(4.dp))
             }
         }
-            }
+    }
+}
+    }
 }
 
 @Composable
@@ -1682,6 +1680,10 @@ private fun ConfirmAmountDialog(
 
 }
 
+
+
+// قائمة مبالغ افتراضية مشتركة لاستخدامها في ايتونز/رصيد الهاتف
+private val COMMON_AMOUNTS = listOf(5,10,15,20,25,30,40,50,100)
 /* الأقسام اليدوية (ايتونز/هاتف/ببجي/لودو) */
 
 /* =========================
@@ -1783,6 +1785,7 @@ fun PackageGrid(
                         }
                     }
                 }
+                if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }
@@ -1909,12 +1912,12 @@ fun ConfirmPackageIdDialog(
             "شراء رصيد ايتونز" -> {
                 AmountGrid(
                     title = "شراء رصيد ايتونز",
-                    subtitle = "كل 5$ = 9$",
+                    subtitle = "اختر المبلغ",
                     labelSuffix = "ايتونز",
                     keyPrefix = "topup.itunes.",
 
-                    amounts = commonAmounts,
-                    priceOf = { usd -> priceForItunes(usd) },
+                    amounts = COMMON_AMOUNTS,
+                    priceOf = { usd -> usd.toDouble() },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
@@ -1925,12 +1928,12 @@ fun ConfirmPackageIdDialog(
             "شراء رصيد اثير" -> {
                 AmountGrid(
                     title = "شراء رصيد اثير",
-                    subtitle = "كل 5$ = 7$",
+                    subtitle = "اختر المبلغ",
                     labelSuffix = "اثير",
                     keyPrefix = "topup.atheer.",
 
-                    amounts = commonAmounts,
-                    priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
+                    amounts = COMMON_AMOUNTS,
+                    priceOf = { usd -> usd.toDouble() },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
@@ -1941,12 +1944,12 @@ fun ConfirmPackageIdDialog(
             "شراء رصيد اسياسيل" -> {
                 AmountGrid(
                     title = "شراء رصيد اسياسيل",
-                    subtitle = "كل 5$ = 7$",
+                    subtitle = "اختر المبلغ",
                     labelSuffix = "اسياسيل",
                     keyPrefix = "topup.asiacell.",
 
-                    amounts = commonAmounts,
-                    priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
+                    amounts = COMMON_AMOUNTS,
+                    priceOf = { usd -> usd.toDouble() },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
@@ -1957,12 +1960,12 @@ fun ConfirmPackageIdDialog(
             "شراء رصيد كورك" -> {
                 AmountGrid(
                     title = "شراء رصيد كورك",
-                    subtitle = "كل 5$ = 7$",
+                    subtitle = "اختر المبلغ",
                     labelSuffix = "كورك",
                     keyPrefix = "topup.korek.",
 
-                    amounts = commonAmounts,
-                    priceOf = { usd -> priceForKorek(usd) },
+                    amounts = COMMON_AMOUNTS,
+                    priceOf = { usd -> usd.toDouble() },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price

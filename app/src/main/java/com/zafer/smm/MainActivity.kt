@@ -102,6 +102,9 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.text.style.TextAlign
+import android.content.SharedPreferences
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 
 
@@ -165,7 +168,48 @@ object AppNotifier {
     }
 }
 
-@Composable
+
+    // --- Pricing cache (prefix+amounts -> map) persisted in SharedPreferences with TTL ---
+    private object PricingCache {
+        private fun verKey(prefix: String, amounts: List<Int>) = "ver:" + key(prefix, amounts)
+        fun getVersion(ctx: Context, prefix: String, amounts: List<Int>): Long = prefs(ctx).getLong(verKey(prefix, amounts), 0L)
+        fun saveVersion(ctx: Context, prefix: String, amounts: List<Int>, ver: Long) {
+            prefs(ctx).edit().putLong(verKey(prefix, amounts), ver).apply()
+        }
+        private const val PREF = "pricing_cache_v1"
+        private const val TTL_HOURS_DEFAULT = 12L
+
+        private fun prefs(ctx: Context): SharedPreferences =
+            ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+
+        private fun key(prefix: String, amounts: List<Int>) =
+            prefix + ":" + amounts.joinToString(",")
+
+        fun load(ctx: Context, prefix: String, amounts: List<Int>): Map<String, PublicPricingEntry> {
+            val json = prefs(ctx).getString("data:" + key(prefix, amounts), null) ?: return emptyMap()
+            return try {
+                val type = object : TypeToken<Map<String, PublicPricingEntry>>() {}.type
+                Gson().fromJson<Map<String, PublicPricingEntry>>(json, type) ?: emptyMap()
+            } catch (_: Throwable) { emptyMap() }
+        }
+
+        fun save(ctx: Context, prefix: String, amounts: List<Int>, data: Map<String, PublicPricingEntry>) {
+            val k = key(prefix, amounts)
+            prefs(ctx).edit()
+                .putString("data:" + k, Gson().toJson(data))
+                .putLong("ts:" + k, System.currentTimeMillis())
+                .apply()
+        }
+
+        fun isFresh(ctx: Context, prefix: String, amounts: List<Int>, ttlHours: Long = TTL_HOURS_DEFAULT): Boolean {
+            val ts = prefs(ctx).getLong("ts:" + key(prefix, amounts), 0L)
+            if (ts <= 0L) return false
+            val age = System.currentTimeMillis() - ts
+            return age < ttlHours * 60L * 60L * 1000L
+        }
+    }
+    // -------------------------------------------------------------------------------
+    @Composable
 private fun NoticeBody(text: String) {
     val clip = LocalClipboardManager.current
     val codeRegex = "(?:الكود|code|card|voucher|redeem)\\s*[:：-]?\\s*([A-Za-z0-9][A-Za-z0-9-]{5,})".toRegex(RegexOption.IGNORE_CASE)
@@ -409,6 +453,12 @@ private suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, Public
         }
         out
     } catch (_: Exception) { emptyMap() }
+}
+
+private suspend fun apiPublicPricingVersion(): Long {
+    val (code, txt) = httpGet("/api/public/pricing/version")
+    if (code !in 200..299 || txt == null) return 0L
+    return try { org.json.JSONObject(txt).optLong("version", 0L) } catch (_: Exception) { 0L }
 }
 
 @Composable
@@ -1595,24 +1645,51 @@ private fun AmountGrid(
     onBack: () -> Unit
 ) {
     
-    // --- Dynamic pricing for topups (iTunes/telecom) if keyPrefix is provided ---
-    val effectiveMap = if (keyPrefix != null) {
+    
+    // --- Dynamic pricing for topups with local cache ---
+    val ctx = LocalContext.current
+    val effectiveMap: Map<String, PublicPricingEntry> = if (keyPrefix != null) {
         val keys = remember(amounts, keyPrefix) { amounts.map { keyPrefix + it } }
-        val m by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keys) {
-            value = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+        var cached by remember(keys) { mutableStateOf<Map<String, PublicPricingEntry>>(emptyMap()) }
+        var map by remember(keys) { mutableStateOf<Map<String, PublicPricingEntry>>(emptyMap()) }
+
+        
+        LaunchedEffect(keys) {
+            // Load cache immediately
+            cached = PricingCache.load(ctx, keyPrefix!!, amounts)
+            if (cached.isNotEmpty()) map = cached
+
+            val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
+            val localVer = PricingCache.getVersion(ctx, keyPrefix!!, amounts)
+            val needRefresh = (srvVer > 0L && srvVer != localVer) || map.isEmpty()
+
+            if (needRefresh) {
+                val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                if (fresh.isNotEmpty()) {
+                    map = fresh
+                    PricingCache.save(ctx, keyPrefix!!, amounts, fresh)
+                    if (srvVer > 0L) PricingCache.saveVersion(ctx, keyPrefix!!, amounts, srvVer)
+                }
+            }
         }
-        m
+         catch (_: Throwable) { emptyMap() }
+                if (fresh.isNotEmpty()) {
+                    map = fresh
+                    PricingCache.save(ctx, keyPrefix!!, amounts, fresh)
+                }
+            }
+        }
+        map
     } else emptyMap()
 
     fun effectiveFor(usd: Int): Pair<Int, Double> {
         val entry = if (keyPrefix != null) effectiveMap[keyPrefix + usd] else null
         val effUsd = if (entry != null && entry.minQty > 0) entry.minQty else usd
-        val effPrice = if (entry != null && entry.pricePerK > 0.0) {
-            if (entry.mode == "flat") entry.pricePerK else entry.pricePerK
-        } else priceOf(effUsd)
+        val effPrice = if (entry != null && entry.pricePerK > 0.0) entry.pricePerK else priceOf(effUsd)
         return Pair(effUsd, effPrice)
     }
     // ---------------------------------------------------------------------------
+    
 Column(
         Modifier
             .fillMaxSize()
@@ -1642,7 +1719,7 @@ Column(
                         colors = CardDefaults.cardColors(containerColor = Surface1)
                     ) {
                         Column(Modifier.padding(16.dp)) {
-                            val label = if (labelSuffix.isBlank()) "\$${effUsd}" else "\$${effUsd} $labelSuffix"
+                            val label = if (labelSuffix.isBlank()) "\$${usd}" else "\$${usd} $labelSuffix"
                             Text(label, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
                             Spacer(Modifier.height(4.dp))
                             run {
@@ -1730,17 +1807,33 @@ val ludoGoldPackages = listOf(
 private fun extractDigits(s: String): String = s.filter { it.isDigit() }
 
 @Composable
+
 private fun packagesWithOverrides(
     base: List<PackageOption>,
     keyPrefix: String,
     unit: String
 ): List<PackageOption> {
+    val ctx = LocalContext.current
     val result by produceState(initialValue = base, base) {
-        val keys = base.mapNotNull { opt ->
-            val qty = opt.label.filter { it.isDigit() }
-            if (qty.isEmpty()) null else "$keyPrefix$qty"
+        val amounts = base.mapNotNull { opt -> opt.label.filter { it.isDigit() }.toIntOrNull() }
+        val keys = amounts.map { "$keyPrefix$it" }
+
+        
+        // Try cache with revision check
+        var map = PricingCache.load(ctx, keyPrefix, amounts)
+        val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
+        val localVer = PricingCache.getVersion(ctx, keyPrefix, amounts)
+        val needRefresh = (srvVer > 0L && srvVer != localVer) || map.isEmpty()
+
+        if (needRefresh) {
+            val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+            if (fresh.isNotEmpty()) {
+                map = fresh
+                PricingCache.save(ctx, keyPrefix, amounts, fresh)
+                if (srvVer > 0L) PricingCache.saveVersion(ctx, keyPrefix, amounts, srvVer)
+            }
         }
-        val map = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+
         value = base.map { opt ->
             val qtyStr = opt.label.filter { it.isDigit() }
             val k = if (qtyStr.isEmpty()) "" else "$keyPrefix$qtyStr"
@@ -1753,6 +1846,7 @@ private fun packagesWithOverrides(
     }
     return result
 }
+
 @Composable
 fun PackageGrid(
     title: String,

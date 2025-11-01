@@ -1,25 +1,16 @@
+
 package com.zafer.smm.crash
 
 import android.app.Activity
 import android.app.Application
 import android.content.*
 import android.database.Cursor
+import android.graphics.Typeface
 import android.net.Uri
-import android.os.Build
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.dp
+import android.os.*
+import android.view.View
+import android.view.ViewGroup
+import android.widget.*
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -28,8 +19,9 @@ import java.util.*
 import kotlin.system.exitProcess
 
 /**
- * CrashKitV2 — يلتقط أي كراش، يحفظ تقريرًا، ويعرض شاشة السجل تلقائيًا في أول تشغيل لاحق.
- * هذه النسخة تُثبّت نفسها مبكرًا جدًا عبر ContentProvider حتى لو الكراش يحدث قبل MainActivity.
+ * CrashKitV2 (Plain Views)
+ * يلتقط أي كراش، يحفظ تقريراً، ويعرض شاشة السجل تلقائيًا في أول تشغيل لاحق.
+ * بدون Compose لتقليل التبعيات ومنع كراش ثانوي.
  */
 object CrashKitV2 {
     private const val FILE_NAME = "crash_latest.txt"
@@ -53,7 +45,6 @@ object CrashKitV2 {
             } catch (_: Throwable) {
                 // ignore
             } finally {
-                // مرر للمعالج السابق (قد يطبع للّوغ) ثم أنهِ العملية
                 previous?.uncaughtException(t, e)
                 android.os.Process.killProcess(android.os.Process.myPid())
                 exitProcess(10)
@@ -67,7 +58,6 @@ object CrashKitV2 {
         val pending = prefs.getBoolean(KEY_PENDING, false)
         val file = File(app.filesDir, FILE_NAME)
         if (pending && file.exists()) {
-            // شغّل على الخيط الرئيسي لضمان سلامة بدء النشاط
             Handler(Looper.getMainLooper()).post {
                 val i = Intent(app, CrashReportActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
@@ -110,8 +100,8 @@ object CrashKitV2 {
 }
 
 /**
- * مزوّد محتوى بسيط للتثبيت المبكر بدون أي اعتماديات إضافية.
- * يُستدعى قبل إنشاء الأنشطة؛ ينصّب CrashKitV2 ويعرض شاشة السجل إن وجدت.
+ * ContentProvider للتثبيت المبكر جدًا.
+ * initOrder العالي يضمن تشغيله قبل أي Provider آخر في نفس العملية.
  */
 class CrashInitProvider : ContentProvider() {
     override fun onCreate(): Boolean {
@@ -127,81 +117,84 @@ class CrashInitProvider : ContentProvider() {
     override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun CrashReportScreen(ctx: Context) {
-    var text by remember { mutableStateOf(CrashKitV2.loadReport(ctx) ?: "لا توجد سجلات خطأ.") }
-
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("سجل الأعطال") }) }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .padding(16.dp)
-                .fillMaxSize()
-        ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    val clip = (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-                    clip.setPrimaryClip(ClipData.newPlainText("Crash Report", text))
-                }) { Text("نسخ") }
-
-                Button(onClick = {
-                    val share = Intent(Intent.ACTION_SEND).apply {
-                        type = "text/plain"
-                        putExtra(Intent.EXTRA_TEXT, text)
-                    }
-                    ctx.startActivity(Intent.createChooser(share, "مشاركة السجل").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }) { Text("مشاركة") }
-
-                OutlinedButton(onClick = {
-                    CrashKitV2.clearReport(ctx)
-                    text = "لا توجد سجلات خطأ."
-                }) { Text("مسح") }
-
-                Spacer(Modifier.weight(1f))
-
-                Button(onClick = {
-                    val pm = ctx.packageManager
-                    val launch = pm.getLaunchIntentForPackage(ctx.packageName)
-                    if (launch != null) {
-                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                        ctx.startActivity(launch)
-                    }
-                    if (ctx is Activity) (ctx as Activity).finish()
-                }) { Text("فتح التطبيق") }
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            Box(
-                modifier = Modifier
-                    .weight(1f, fill = true)
-                    .fillMaxWidth()
-            ) {
-                SelectionContainer {
-                    Text(
-                        text = text,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** Activity تعرض شاشة السجل. */
-class CrashReportActivity : ComponentActivity() {
+/**
+ * Activity خفيفة جدًا (بدون Compose) تُعرض في عملية منفصلة ':crash' لتتفادى تهيئة كود التطبيق الأساسي.
+ */
+class CrashReportActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            MaterialTheme {
-                CrashReportScreen(this@CrashReportActivity)
-            }
+
+        // واجهة بسيطة: صف أزرار + مساحة نص قابلة للتمرير
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 24, 24, 24)
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
+
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+
+        fun mkButton(text: String, onClick: () -> Unit): Button =
+            Button(this).apply {
+                this.text = text
+                setOnClickListener { onClick() }
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    setMargins(0, 0, 16, 0)
+                }
+            }
+
+        val tv = TextView(this).apply {
+            typeface = Typeface.MONOSPACE
+            textSize = 13f
+            isVerticalScrollBarEnabled = true
+        }
+
+        val scroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                topMargin = 16
+            }
+            addView(tv, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+
+        val ctx = this@CrashReportActivity
+        var current = CrashKitV2.loadReport(ctx) ?: "لا توجد سجلات خطأ."
+        tv.text = current
+
+        val copyBtn = mkButton("نسخ") {
+            val clip = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clip.setPrimaryClip(ClipData.newPlainText("Crash Report", current))
+            Toast.makeText(ctx, "تم النسخ", Toast.LENGTH_SHORT).show()
+        }
+        val shareBtn = mkButton("مشاركة") {
+            val share = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, current)
+            }
+            startActivity(Intent.createChooser(share, "مشاركة السجل"))
+        }
+        val clearBtn = mkButton("مسح") {
+            CrashKitV2.clearReport(ctx)
+            current = "لا توجد سجلات خطأ."
+            tv.text = current
+        }
+        val openBtn = mkButton("فتح التطبيق") {
+            val launch = packageManager.getLaunchIntentForPackage(packageName)
+            if (launch != null) {
+                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                startActivity(launch)
+            }
+            finish()
+        }
+
+        btnRow.addView(copyBtn)
+        btnRow.addView(shareBtn)
+        btnRow.addView(clearBtn)
+        btnRow.addView(openBtn)
+
+        root.addView(btnRow)
+        root.addView(scroll)
+        setContentView(root)
     }
 }

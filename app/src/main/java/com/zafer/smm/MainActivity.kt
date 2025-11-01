@@ -1,16 +1,10 @@
-
-import com.google.gson.annotations.SerializedName
-
-@file:Suppress("UnusedImport", "SpellCheckingInspection")
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-
 package com.zafer.smm
+import com.google.gson.annotations.SerializedName
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.material3.Card
-
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.width
@@ -85,7 +79,6 @@ import com.google.firebase.messaging.RemoteMessage
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.android.gms.tasks.Task
 import androidx.lifecycle.lifecycleScope
-
 import java.util.concurrent.TimeUnit
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -109,6 +102,9 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.text.style.TextAlign
+
+
+
 
 private const val OWNER_UID_BACKEND = "OWNER-0001" // يجب أن يطابق OWNER_UID في السيرفر
 

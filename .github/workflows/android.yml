@@ -1,4 +1,4 @@
-name: Android Build (Tag-unified, wrapper-safe)
+name: Android Build (Tag-unified, wrapper-safe, with-logs)
 
 on:
   workflow_dispatch:
@@ -59,6 +59,11 @@ jobs:
           echo "PROJECT_DIR=${{ env.PROJECT_DIR }}"
           echo "USE_WRAPPER=$USE_WRAPPER"
 
+      - name: Prepare log directory
+        run: |
+          echo "LOG_DIR=$GITHUB_WORKSPACE/build_logs" >> $GITHUB_ENV
+          mkdir -p "$GITHUB_WORKSPACE/build_logs"
+
       - name: Create google-services.json from secret (optional)
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
@@ -87,12 +92,22 @@ jobs:
           echo "VERSION_NAME=$TAG" >> $GITHUB_ENV
           echo "VERSION_CODE=${VC:-1}" >> $GITHUB_ENV
 
-      - name: Build with Gradle Wrapper
+      - name: Build with Gradle Wrapper (with full log)
         if: env.USE_WRAPPER == 'true'
         working-directory: ${{ env.PROJECT_DIR }}
+        shell: bash
         run: |
+          set -eo pipefail
           chmod +x ./gradlew || true
-          ./gradlew clean :app:assembleRelease             -PVERSION_NAME="$VERSION_NAME" -PVERSION_CODE="$VERSION_CODE"             -PversionName="$VERSION_NAME" -PversionCode="$VERSION_CODE"
+          echo "==== Gradle & Android env versions ====" >> "$LOG_DIR/versions.txt" 2>&1
+          ./gradlew --version >> "$LOG_DIR/versions.txt" 2>&1 || true
+          sdkmanager --version >> "$LOG_DIR/versions.txt" 2>&1 || true
+          echo "=======================================" >> "$LOG_DIR/versions.txt" 2>&1
+          # Run build and tee all output to a log file
+          ./gradlew clean :app:assembleRelease             -PVERSION_NAME="$VERSION_NAME" -PVERSION_CODE="$VERSION_CODE"             -PversionName="$VERSION_NAME" -PversionCode="$VERSION_CODE"             --stacktrace --info --no-daemon --console=plain 2>&1 | tee "$LOG_DIR/gradle_build.log"
+          GRADLE_EXIT=${PIPESTATUS[0]}
+          echo "GRADLE_EXIT=$GRADLE_EXIT" >> $GITHUB_ENV
+          exit $GRADLE_EXIT
 
       - name: Build with Gradle (no wrapper)
         if: env.USE_WRAPPER != 'true'
@@ -104,13 +119,15 @@ jobs:
             clean :app:assembleRelease
             -PVERSION_NAME=${{ env.VERSION_NAME }} -PVERSION_CODE=${{ env.VERSION_CODE }}
             -PversionName=${{ env.VERSION_NAME }} -PversionCode=${{ env.VERSION_CODE }}
+            --stacktrace --info --console=plain
 
       - name: Prepare keystore (optional)
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\r' | base64 -d > keystore.jks
+            echo "$ANDROID_KEYSTORE_BASE64" | tr -d '
+' | base64 -d > keystore.jks
             echo "HAS_KEYSTORE=true" >> $GITHUB_ENV
           else
             echo "HAS_KEYSTORE=false" >> $GITHUB_ENV
@@ -127,14 +144,14 @@ jobs:
           # Search for unsigned if wrapperless path differences occur
           UNSIGNED_APK=$(ls "$RELEASE_DIR"/*-unsigned.apk 2>/dev/null | head -n 1 || true)
           if [ -z "$UNSIGNED_APK" ]; then
-            echo "No *-unsigned.apk found in $RELEASE_DIR; listing files for debug:"
-            ls -lR "${{ env.PROJECT_DIR }}/app/build/outputs" || true
+            echo "No *-unsigned.apk found in $RELEASE_DIR; listing files for debug:" | tee -a "$LOG_DIR/signing.log"
+            ls -lR "${{ env.PROJECT_DIR }}/app/build/outputs" | tee -a "$LOG_DIR/signing.log" || true
           fi
           BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n1)
           if [ "$HAS_KEYSTORE" = "true" ] && [ -n "$KS_ALIAS" ] && [ -n "$KS_PASS" ] && [ -n "$KEY_PASS" ] && [ -n "$UNSIGNED_APK" ]; then
-            "$BT/zipalign" -f 4 "$UNSIGNED_APK" "$RELEASE_DIR/app-release-aligned.apk"
-            "$BT/apksigner" sign               --ks keystore.jks               --ks-key-alias "$KS_ALIAS"               --ks-pass pass:"$KS_PASS"               --key-pass pass:"$KEY_PASS"               --out "$RELEASE_DIR/app-release.apk"               "$RELEASE_DIR/app-release-aligned.apk"
-            "$BT/apksigner" verify -v "$RELEASE_DIR/app-release.apk"
+            "$BT/zipalign" -f 4 "$UNSIGNED_APK" "$RELEASE_DIR/app-release-aligned.apk" 2>&1 | tee -a "$LOG_DIR/signing.log"
+            "$BT/apksigner" sign               --ks keystore.jks               --ks-key-alias "$KS_ALIAS"               --ks-pass pass:"$KS_PASS"               --key-pass pass:"$KEY_PASS"               --out "$RELEASE_DIR/app-release.apk"               "$RELEASE_DIR/app-release-aligned.apk" 2>&1 | tee -a "$LOG_DIR/signing.log"
+            "$BT/apksigner" verify -v "$RELEASE_DIR/app-release.apk" 2>&1 | tee -a "$LOG_DIR/signing.log"
             echo "FINAL_APK=$RELEASE_DIR/app-release.apk" >> $GITHUB_ENV
           else
             # Fallback: upload unsigned or aligned if exists
@@ -147,7 +164,20 @@ jobs:
             fi
           fi
 
+      - name: Upload logs (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ env.VERSION_NAME }}-${{ github.run_attempt }}
+          path: |
+            build_logs/*
+            ${{ env.PROJECT_DIR }}/app/build/outputs/logs/**
+            ${{ env.PROJECT_DIR }}/app/build/reports/**
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Upload artifact (APK)
+        if: ${{ env.FINAL_APK != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: app-${{ env.VERSION_NAME }}

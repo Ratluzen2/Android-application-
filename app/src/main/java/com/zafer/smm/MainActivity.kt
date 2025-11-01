@@ -1588,7 +1588,26 @@ private fun AmountGrid(
     onSelect: (usd: Int, price: Double) -> Unit,
     onBack: () -> Unit
 ) {
-    Column(
+    
+    // --- Dynamic pricing for topups (iTunes/telecom) if keyPrefix is provided ---
+    val effectiveMap = if (keyPrefix != null) {
+        val keys = remember(amounts, keyPrefix) { amounts.map { keyPrefix + it } }
+        val m by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keys) {
+            value = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+        }
+        m
+    } else emptyMap()
+
+    fun effectiveFor(usd: Int): Pair<Int, Double> {
+        val entry = if (keyPrefix != null) effectiveMap[keyPrefix + usd] else null
+        val effUsd = if (entry != null && entry.minQty > 0) entry.minQty else usd
+        val effPrice = if (entry != null && entry.pricePerK > 0.0) {
+            if (entry.mode == "flat") entry.pricePerK else entry.pricePerK
+        } else priceOf(effUsd)
+        return Pair(effUsd, effPrice)
+    }
+    // ---------------------------------------------------------------------------
+Column(
         Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
@@ -1608,12 +1627,12 @@ private fun AmountGrid(
         amounts.chunked(2).forEach { pair ->
             Row(Modifier.fillMaxWidth()) {
                 pair.forEach { usd ->
-                    val price = priceOf(usd)
+                    val (effUsd, price) = effectiveFor(usd)
                     Card(
                         modifier = Modifier
                             .weight(1f)
                             .padding(4.dp)
-                            .clickable { onSelect(usd, price) },
+                            .clickable { onSelect(effUsd, price) },
                         colors = CardDefaults.cardColors(containerColor = Surface1)
                     ) {
                         Column(Modifier.padding(16.dp)) {

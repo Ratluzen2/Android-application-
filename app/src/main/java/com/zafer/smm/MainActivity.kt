@@ -610,8 +610,8 @@ if (loading) { CircularProgressIndicator(color = Accent); return@Column }
         } else {
             val list = servicesFor(selectedCat!!)
             Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { selectedCat = null }) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
-                Spacer(Modifier.width(6.dp))
                 Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
 
 /* PUBG/Ludo Orders Editor */
@@ -687,10 +687,10 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                     title = { Text("تعديل: ${p.title}") },
                     text  = {
                         Column {
+                        Column {
                             OutlinedTextField(value = priceTxt, onValueChange = { priceTxt = it }, label = { Text("السعر") }, singleLine = true)
-                            Spacer(Modifier.height(6.dp))
                             OutlinedTextField(value = qtyTxt, onValueChange = { qtyTxt = it }, label = { Text("الكمية") }, singleLine = true)
-                        }
+                            OutlinedTextField(value = qtyTxt, onValueChange = { qtyTxt = it }, label = { Text("الكمية") }, singleLine = true)
                     }
                 )
             }
@@ -715,9 +715,9 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                         Column(Modifier.padding(16.dp)) {
                             Text(key, fontWeight = FontWeight.SemiBold, color = OnBg)
                             Spacer(Modifier.height(4.dp))
+                            Spacer(Modifier.height(4.dp))
                             val tip = if (has) " (معدل)" else " (افتراضي)"
-                            Text("السعر/ألف: ${ov?.pricePerK ?: svc.pricePerK}  •  الحد الأدنى: ${ov?.minQty ?: svc.min}  •  الحد الأقصى: ${ov?.maxQty ?: svc.max}$tip", color = Dim, fontSize = 12.sp)
-                            Spacer(Modifier.height(8.dp))
+                            Text("السعر/ألف: ${(ov?.pricePerK ?: svc.pricePerK)} • الحد الأدنى: ${(ov?.minQty ?: svc.min)} • الحد الأقصى: ${(ov?.maxQty ?: svc.max)}$tip", color = Dim, fontSize = 12.sp)
                             Row {
                                 TextButton(onClick = { showEdit = true }) { Text("تعديل") }
                                 Spacer(Modifier.width(6.dp))
@@ -754,15 +754,14 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                             title = { Text("تعديل: $key") },
                             text = {
                                 Column {
+                                Column {
                                     OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("السعر المباشر") }, singleLine = true)
                                     Spacer(Modifier.height(6.dp))
                                     OutlinedTextField(value = min, onValueChange = { min = it }, label = { Text("الحد الأدنى") }, singleLine = true)
                                     Spacer(Modifier.height(6.dp))
                                     OutlinedTextField(value = max, onValueChange = { max = it }, label = { Text("الحد الأقصى") }, singleLine = true)
-                                }
                             }
                         )
-                    }
                 }
             }
         }

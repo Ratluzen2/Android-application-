@@ -932,9 +932,78 @@ setContent { AppTheme { UpdatePromptHost(); AppRoot() } }
    Root
    ========================= */
 @Composable
+private fun PrefetchPricingOnLaunch() {
+    val ctx = LocalContext.current
+    LaunchedEffect(Unit) {
+        // Ask server for the current pricing version; skip if unknown (0L)
+        val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
+        if (srvVer <= 0L) return@LaunchedEffect
+
+        // --- Topup providers ---
+        val topupPrefixes = listOf("topup.itunes.", "topup.atheer.", "topup.asiacell.", "topup.zain.", "topup.korek.")
+        for (prefix in topupPrefixes) {
+            val amounts = COMMON_AMOUNTS
+            val localVer = PricingCache.getVersion(ctx, prefix, amounts)
+            if (localVer != srvVer) {
+                val keys = amounts.map { prefix + it }
+                val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                if (fresh.isNotEmpty()) {
+                    PricingCache.save(ctx, prefix, amounts, fresh)
+                    PricingCache.saveVersion(ctx, prefix, amounts, srvVer)
+                }
+            }
+        }
+
+        // --- PUBG ---
+        run {
+            val amounts = pubgPackages.mapNotNull { extractDigits(it.label).toIntOrNull() }
+            val prefix = "pkg.pubg."
+            val localVer = PricingCache.getVersion(ctx, prefix, amounts)
+            if (localVer != srvVer) {
+                val keys = amounts.map { prefix + it }
+                val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                if (fresh.isNotEmpty()) {
+                    PricingCache.save(ctx, prefix, amounts, fresh)
+                    PricingCache.saveVersion(ctx, prefix, amounts, srvVer)
+                }
+            }
+        }
+
+        // --- Ludo (Diamonds & Gold) ---
+        run {
+            val diaAmounts = ludoDiamondsPackages.mapNotNull { extractDigits(it.label).toIntOrNull() }
+            val goldAmounts = ludoGoldPackages.mapNotNull { extractDigits(it.label).toIntOrNull() }
+            val diaPrefix = "pkg.ludo.diamonds."
+            val goldPrefix = "pkg.ludo.gold."
+
+            val localDia = PricingCache.getVersion(ctx, diaPrefix, diaAmounts)
+            if (localDia != srvVer) {
+                val keys = diaAmounts.map { diaPrefix + it }
+                val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                if (fresh.isNotEmpty()) {
+                    PricingCache.save(ctx, diaPrefix, diaAmounts, fresh)
+                    PricingCache.saveVersion(ctx, diaPrefix, diaAmounts, srvVer)
+                }
+            }
+
+            val localGold = PricingCache.getVersion(ctx, goldPrefix, goldAmounts)
+            if (localGold != srvVer) {
+                val keys = goldAmounts.map { goldPrefix + it }
+                val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                if (fresh.isNotEmpty()) {
+                    PricingCache.save(ctx, goldPrefix, goldAmounts, fresh)
+                    PricingCache.saveVersion(ctx, goldPrefix, goldAmounts, srvVer)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun AppRoot() {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
+    PrefetchPricingOnLaunch()
 
     var uid by remember { mutableStateOf(loadOrCreateUid(ctx)) }
     var ownerMode by remember { mutableStateOf(loadOwnerMode(ctx)) }

@@ -1417,7 +1417,7 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
             }
             Spacer(Modifier.height(10.dp))
 
-            inCat.forEach { svc ->
+            listToShow.forEach { svc ->
                 ElevatedCard(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1617,10 +1617,10 @@ private fun AmountGrid(
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
                     ) {
                         Column(Modifier.padding(16.dp)) {
-                            val label = if (labelSuffix.isBlank()) "${'$'}usd${'$'}" else "${'$'}usd${'$'} $labelSuffix"
+                            val label = if (labelSuffix.isBlank()) "${usd}$" else "${usd}$ $labelSuffix"
                             Text(label, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
                             Spacer(Modifier.height(4.dp))
-                            Text("السعر: ${'$'}${'$'}price", color = Dim, fontSize = 12.sp)
+                            Text("السعر: ${"%.2f".format(price)}\$", color = Dim, fontSize = 12.sp)
                         }
                     }
                 }
@@ -1851,39 +1851,41 @@ fun ConfirmPackageIdDialog(
         "قسم خدمات الودو"       -> listOf("شراء الماسات لودو", "شراء ذهب لودو")
         else -> emptyList()
     }
+
     if (selectedManualFlow == null) {
+        // قائمة الأقسام اليدوية
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+                .padding(bottom = 100.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+                Spacer(Modifier.width(6.dp))
+                Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+            }
+            Spacer(Modifier.height(10.dp))
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-        }
-        Spacer(Modifier.height(10.dp))
-
-        items.forEach { name ->
-            ElevatedCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
-                    .clickable {
-                        selectedManualFlow = name
-                    },
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = Surface1,
-                    contentColor = OnBg
-                )
-            ) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.ChevronLeft, null, tint = Accent)
-                    Spacer(Modifier.width(8.dp))
-                    Text(name, fontWeight = FontWeight.SemiBold, color = OnBg)
+            items.forEach { name ->
+                ElevatedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .clickable { selectedManualFlow = name },
+                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                ) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.ChevronLeft, null, tint = Accent)
+                        Spacer(Modifier.width(8.dp))
+                        Text(name, fontWeight = FontWeight.SemiBold, color = OnBg)
+                    }
                 }
             }
         }
-    }
-
-    // ----- Manual flows UI -----
+    } else {
+        // واجهة الاختيار داخل القسم اليدوي
         when (selectedManualFlow) {
             "شراء رصيد ايتونز" -> {
                 AmountGrid(
@@ -1891,7 +1893,6 @@ fun ConfirmPackageIdDialog(
                     subtitle = "اختر المبلغ",
                     labelSuffix = "ايتونز",
                     keyPrefix = "topup.itunes.",
-
                     amounts = COMMON_AMOUNTS,
                     priceOf = { usd -> usd.toDouble() },
                     onSelect = { usd, price ->
@@ -1907,7 +1908,6 @@ fun ConfirmPackageIdDialog(
                     subtitle = "اختر المبلغ",
                     labelSuffix = "اثير",
                     keyPrefix = "topup.atheer.",
-
                     amounts = COMMON_AMOUNTS,
                     priceOf = { usd -> usd.toDouble() },
                     onSelect = { usd, price ->
@@ -1923,7 +1923,6 @@ fun ConfirmPackageIdDialog(
                     subtitle = "اختر المبلغ",
                     labelSuffix = "اسياسيل",
                     keyPrefix = "topup.asiacell.",
-
                     amounts = COMMON_AMOUNTS,
                     priceOf = { usd -> usd.toDouble() },
                     onSelect = { usd, price ->
@@ -1939,7 +1938,6 @@ fun ConfirmPackageIdDialog(
                     subtitle = "اختر المبلغ",
                     labelSuffix = "كورك",
                     keyPrefix = "topup.korek.",
-
                     amounts = COMMON_AMOUNTS,
                     priceOf = { usd -> usd.toDouble() },
                     onSelect = { usd, price ->
@@ -1985,59 +1983,96 @@ fun ConfirmPackageIdDialog(
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
                 )
             }
-
         }
     }
 
-    
+    // حوارات التأكيد (تظهر بعد الاختيار)
     if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماسات لودو","شراء ذهب لودو") &&
         pendingPkgLabel != null && pendingPkgPrice != null) {
-    ConfirmPackageIdDialog(
-        sectionTitle = selectedManualFlow!!,
-        label = pendingPkgLabel!!,
-        priceUsd = pendingPkgPrice!!,
-        onConfirm = { accountId ->
-            val flow = selectedManualFlow
-            val priceInt = pendingPkgPrice
-            scope.launch {
-                if (flow != null && priceInt != null) {
-                    val bal = apiGetBalance(uid) ?: 0.0
-                    if (bal < priceInt) {
-                        onToast("رصيدك غير كافٍ. السعر: ${'$'}$priceInt | رصيدك: ${"%.2f".format(bal)}${'$'}")
-                    } else {
-                        val product = when (flow) {
-                            "شحن شدات ببجي" -> "pubg_uc"
-                            "شراء الماسات لودو" -> "ludo_diamonds"
-                            "شراء ذهب لودو" -> "ludo_gold"
-                            else -> "manual"
-                        }
-                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, accountId)
-                        if (ok) {
-                            onToast("تم استلام طلبك (${pendingPkgLabel}).")
-                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
-                            onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} (Player: ${accountId}) يحتاج مراجعة.", forOwner = true))
+        ConfirmPackageIdDialog(
+            sectionTitle = selectedManualFlow!!,
+            label = pendingPkgLabel!!,
+            priceUsd = pendingPkgPrice!!,
+            onConfirm = { accountId ->
+                val flow = selectedManualFlow
+                val priceInt = pendingPkgPrice
+                scope.launch {
+                    if (flow != null && priceInt != null) {
+                        val bal = apiGetBalance(uid) ?: 0.0
+                        if (bal < priceInt) {
+                            onToast("رصيدك غير كافٍ. السعر: ${"$"}$priceInt | رصيدك: ${"%.2f".format(bal)}${"$"}")
                         } else {
-                            val msg = (txt ?: "").lowercase()
-                            if (msg.contains("insufficient")) {
-                                onToast("رصيدك غير كافٍ لإتمام العملية.")
+                            val product = when (flow) {
+                                "شحن شدات ببجي" -> "pubg_uc"
+                                "شراء الماسات لودو" -> "ludo_diamonds"
+                                "شراء ذهب لودو" -> "ludo_gold"
+                                else -> "manual"
+                            }
+                            val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, accountId)
+                            if (ok) {
+                                onToast("تم استلام طلبك (${pendingPkgLabel}).")
+                                onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
+                                onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} (Player: ${accountId}) يحتاج مراجعة.", forOwner = true))
                             } else {
-                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
+                                val msg = (txt ?: "").lowercase()
+                                if (msg.contains("insufficient")) onToast("رصيدك غير كافٍ لإتمام العملية.")
+                                else onToast("تعذر إرسال الطلب. حاول لاحقًا.")
                             }
                         }
                     }
+                    pendingPkgLabel = null
+                    pendingPkgPrice = null
+                    selectedManualFlow = null
                 }
+            },
+            onDismiss = {
                 pendingPkgLabel = null
                 pendingPkgPrice = null
-                selectedManualFlow = null
             }
-        },
-        onDismiss = {
-            pendingPkgLabel = null
-            pendingPkgPrice = null
-        }
-    )
-}
-if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
+        )
+    }
+
+    if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
+        ConfirmAmountDialog(
+            sectionTitle = selectedManualFlow!!,
+            usd = pendingUsd!!,
+            price = pendingPrice!!,
+            onConfirm = {
+                val flow = selectedManualFlow
+                val amount = pendingUsd
+                scope.launch {
+                    if (flow != null && amount != null) {
+                        val product = when (flow) {
+                            "شراء رصيد ايتونز" -> "itunes"
+                            "شراء رصيد اثير" -> "atheer"
+                            "شراء رصيد اسياسيل" -> "asiacell"
+                            "شراء رصيد كورك" -> "korek"
+                            else -> "manual"
+                        }
+                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, amount)
+                        if (ok) {
+                            val label = "$flow ${amount}$"
+                            onToast("تم استلام طلبك ($label).")
+                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $label للمراجعة.", forOwner = false))
+                            onAddNotice(AppNotice("طلب جديد", "طلب $label من UID=$uid يحتاج مراجعة.", forOwner = true))
+                        } else {
+                            val msg = (txt ?: "").lowercase()
+                            if (msg.contains("insufficient")) onToast("رصيدك غير كافٍ لإتمام العملية.")
+                            else onToast("تعذر إرسال الطلب. حاول لاحقًا.")
+                        }
+                    }
+                    pendingUsd = null
+                    pendingPrice = null
+                    selectedManualFlow = null
+                }
+            },
+            onDismiss = {
+                pendingUsd = null
+                pendingPrice = null
+            }
+        )
+    }
+}if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         ConfirmAmountDialog(
             sectionTitle = selectedManualFlow!!,
             usd = pendingUsd!!,

@@ -1799,8 +1799,7 @@ val ludoGoldPackages = listOf(
     PackageOption("124550000 ذهب", 800)
 )
 
-@Composable
-
+}
 /* ===== App launch prefetch for pricing (version-based, non-Compose) ===== */
 private fun prefetchPricingOnLaunch(ctx: android.content.Context) {
     // Run in background; avoid blocking UI
@@ -1872,7 +1871,6 @@ private fun prefetchPricingOnLaunch(ctx: android.content.Context) {
 private fun extractDigits(s: String): String = s.filter { it.isDigit() }
 
 @Composable
-
 private fun packagesWithOverrides(
     base: List<PackageOption>,
     keyPrefix: String,

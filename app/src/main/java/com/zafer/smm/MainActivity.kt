@@ -1,4 +1,5 @@
 
+import com.google.gson.annotations.SerializedName
 
 @file:Suppress("UnusedImport", "SpellCheckingInspection")
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
@@ -379,7 +380,14 @@ private suspend fun apiAdminClearPricing(token: String, uiKey: String): Boolean 
 /* =========================
    Public Pricing (read-only for client)
    ========================= */
-data class PublicPricingEntry(val pricePerK: Double, val minQty: Int, val maxQty: Int, val mode: String = "per_k")
+data class PublicPricingEntry(@SerializedName(value = "pricePerK", alternate = ["price_per_k","flat_price"])
+    val pricePerK: Double,
+    @SerializedName(value = "minQty", alternate = ["min_qty"])
+    val minQty: Int,
+    @SerializedName(value = "maxQty", alternate = ["max_qty"])
+    val maxQty: Int,
+    @SerializedName(value = "mode", alternate = ["pricing_mode"])
+    val mode: String = "per_k" )
 
 private suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, PublicPricingEntry> {
     if (keys.isEmpty()) return emptyMap()

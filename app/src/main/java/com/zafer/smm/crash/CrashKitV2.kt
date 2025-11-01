@@ -1,4 +1,4 @@
-
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package com.zafer.smm.crash
 
 import android.app.Activity
@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -118,54 +119,73 @@ object CrashKitV2 {
 }
 
 /** شاشة Compose لعرض تقرير الأعطال مع نسخ/مشاركة/مسح. */
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CrashReportScreen(ctx: Context) {
+    var text by remember { mutableStateOf(CrashKitV2.loadReport(ctx) ?: "لا توجد سجلات خطأ.") }
+
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("سجل الأعطال") }) }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .padding(16.dp)
+                .fillMaxSize()
+        ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    val clip = (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                    clip.setPrimaryClip(ClipData.newPlainText("Crash Report", text))
+                }) { Text("نسخ") }
+
+                Button(onClick = {
+                    val share = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, text)
+                    }
+                    ctx.startActivity(Intent.createChooser(share, "مشاركة السجل").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }) { Text("مشاركة") }
+
+                OutlinedButton(onClick = {
+                    CrashKitV2.clearReport(ctx)
+                    text = "لا توجد سجلات خطأ."
+                }) { Text("مسح") }
+
+                Spacer(Modifier.weight(1f))
+
+                Button(onClick = {
+                    val pm = ctx.packageManager
+                    val launch = pm.getLaunchIntentForPackage(ctx.packageName)
+                    if (launch != null) {
+                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                        ctx.startActivity(launch)
+                    }
+                    if (ctx is Activity) (ctx as Activity).finish()
+                }) { Text("فتح التطبيق") }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            SelectionContainer {
+                Text(
+                    text = text,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = true)
+                        .verticalScroll(rememberScrollState())
+                )
+            }
+        }
+    }
+}
+
 class CrashReportActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent {
-            MaterialTheme {
-                val ctx = this@CrashReportActivity
-                var text by remember { mutableStateOf(CrashKitV2.loadReport(ctx) ?: "لا توجد سجلات خطأ.") }
-
-                Scaffold(
-                    topBar = { TopAppBar(title = { Text("سجل الأعطال") }) }
-                ) { padding ->
-                    Column(
-                        modifier = Modifier
-                            .padding(padding)
-                            .padding(16.dp)
-                            .fillMaxSize()
-                    ) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = {
-                                val clip = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clip.setPrimaryClip(ClipData.newPlainText("Crash Report", text))
-                            }) { Text("نسخ") }
-
-                            Button(onClick = {
-                                val share = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, text)
-                                }
-                                startActivity(Intent.createChooser(share, "مشاركة السجل"))
-                            }) { Text("مشاركة") }
-
-                            OutlinedButton(onClick = {
-                                CrashKitV2.clearReport(ctx)
-                                text = "لا توجد سجلات خطأ."
-                            }) { Text("مسح") }
-
-                            Spacer(Modifier.weight(1f))
-
-                            Button(onClick = {
-                                // افتح لانشر التطبيق
-                                val launch = packageManager.getLaunchIntentForPackage(packageName)
-                                if (launch != null) {
-                                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                                    startActivity(launch)
-                                }
-                                finish()
-                            }) { Text("فتح التطبيق") }
-                        }
+        setContent { MaterialTheme { CrashReportScreen(this@CrashReportActivity) } }
 
                         Spacer(Modifier.height(12.dp))
 

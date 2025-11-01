@@ -487,6 +487,7 @@ private suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, Public
         }
         out
     } catch (_: Exception) { emptyMap() }
+}
 private suspend fun apiPublicPricingVersion(): Long? {
     return try {
         val (code, txt) = httpGet("/api/public/pricing/version")
@@ -2077,8 +2078,6 @@ fun ConfirmPackageIdDialog(
                         pendingPrice = price
                     },
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
-                ,
-                    tiers = tiersForTopup("topup.itunes.", "ايتونز")
                 )
             }
             "شراء رصيد اثير" -> {
@@ -2095,8 +2094,6 @@ fun ConfirmPackageIdDialog(
                         pendingPrice = price
                     },
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
-                ,
-                    tiers = tiersForTopup("topup.atheer.", "اثير")
                 )
             }
             "شراء رصيد اسياسيل" -> {
@@ -2113,8 +2110,6 @@ fun ConfirmPackageIdDialog(
                         pendingPrice = price
                     },
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
-                ,
-                    tiers = tiersForTopup("topup.asiacell.", "اسياسيل")
                 )
             }
             "شراء رصيد كورك" -> {
@@ -2131,8 +2126,6 @@ fun ConfirmPackageIdDialog(
                         pendingPrice = price
                     },
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
-                ,
-                    tiers = tiersForTopup("topup.korek.", "كورك")
                 )
             }
             "شحن شدات ببجي" -> {

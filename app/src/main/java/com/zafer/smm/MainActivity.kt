@@ -924,6 +924,7 @@ class MainActivity : ComponentActivity() {
     android.util.Log.e("FCM", "Exception while getting token", e)
 }
 
+        com.zafer.smm.crash.CrashKitV2.init(application)
 setContent { AppTheme { UpdatePromptHost(); AppRoot() } }
         prefetchPricingOnLaunch(this)
     }

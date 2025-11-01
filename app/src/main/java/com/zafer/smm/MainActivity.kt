@@ -482,12 +482,10 @@ if (loading) { CircularProgressIndicator(color = Accent); return@Column }
                 Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
 
 /* PUBG/Ludo Orders Editor */
-if (selectedCat == "ببجي" || selectedCat == "لودو") {
-    // عرض باقات ببجي/لودو وتعديل السعر والكمية بشكل مخصص لكل باقة
+if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "اسياسيل", "كورك")) {
     data class PkgSpec(val key: String, val title: String, val defQty: Int, val defPrice: Double)
     val scope = rememberCoroutineScope()
 
-    
     val pkgs: List<PkgSpec> = when (selectedCat) {
         "ببجي" -> listOf(
             PkgSpec("pkg.pubg.60",   "60 شدة",    60,    2.0),
@@ -499,7 +497,6 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
             PkgSpec("pkg.pubg.16200","16200 شدة", 16200, 185.0)
         )
         "لودو" -> listOf(
-            // Diamonds
             PkgSpec("pkg.ludo.diamonds.810",     "810 الماسة",       810,     5.0),
             PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
             PkgSpec("pkg.ludo.diamonds.3180",    "3180 الماسة",      3180,    15.0),
@@ -508,7 +505,6 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
             PkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
             PkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
             PkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),
-            // Gold
             PkgSpec("pkg.ludo.gold.66680",       "66680 ذهب",        66680,   5.0),
             PkgSpec("pkg.ludo.gold.219500",      "219500 ذهب",       219500,  10.0),
             PkgSpec("pkg.ludo.gold.1443000",     "1443000 ذهب",      1443000, 20.0),
@@ -519,37 +515,19 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
             PkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",    124550000,800.0)
         )
         "ايتونز" -> commonAmounts.map { usd ->
-            PkgSpec("topup.itunes.$" + "usd", "${usd}$ ايتونز", usd, priceForItunes(usd))
+            PkgSpec("topup.itunes.$usd", "${usd}$ ايتونز", usd, priceForItunes(usd))
         }
         "أثير" -> commonAmounts.map { usd ->
-            PkgSpec("topup.atheer.$" + "usd", "${usd}$ اثير", usd, priceForAtheerOrAsiacell(usd))
+            PkgSpec("topup.atheer.$usd", "${usd}$ اثير", usd, priceForAtheerOrAsiacell(usd))
         }
         "اسياسيل" -> commonAmounts.map { usd ->
-            PkgSpec("topup.asiacell.$" + "usd", "${usd}$ اسياسيل", usd, priceForAtheerOrAsiacell(usd))
+            PkgSpec("topup.asiacell.$usd", "${usd}$ اسياسيل", usd, priceForAtheerOrAsiacell(usd))
         }
         "كورك" -> commonAmounts.map { usd ->
-            PkgSpec("topup.korek.$" + "usd", "${usd}$ كورك", usd, priceForKorek(usd))
+            PkgSpec("topup.korek.$usd", "${usd}$ كورك", usd, priceForKorek(usd))
         }
         else -> emptyList()
     }
-    ,
-        PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
-        PkgSpec("pkg.ludo.diamonds.5080",    "5080 الماسة",      5080,    20.0),
-        PkgSpec("pkg.ludo.diamonds.12750",   "12750 الماسة",     12750,   35.0),
-        PkgSpec("pkg.ludo.diamonds.27200",   "27200 الماسة",     27200,   85.0),
-        PkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
-        PkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
-        PkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),
-        // Gold
-        PkgSpec("pkg.ludo.gold.66680",       "66680 ذهب",        66680,   5.0),
-        PkgSpec("pkg.ludo.gold.219500",      "219500 ذهب",       219500,  10.0),
-        PkgSpec("pkg.ludo.gold.1443000",     "1443000 ذهب",      1443000, 20.0),
-        PkgSpec("pkg.ludo.gold.3627000",     "3627000 ذهب",      3627000, 35.0),
-        PkgSpec("pkg.ludo.gold.9830000",     "9830000 ذهب",      9830000, 85.0),
-        PkgSpec("pkg.ludo.gold.24835000",    "24835000 ذهب",     24835000,165.0),
-        PkgSpec("pkg.ludo.gold.74550000",    "74550000 ذهب",     74550000,475.0),
-        PkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",    124550000,800.0)
-    )
 
     LazyColumn {
         items(pkgs) { p ->
@@ -574,7 +552,7 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                             TextButton(onClick = {
                                 scope.launch {
                                     val ok = apiAdminClearPricing(token, p.key)
-                                    if (ok) { snack = "تم حذف التعديل"; refreshKey++ } else snack = "فشل الحذف"
+                                    if (ok) { onSnack("تم حذف التعديل"); onSaved() } else onSnack("فشل الحذف")
                                 }
                             }) { Text("حذف التعديل") }
                         }
@@ -600,7 +578,7 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                                     maxQty = newQty,
                                     mode = "package"
                                 )
-                                if (ok) { snack = "تم الحفظ"; open = false; refreshKey++ } else snack = "فشل الحفظ"
+                                if (ok) { onSnack("تم الحفظ"); open = false; onSaved() } else onSnack("فشل الحفظ")
                             }
                         }) { Text("حفظ") }
                     },
@@ -618,6 +596,9 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
         }
     }
     return@Column
+}
+}
+
 }
 
             }
@@ -1619,7 +1600,13 @@ private fun AmountGrid(
     onSelect: (usd: Int, price: Double) -> Unit,
     onBack: () -> Unit
 ) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+            .padding(bottom = 100.dp)
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
             Spacer(Modifier.width(6.dp))
@@ -1630,50 +1617,49 @@ private fun AmountGrid(
         }
         Spacer(Modifier.height(12.dp))
 
-        
-        // Build effective pricing with optional overrides (bulk)
-        val keyList = remember(amounts, keyPrefix) { if (keyPrefix != null) amounts.map { "$keyPrefix$it" } else emptyList() }
+        val keyList = remember(amounts, keyPrefix) {
+            if (keyPrefix != null) amounts.map { "$keyPrefix$it" } else emptyList()
+        }
         val effectiveMap by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keyList) {
             value = try { apiPublicPricingBulk(keyList) } catch (_: Throwable) { emptyMap() }
         }
 
-        data class Amt(val usd: Int, val price: Double)
-        val effectiveAmts = remember(amounts, effectiveMap) {
+        val pairs = remember(amounts, effectiveMap, keyPrefix) {
             amounts.map { usd0 ->
-                val ov = if (keyPrefix != null) effectiveMap["${'$'}keyPrefix${'$'}usd0"] else null
+                val ov = if (keyPrefix != null) effectiveMap["$keyPrefix$usd0"] else null
                 val effUsd = ov?.minQty?.takeIf { it > 0 } ?: usd0
                 val effPrice = ov?.pricePerK ?: priceOf(usd0)
-                Amt(effUsd, effPrice)
-            }
+                effUsd to effPrice
+            }.chunked(2)
         }
 
-        val rows = effectiveAmts.chunked(2)
-        rows.forEach { pair ->
+        pairs.forEach { pair ->
             Row(Modifier.fillMaxWidth()) {
-                pair.forEach { item ->
-                    val price = String.format(java.util.Locale.getDefault(), "%.2f", item.price)
+                pair.forEach { (usd, price) ->
+                    val priceStr = String.format(Locale.getDefault(), "%.2f", price)
                     ElevatedCard(
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
                             .padding(4.dp)
-                            .clickable { onSelect(item.usd, item.price) },
+                            .clickable { onSelect(usd, price) },
                         colors = CardDefaults.elevatedCardColors(
                             containerColor = Surface1,
                             contentColor = OnBg
                         )
                     ) {
                         Column(Modifier.padding(16.dp)) {
-                            Text("${'$'}{item.usd}${'$'}${if (labelSuffix.isNotBlank()) labelSuffix else ""}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
+                            val lbl = if (labelSuffix.isNotBlank()) " $labelSuffix" else ""
+                            Text("${usd}$$lbl", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
                             Spacer(Modifier.height(4.dp))
-                            Text("السعر: ${'$'}price${'$'}", color = Dim, fontSize = 12.sp)
+                            Text("السعر: $$priceStr", color = Dim, fontSize = 12.sp)
                         }
                     }
                 }
                 if (pair.size == 1) Spacer(Modifier.weight(1f).padding(4.dp))
             }
         }
-                if (pair.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
+    }
+}
     }
 }
 

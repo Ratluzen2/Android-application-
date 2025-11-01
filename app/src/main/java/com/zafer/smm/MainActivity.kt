@@ -429,7 +429,7 @@ data class PublicPricingEntry(
     val minQty: Int = 0,
     @SerializedName(value = "maxQty", alternate = ["max_qty"])
     val maxQty: Int = 0,
-    @SerializedName(value = "mode", alternate = ["pricing_mode", "mode"])
+    @SerializedName(value = "mode", alternate = ["pricing_mode"])
     val mode: String = "per_k"
 )
 

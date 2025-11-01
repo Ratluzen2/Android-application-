@@ -589,7 +589,10 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
         }
         
 if (loading) { CircularProgressIndicator(color = Accent); return@Column }
-        snack?.let { s -> Snackbar(Modifier.fillMaxWidth()) { Text(s) }; LaunchedEffect(s) { kotlinx.coroutines.delay(2000); snack = null } }
+        snack?.let { s ->
+    Snackbar(Modifier.fillMaxWidth()) { Text(s) }
+    LaunchedEffect(s) { kotlinx.coroutines.delay(2000); snack = null }
+}
         err?.let { e -> Text("تعذر جلب البيانات: $e", color = Bad); return@Column }
 
         if (selectedCat == null) {
@@ -1448,7 +1451,7 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
                 }
             },
             enabled = !sending
-        ) { Text(if (sending) "جاري الإرسال..." else "إرسال") }
+        ) { Text(if (sending) "جاري الإرسال" else "إرسال") }
     }
 }
 
@@ -1838,6 +1841,8 @@ private fun ConfirmAmountDialog(
 /* =========================
    Package Picker (PUBG / Ludo)
    ========================= */
+
+}
 data class PackageOption(val label: String, val priceUsd: Int)
 
 val pubgPackages = listOf(
@@ -3335,8 +3340,8 @@ private fun prefs(ctx: Context) = ctx.getSharedPreferences("app_prefs", Context.
 // =========================
 private const val PREF_ASIA_BAN_UNTIL = "asia_ban_until_ms"
 private const val PREF_ASIA_BAN_REASON = "asia_ban_reason"
-private const val PREF_ASIA_CARD_TIMES = "asia_card_times"    // JSONObject: { "CARD_DIGITS": [ts, ts, ...] }
-private const val PREF_ASIA_RECENT = "asia_recent_times"      // JSONArray: [ts, ts, ...]
+private const val PREF_ASIA_CARD_TIMES = "asia_card_times"    // JSONObject: { "CARD_DIGITS": [ts, ts, ] }
+private const val PREF_ASIA_RECENT = "asia_recent_times"      // JSONArray: [ts, ts, ]
 
 private fun clearAsiacellBan(ctx: Context) {
     prefs(ctx).edit().remove(PREF_ASIA_BAN_UNTIL).remove(PREF_ASIA_BAN_REASON).apply()
@@ -4026,7 +4031,7 @@ private fun FixedTopBar(
                 val (txt, clr) = when (online) {
                     true -> "متصل" to Good
                     false -> "غير متصل" to Bad
-                    else -> "..." to Dim
+                    else -> "" to Dim
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(10.dp).clip(CircleShape).background(clr))
@@ -4353,4 +4358,22 @@ class PricingMessagingService : com.google.firebase.messaging.FirebaseMessagingS
             // Ignore malformed payloads to avoid crashing FCM service
         }
     }
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
+}
 }

@@ -168,16 +168,21 @@ private fun CrashReportScreen(ctx: Context) {
 
             Spacer(Modifier.height(12.dp))
 
-            SelectionContainer {
-                Text(
-                    text = text,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = true)
-                        .verticalScroll(rememberScrollState())
-                )
-            }
+            Box(
+                modifier = Modifier
+                    .weight(1f, fill = true)
+                    .fillMaxWidth()
+            ) {
+                SelectionContainer {
+                    Text(
+                        text = text,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                    )
+                }
+            }}
         }
     }
 }
@@ -186,22 +191,3 @@ class CrashReportActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { MaterialTheme { CrashReportScreen(this@CrashReportActivity) } }
-
-                        Spacer(Modifier.height(12.dp))
-
-                        SelectionContainer {
-                            Text(
-                                text = text,
-                                fontFamily = FontFamily.Monospace,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f, fill = true)
-                                    .verticalScroll(rememberScrollState())
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}

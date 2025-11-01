@@ -415,12 +415,11 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
     var refreshKey by remember { mutableStateOf(0) }
     var snack by remember { mutableStateOf<String?>(null) }
 
-    val cats = listOf("مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
+    val cats = listOf(
+        
+        "مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
         "مشاهدات انستغرام", "لايكات انستغرام", "متابعين انستغرام", "مشاهدات بث انستا", "خدمات التليجرام",
-        "ببجي", "لودو"
-    ,
-        "ايتونز", "أثير", "اسياسيل", "كورك"
-    )
+        "ببجي", "لودو", "ايتونز", "أثير", "اسياسيل", "كورك")
 
     fun servicesFor(cat: String): List<ServiceDef> {
         fun hasAll(key: String, vararg words: String) = words.all { key.contains(it) }
@@ -487,71 +486,18 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
     data class PkgSpec(val key: String, val title: String, val defQty: Int, val defPrice: Double)
     val scope = rememberCoroutineScope()
 
-    
-    val pkgs: List<PkgSpec> = when (selectedCat) {
-        "ببجي" -> listOf(
-            PkgSpec("pkg.pubg.60",   "60 شدة",    60,    2.0),
-            PkgSpec("pkg.pubg.325",  "325 شدة",   325,   9.0),
-            PkgSpec("pkg.pubg.660",  "660 شدة",   660,   15.0),
-            PkgSpec("pkg.pubg.1800", "1800 شدة",  1800,  40.0),
-            PkgSpec("pkg.pubg.3850", "3850 شدة",  3850,  55.0),
-            PkgSpec("pkg.pubg.8100", "8100 شدة",  8100,  100.0),
-            PkgSpec("pkg.pubg.16200","16200 شدة", 16200, 185.0)
-        )
-        "لودو" -> listOf(
-            // Diamonds
-            PkgSpec("pkg.ludo.diamonds.810",     "810 الماسة",       810,     5.0),
-            PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
-            PkgSpec("pkg.ludo.diamonds.3180",    "3180 الماسة",      3180,    15.0),
-            PkgSpec("pkg.ludo.diamonds.8860",    "8860 الماسة",      8860,    35.0),
-            PkgSpec("pkg.ludo.diamonds.27730",   "27730 الماسة",     27730,   85.0),
-            PkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
-            PkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
-            PkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),
-            // Gold
-            PkgSpec("pkg.ludo.gold.66680",       "66680 ذهب",        66680,   5.0),
-            PkgSpec("pkg.ludo.gold.219500",      "219500 ذهب",       219500,  10.0),
-            PkgSpec("pkg.ludo.gold.1443000",     "1443000 ذهب",      1443000, 20.0),
-            PkgSpec("pkg.ludo.gold.3627000",     "3627000 ذهب",      3627000, 35.0),
-            PkgSpec("pkg.ludo.gold.9830000",     "9830000 ذهب",      9830000, 85.0),
-            PkgSpec("pkg.ludo.gold.24835000",    "24835000 ذهب",     24835000,165.0),
-            PkgSpec("pkg.ludo.gold.74550000",    "74550000 ذهب",     74550000,475.0),
-            PkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",    124550000,800.0)
-        )
-        "ايتونز" -> commonAmounts.map { usd ->
-            PkgSpec("topup.itunes.$" + "usd", "${usd}$ ايتونز", usd, priceForItunes(usd))
-        }
-        "أثير" -> commonAmounts.map { usd ->
-            PkgSpec("topup.atheer.$" + "usd", "${usd}$ اثير", usd, priceForAtheerOrAsiacell(usd))
-        }
-        "اسياسيل" -> commonAmounts.map { usd ->
-            PkgSpec("topup.asiacell.$" + "usd", "${usd}$ اسياسيل", usd, priceForAtheerOrAsiacell(usd))
-        }
-        "كورك" -> commonAmounts.map { usd ->
-            PkgSpec("topup.korek.$" + "usd", "${usd}$ كورك", usd, priceForKorek(usd))
-        }
+        val pkgs: List<PkgSpec> = when (selectedCat) {
+        "ببجي" -> tiersForPubg().map { it.toPkgSpec() }
+        "لودو" -> (tiersForLudoDiamonds() + tiersForLudoGold()).map { it.toPkgSpec() }
+        "ايتونز" -> tiersForTopup("topup.itunes.", "ايتونز").map { it.toPkgSpec() }
+        "أثير" -> tiersForTopup("topup.atheer.", "اثير").map { it.toPkgSpec() }
+        "اسياسيل" -> tiersForTopup("topup.asiacell.", "اسياسيل").map { it.toPkgSpec() }
+        "كورك" -> tiersForTopup("topup.korek.", "كورك").map { it.toPkgSpec() }
         else -> emptyList()
     }
-    ,
-        PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
-        PkgSpec("pkg.ludo.diamonds.5080",    "5080 الماسة",      5080,    20.0),
-        PkgSpec("pkg.ludo.diamonds.12750",   "12750 الماسة",     12750,   35.0),
-        PkgSpec("pkg.ludo.diamonds.27200",   "27200 الماسة",     27200,   85.0),
-        PkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
-        PkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
-        PkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),
-        // Gold
-        PkgSpec("pkg.ludo.gold.66680",       "66680 ذهب",        66680,   5.0),
-        PkgSpec("pkg.ludo.gold.219500",      "219500 ذهب",       219500,  10.0),
-        PkgSpec("pkg.ludo.gold.1443000",     "1443000 ذهب",      1443000, 20.0),
-        PkgSpec("pkg.ludo.gold.3627000",     "3627000 ذهب",      3627000, 35.0),
-        PkgSpec("pkg.ludo.gold.9830000",     "9830000 ذهب",      9830000, 85.0),
-        PkgSpec("pkg.ludo.gold.24835000",    "24835000 ذهب",     24835000,165.0),
-        PkgSpec("pkg.ludo.gold.74550000",    "74550000 ذهب",     74550000,475.0),
-        PkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",    124550000,800.0)
-    )
 
     LazyColumn {
+
         items(pkgs) { p ->
             val ov = overrides[p.key]
             val curPrice = ov?.pricePerK ?: p.defPrice
@@ -1608,13 +1554,75 @@ private fun priceForKorek(usd: Int): Double {
     return steps * 7.0
 }
 
+// --- Unified Tier model for both user & owner flows ---
+data class TierSpec(
+    val key: String,       // e.g., "topup.itunes.5", "pkg.pubg.60"
+    val amount: Int,       // e.g., 5, 10, 60, 325
+    val defPrice: Double,  // default price shown if no override
+    val unit: String       // e.g., "ايتونز", "اثير", "شدة", "الماسة", "ذهب"
+)
+
+private fun tiersForTopup(prefix: String, unit: String, amounts: List<Int> = listOf(5,10,15,20,25,30,40,50,100)): List<TierSpec> =
+    amounts.map { usd ->
+        val p = when (prefix) {
+            "topup.itunes."   -> priceForItunes(usd)
+            "topup.atheer."   -> priceForAtheerOrAsiacell(usd)
+            "topup.asiacell." -> priceForAtheerOrAsiacell(usd)
+            "topup.korek."    -> priceForKorek(usd)
+            else -> 0.0
+        }
+        TierSpec("$prefix$usd", usd, p, unit)
+    }
+
+private fun tiersForPubg(): List<TierSpec> = listOf(
+    TierSpec("pkg.pubg.60",     60,     2.0,  "شدة"),
+    TierSpec("pkg.pubg.325",    325,    9.0,  "شدة"),
+    TierSpec("pkg.pubg.660",    660,    15.0, "شدة"),
+    TierSpec("pkg.pubg.1800",   1800,   40.0, "شدة"),
+    TierSpec("pkg.pubg.3850",   3850,   55.0, "شدة"),
+    TierSpec("pkg.pubg.8100",   8100,   100.0,"شدة"),
+    TierSpec("pkg.pubg.16200",  16200,  185.0,"شدة"),
+)
+
+private fun tiersForLudoDiamonds(): List<TierSpec> = listOf(
+    TierSpec("pkg.ludo.diamonds.810",     810,     5.0,   "الماسة"),
+    TierSpec("pkg.ludo.diamonds.2280",    2280,    10.0,  "الماسة"),
+    TierSpec("pkg.ludo.diamonds.3180",    3180,    15.0,  "الماسة"),
+    TierSpec("pkg.ludo.diamonds.8860",    8860,    35.0,  "الماسة"),
+    TierSpec("pkg.ludo.diamonds.27730",   27730,   85.0,  "الماسة"),
+    TierSpec("pkg.ludo.diamonds.54900",   54900,   165.0, "الماسة"),
+    TierSpec("pkg.ludo.diamonds.164800",  164800,  475.0, "الماسة"),
+    TierSpec("pkg.ludo.diamonds.275400",  275400,  800.0, "الماسة"),
+)
+
+private fun tiersForLudoGold(): List<TierSpec> = listOf(
+    TierSpec("pkg.ludo.gold.66680",       66680,    5.0,   "ذهب"),
+    TierSpec("pkg.ludo.gold.219500",      219500,   10.0,  "ذهب"),
+    TierSpec("pkg.ludo.gold.1443000",     1443000,  20.0,  "ذهب"),
+    TierSpec("pkg.ludo.gold.3627000",     3627000,  35.0,  "ذهب"),
+    TierSpec("pkg.ludo.gold.9830000",     9830000,  85.0,  "ذهب"),
+    TierSpec("pkg.ludo.gold.24835000",    24835000, 165.0, "ذهب"),
+    TierSpec("pkg.ludo.gold.74550000",    74550000, 475.0, "ذهب"),
+    TierSpec("pkg.ludo.gold.124550000",   124550000,800.0, "ذهب"),
+)
+
+private fun TierSpec.ownerTitle(): String =
+    if (key.startsWith("topup.")) "${amount}$ ${unit}" else "$amount ${unit}"
+
+private fun TierSpec.toPkgSpec(): PkgSpec =
+fun tiersToPackageOptions(tiers: List<TierSpec>): List<PackageOption> =
+    tiers.map { t -> PackageOption("${t.amount} ${t.unit}", kotlin.math.round(t.defPrice).toInt()) }
+
+    PkgSpec(key = key, title = ownerTitle(), defQty = amount, defPrice = defPrice)
+
+
+
 @Composable
 private fun AmountGrid(
     title: String,
     subtitle: String,
     labelSuffix: String = "",
     amounts: List<Int>,
-    keyPrefix: String? = null,
     priceOf: (Int) -> Double,
     onSelect: (usd: Int, price: Double) -> Unit,
     onBack: () -> Unit
@@ -1630,47 +1638,27 @@ private fun AmountGrid(
         }
         Spacer(Modifier.height(12.dp))
 
-        
-        // Build effective pricing with optional overrides (bulk)
-        val keyList = remember(amounts, keyPrefix) { if (keyPrefix != null) amounts.map { "$keyPrefix$it" } else emptyList() }
-        val effectiveMap by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keyList) {
-            value = try { apiPublicPricingBulk(keyList) } catch (_: Throwable) { emptyMap() }
-        }
-
-        data class Amt(val usd: Int, val price: Double)
-        val effectiveAmts = remember(amounts, effectiveMap) {
-            amounts.map { usd0 ->
-                val ov = if (keyPrefix != null) effectiveMap["${'$'}keyPrefix${'$'}usd0"] else null
-                val effUsd = ov?.minQty?.takeIf { it > 0 } ?: usd0
-                val effPrice = ov?.pricePerK ?: priceOf(usd0)
-                Amt(effUsd, effPrice)
-            }
-        }
-
-        val rows = effectiveAmts.chunked(2)
+        val rows = amounts.chunked(2)
         rows.forEach { pair ->
             Row(Modifier.fillMaxWidth()) {
-                pair.forEach { item ->
-                    val price = String.format(java.util.Locale.getDefault(), "%.2f", item.price)
+                pair.forEach { usd ->
+                    val price = String.format(java.util.Locale.getDefault(), "%.2f", priceOf(usd))
                     ElevatedCard(
                         modifier = Modifier.weight(1f)
                             .padding(4.dp)
-                            .clickable { onSelect(item.usd, item.price) },
+                            .clickable { onSelect(usd, priceOf(usd)) },
                         colors = CardDefaults.elevatedCardColors(
                             containerColor = Surface1,
                             contentColor = OnBg
                         )
                     ) {
                         Column(Modifier.padding(16.dp)) {
-                            Text("${'$'}{item.usd}${'$'}${if (labelSuffix.isNotBlank()) labelSuffix else ""}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
+                            Text("$usd${"$"}${if (labelSuffix.isNotBlank()) labelSuffix else ""}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
                             Spacer(Modifier.height(4.dp))
-                            Text("السعر: ${'$'}price${'$'}", color = Dim, fontSize = 12.sp)
+                            Text("السعر: $price$", color = Dim, fontSize = 12.sp)
                         }
                     }
                 }
-                if (pair.size == 1) Spacer(Modifier.weight(1f).padding(4.dp))
-            }
-        }
                 if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
@@ -1933,15 +1921,15 @@ fun ConfirmPackageIdDialog(
                     title = "شراء رصيد ايتونز",
                     subtitle = "كل 5$ = 9$",
                     labelSuffix = "ايتونز",
-                    keyPrefix = "topup.itunes.",
-
-                    amounts = commonAmounts,
+                    amounts = tiersForTopup("topup.itunes.", "ايتونز").map { it.amount },
                     priceOf = { usd -> priceForItunes(usd) },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
                     },
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                ,
+                    tiers = tiersForTopup("topup.itunes.", "ايتونز")
                 )
             }
             "شراء رصيد اثير" -> {
@@ -1949,15 +1937,15 @@ fun ConfirmPackageIdDialog(
                     title = "شراء رصيد اثير",
                     subtitle = "كل 5$ = 7$",
                     labelSuffix = "اثير",
-                    keyPrefix = "topup.atheer.",
-
-                    amounts = commonAmounts,
+                    amounts = tiersForTopup("topup.atheer.", "اثير").map { it.amount },
                     priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
                     },
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                ,
+                    tiers = tiersForTopup("topup.atheer.", "اثير")
                 )
             }
             "شراء رصيد اسياسيل" -> {
@@ -1965,15 +1953,15 @@ fun ConfirmPackageIdDialog(
                     title = "شراء رصيد اسياسيل",
                     subtitle = "كل 5$ = 7$",
                     labelSuffix = "اسياسيل",
-                    keyPrefix = "topup.asiacell.",
-
-                    amounts = commonAmounts,
+                    amounts = tiersForTopup("topup.asiacell.", "اسياسيل").map { it.amount },
                     priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
                     },
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                ,
+                    tiers = tiersForTopup("topup.asiacell.", "اسياسيل")
                 )
             }
             "شراء رصيد كورك" -> {
@@ -1981,22 +1969,22 @@ fun ConfirmPackageIdDialog(
                     title = "شراء رصيد كورك",
                     subtitle = "كل 5$ = 7$",
                     labelSuffix = "كورك",
-                    keyPrefix = "topup.korek.",
-
-                    amounts = commonAmounts,
+                    amounts = tiersForTopup("topup.korek.", "كورك").map { it.amount },
                     priceOf = { usd -> priceForKorek(usd) },
                     onSelect = { usd, price ->
                         pendingUsd = usd
                         pendingPrice = price
                     },
                     onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
+                ,
+                    tiers = tiersForTopup("topup.korek.", "كورك")
                 )
             }
             "شحن شدات ببجي" -> {
                 PackageGrid(
                     title = "شحن شدات ببجي",
                     subtitle = "اختر الباقة",
-                    packages = packagesWithOverrides(pubgPackages, "pkg.pubg.", "شدة"),
+                    packages = packagesWithOverrides(tiersToPackageOptions(tiersForPubg()), "pkg.pubg.", "شدة"),
                     onSelect = { opt ->
                         pendingPkgLabel = opt.label
                         pendingPkgPrice = opt.priceUsd
@@ -2008,7 +1996,7 @@ fun ConfirmPackageIdDialog(
                 PackageGrid(
                     title = "شراء الماسات لودو",
                     subtitle = "اختر الباقة",
-                    packages = packagesWithOverrides(ludoDiamondsPackages, "pkg.ludo.diamonds.", "الماسة"),
+                    packages = packagesWithOverrides(tiersToPackageOptions(tiersForLudoDiamonds()), "pkg.ludo.diamonds.", "الماسة"),
                     onSelect = { opt ->
                         pendingPkgLabel = opt.label
                         pendingPkgPrice = opt.priceUsd
@@ -2020,7 +2008,7 @@ fun ConfirmPackageIdDialog(
                 PackageGrid(
                     title = "شراء ذهب لودو",
                     subtitle = "اختر الباقة",
-                    packages = packagesWithOverrides(ludoGoldPackages, "pkg.ludo.gold.", "ذهب"),
+                    packages = packagesWithOverrides(tiersToPackageOptions(tiersForLudoGold()), "pkg.ludo.gold.", "ذهب"),
                     onSelect = { opt ->
                         pendingPkgLabel = opt.label
                         pendingPkgPrice = opt.priceUsd

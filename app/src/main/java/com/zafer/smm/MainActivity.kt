@@ -1627,11 +1627,8 @@ private fun AmountGrid(
                 if (pair.size == 1) Spacer(Modifier.weight(1f).padding(4.dp))
             }
         }
-    }
-}
 
-@Composable
-private fun ConfirmAmountDialog(
+@Composable private fun ConfirmAmountDialog(
     sectionTitle: String,
     usd: Int,
     price: Double,

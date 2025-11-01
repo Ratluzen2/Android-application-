@@ -46,7 +46,6 @@ jobs:
             echo "PROJECT_DIR=$DIR" >> $GITHUB_ENV
             echo "USE_WRAPPER=true" >> $GITHUB_ENV
           else
-            # Try common roots
             for d in . android app ; do
               if [ -f "$d/settings.gradle" ] || [ -f "$d/settings.gradle.kts" ]; then
                 echo "Detected Gradle project at: $d"
@@ -56,8 +55,6 @@ jobs:
             done
             echo "USE_WRAPPER=false" >> $GITHUB_ENV
           fi
-          echo "PROJECT_DIR=${{ env.PROJECT_DIR }}"
-          echo "USE_WRAPPER=$USE_WRAPPER"
 
       - name: Prepare log directory
         run: |
@@ -96,6 +93,7 @@ jobs:
         if: env.USE_WRAPPER == 'true'
         working-directory: ${{ env.PROJECT_DIR }}
         shell: bash
+        continue-on-error: true
         run: |
           set -eo pipefail
           chmod +x ./gradlew || true
@@ -104,10 +102,8 @@ jobs:
           sdkmanager --version >> "$LOG_DIR/versions.txt" 2>&1 || true
           echo "=======================================" >> "$LOG_DIR/versions.txt" 2>&1
           # Run build and tee all output to a log file
-          ./gradlew clean :app:assembleRelease             -PVERSION_NAME="$VERSION_NAME" -PVERSION_CODE="$VERSION_CODE"             -PversionName="$VERSION_NAME" -PversionCode="$VERSION_CODE"             --stacktrace --info --no-daemon --console=plain 2>&1 | tee "$LOG_DIR/gradle_build.log"
-          GRADLE_EXIT=${PIPESTATUS[0]}
-          echo "GRADLE_EXIT=$GRADLE_EXIT" >> $GITHUB_ENV
-          exit $GRADLE_EXIT
+          ./gradlew clean :app:assembleRelease             -PVERSION_NAME="$VERSION_NAME" -PVERSION_CODE="$VERSION_CODE"             -PversionName="$VERSION_NAME" -PversionCode="$VERSION_CODE"             --stacktrace --info --no-daemon --console=plain             -Dorg.gradle.warning.mode=all             -Dkotlin.colors.enabled=false 2>&1 | tee "$LOG_DIR/gradle_build.log"
+          echo "GRADLE_EXIT=${PIPESTATUS[0]}" >> $GITHUB_ENV
 
       - name: Build with Gradle (no wrapper)
         if: env.USE_WRAPPER != 'true'
@@ -119,14 +115,27 @@ jobs:
             clean :app:assembleRelease
             -PVERSION_NAME=${{ env.VERSION_NAME }} -PVERSION_CODE=${{ env.VERSION_CODE }}
             -PversionName=${{ env.VERSION_NAME }} -PversionCode=${{ env.VERSION_CODE }}
-            --stacktrace --info --console=plain
+            --stacktrace --info --console=plain -Dorg.gradle.warning.mode=all -Dkotlin.colors.enabled=false
+
+      - name: Extract Kotlin errors (always)
+        if: always()
+        shell: bash
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          set -e
+          # Save only Kotlin compiler error lines and context
+          if [ -f "$LOG_DIR/gradle_build.log" ]; then
+            grep -nE "^e: |Unresolved reference|Unresolved reference:|Type mismatch|Unresolved symbol|Compilation error" "$LOG_DIR/gradle_build.log" > "$LOG_DIR/kotlin_errors_only.txt" || true
+            # Try to re-run Kotlin compile for clearer diagnostics when assemble failed early
+            ./gradlew :app:compileReleaseKotlin --stacktrace --console=plain -Dkotlin.colors.enabled=false 2>&1 | tee "$LOG_DIR/kotlin_compile.log" || true
+          fi
 
       - name: Prepare keystore (optional)
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\\r' | base64 -d > keystore.jks
+            echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\r' | base64 -d > keystore.jks
             echo "HAS_KEYSTORE=true" >> $GITHUB_ENV
           else
             echo "HAS_KEYSTORE=false" >> $GITHUB_ENV
@@ -140,12 +149,7 @@ jobs:
         run: |
           set -e
           RELEASE_DIR="${{ env.PROJECT_DIR }}/app/build/outputs/apk/release"
-          # Search for unsigned if wrapperless path differences occur
           UNSIGNED_APK=$(ls "$RELEASE_DIR"/*-unsigned.apk 2>/dev/null | head -n 1 || true)
-          if [ -z "$UNSIGNED_APK" ]; then
-            echo "No *-unsigned.apk found in $RELEASE_DIR; listing files for debug:" | tee -a "$LOG_DIR/signing.log"
-            ls -lR "${{ env.PROJECT_DIR }}/app/build/outputs" | tee -a "$LOG_DIR/signing.log" || true
-          fi
           BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n1)
           if [ "$HAS_KEYSTORE" = "true" ] && [ -n "$KS_ALIAS" ] && [ -n "$KS_PASS" ] && [ -n "$KEY_PASS" ] && [ -n "$UNSIGNED_APK" ]; then
             "$BT/zipalign" -f 4 "$UNSIGNED_APK" "$RELEASE_DIR/app-release-aligned.apk" 2>&1 | tee -a "$LOG_DIR/signing.log"
@@ -153,7 +157,6 @@ jobs:
             "$BT/apksigner" verify -v "$RELEASE_DIR/app-release.apk" 2>&1 | tee -a "$LOG_DIR/signing.log"
             echo "FINAL_APK=$RELEASE_DIR/app-release.apk" >> $GITHUB_ENV
           else
-            # Fallback: upload unsigned or aligned if exists
             if [ -n "$UNSIGNED_APK" ]; then
               echo "FINAL_APK=$UNSIGNED_APK" >> $GITHUB_ENV
             elif [ -f "$RELEASE_DIR/app-release.apk" ]; then

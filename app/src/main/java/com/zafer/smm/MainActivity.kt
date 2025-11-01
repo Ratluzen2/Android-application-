@@ -1884,6 +1884,9 @@ fun ConfirmPackageIdDialog(
     }
 
     // ----- Manual flows UI -----
+    }
+
+    // ---- Manual flows moved outside the null-check ----
         when (selectedManualFlow) {
             "شراء رصيد ايتونز" -> {
                 AmountGrid(
@@ -1987,7 +1990,6 @@ fun ConfirmPackageIdDialog(
             }
 
         }
-    }
 
     
     if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماسات لودو","شراء ذهب لودو") &&

@@ -1617,7 +1617,7 @@ private fun AmountGrid(
                         colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
                     ) {
                         Column(Modifier.padding(16.dp)) {
-                            val label = if (labelSuffix.isBlank()) "${'$'}usd${'$'}" else "${'$'}usd${'$'} $labelSuffix"
+                            val label = if (labelSuffix.isBlank()) "\$${usd}" else "\$${usd} $labelSuffix"
                             Text(label, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
                             Spacer(Modifier.height(4.dp))
                             Text("السعر: ${'$'}${'$'}price", color = Dim, fontSize = 12.sp)

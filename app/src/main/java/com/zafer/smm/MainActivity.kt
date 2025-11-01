@@ -1,5 +1,4 @@
 package com.zafer.smm
-import com.squareup.moshi.Json
 import com.google.gson.annotations.SerializedName
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
@@ -377,25 +376,16 @@ private suspend fun apiAdminClearPricing(token: String, uiKey: String): Boolean 
 /* =========================
    Public Pricing (read-only for client)
    ========================= */
-data class PublicPricingEntry(@SerializedName(value = "pricePerK", alternate = ["price_per_k","flat_price"])
-    @Json(name = "price_per_k")
+data class PublicPricingEntry(
+    @SerializedName(value = "pricePerK", alternate = ["price_per_k", "flat_price"])
     val pricePerK: Double = 0.0,
     @SerializedName(value = "minQty", alternate = ["min_qty"])
-    @Json(name = "min_qty")
     val minQty: Int = 0,
     @SerializedName(value = "maxQty", alternate = ["max_qty"])
-    @Json(name = "max_qty")
     val maxQty: Int = 0,
-    @SerializedName(value = "mode", alternate = ["pricing_mode"])
-    @Json(name = "pricing_mode")
-    val mode: String = "per_k" )
-    val pricePerK: Double,
-    @SerializedName(value = "minQty", alternate = ["min_qty"])
-    val minQty: Int,
-    @SerializedName(value = "maxQty", alternate = ["max_qty"])
-    val maxQty: Int,
-    @SerializedName(value = "mode", alternate = ["pricing_mode"])
-    val mode: String = "per_k" )
+    @SerializedName(value = "mode", alternate = ["pricing_mode", "mode"])
+    val mode: String = "per_k"
+)
 
 private suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, PublicPricingEntry> {
     if (keys.isEmpty()) return emptyMap()

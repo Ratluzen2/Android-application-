@@ -482,11 +482,12 @@ if (loading) { CircularProgressIndicator(color = Accent); return@Column }
                 Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
 
 /* PUBG/Ludo Orders Editor */
-if (selectedCat in listOf("ببجي","لودو","ايتونز","أثير","اسياسيل","كورك")) {
-    // عرض باقات ببجي/لودو وتعديل السعر والكمية بشكل مخصص لكل باقة
+if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "اسياسيل", "كورك")) {
+    // عرض باقات ببجي/لودو وباقات مبالغ (ايتونز/أثير/اسياسيل/كورك) وتعديل السعر/الكمية
     data class PkgSpec(val key: String, val title: String, val defQty: Int, val defPrice: Double)
     val scope = rememberCoroutineScope()
-val pkgs: List<PkgSpec> = when (selectedCat) {
+
+    val pkgs: List<PkgSpec> = when (selectedCat) {
         "ببجي" -> listOf(
             PkgSpec("pkg.pubg.60",   "60 شدة",    60,    2.0),
             PkgSpec("pkg.pubg.325",  "325 شدة",   325,   9.0),
@@ -516,40 +517,22 @@ val pkgs: List<PkgSpec> = when (selectedCat) {
             PkgSpec("pkg.ludo.gold.74550000",    "74550000 ذهب",     74550000,475.0),
             PkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",    124550000,800.0)
         )
-        "ايتونز" -> commonAmounts.map { usd ->
-            PkgSpec("topup.itunes.$" + "usd", "${usd}$ ايتونز", usd, usd.toDouble())
+        "ايتونز" -> COMMON_AMOUNTS.map { usd ->
+            PkgSpec("topup.itunes.$usd", "${usd}$ ايتونز", usd, usd.toDouble())
         }
-        "أثير" -> commonAmounts.map { usd ->
-            PkgSpec("topup.atheer.$" + "usd", "${usd}$ اثير", usd, usd.toDouble())
+        "أثير" -> COMMON_AMOUNTS.map { usd ->
+            PkgSpec("topup.atheer.$usd", "${usd}$ اثير", usd, usd.toDouble())
         }
-        "اسياسيل" -> commonAmounts.map { usd ->
-            PkgSpec("topup.asiacell.$" + "usd", "${usd}$ اسياسيل", usd, usd.toDouble())
+        "اسياسيل" -> COMMON_AMOUNTS.map { usd ->
+            PkgSpec("topup.asiacell.$usd", "${usd}$ اسياسيل", usd, usd.toDouble())
         }
-        "كورك" -> commonAmounts.map { usd ->
-            PkgSpec("topup.korek.$" + "usd", "${usd}$ كورك", usd, usd.toDouble())
+        "كورك" -> COMMON_AMOUNTS.map { usd ->
+            PkgSpec("topup.korek.$usd", "${usd}$ كورك", usd, usd.toDouble())
         }
         else -> emptyList()
-}
-    ,
-        PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
-        PkgSpec("pkg.ludo.diamonds.5080",    "5080 الماسة",      5080,    20.0),
-        PkgSpec("pkg.ludo.diamonds.12750",   "12750 الماسة",     12750,   35.0),
-        PkgSpec("pkg.ludo.diamonds.27200",   "27200 الماسة",     27200,   85.0),
-        PkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
-        PkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
-        PkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),
-        // Gold
-        PkgSpec("pkg.ludo.gold.66680",       "66680 ذهب",        66680,   5.0),
-        PkgSpec("pkg.ludo.gold.219500",      "219500 ذهب",       219500,  10.0),
-        PkgSpec("pkg.ludo.gold.1443000",     "1443000 ذهب",      1443000, 20.0),
-        PkgSpec("pkg.ludo.gold.3627000",     "3627000 ذهب",      3627000, 35.0),
-        PkgSpec("pkg.ludo.gold.9830000",     "9830000 ذهب",      9830000, 85.0),
-        PkgSpec("pkg.ludo.gold.24835000",    "24835000 ذهب",     24835000,165.0),
-        PkgSpec("pkg.ludo.gold.74550000",    "74550000 ذهب",     74550000,475.0),
-        PkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",    124550000,800.0)
-    )
+    }
 
-    LazyColumn {
+    LazyColumn(Modifier.fillMaxSize().padding(16.dp)) {
         items(pkgs) { p ->
             val ov = overrides[p.key]
             val curPrice = ov?.pricePerK ?: p.defPrice
@@ -566,13 +549,15 @@ val pkgs: List<PkgSpec> = when (selectedCat) {
                     Text("الكمية الحالية: $curQty  •  السعر الحالي: ${"%.2f".format(curPrice)}", color = Dim, fontSize = 12.sp)
                     Spacer(Modifier.height(8.dp))
                     Row {
-                        TextButton(onClick = { open = true }) { Text("تعديل") }
-                        Spacer(Modifier.width(6.dp))
+                        Button(onClick = { open = true }, colors = ButtonDefaults.buttonColors(containerColor = Accent)) {
+                            Text("تعديل", color = Color.White)
+                        }
+                        Spacer(Modifier.width(8.dp))
                         if (ov != null) {
-                            TextButton(onClick = {
+                            OutlinedButton(onClick = {
                                 scope.launch {
-                                    val ok = apiAdminClearPricing(token, p.key)
-                                    if (ok) { snack = "تم حذف التعديل"; refreshKey++ } else snack = "فشل الحذف"
+                                    val ok = apiAdminClearPricing(p.key)
+                                    if (ok) onToast("تم حذف التعديل.")
                                 }
                             }) { Text("حذف التعديل") }
                         }
@@ -581,41 +566,35 @@ val pkgs: List<PkgSpec> = when (selectedCat) {
             }
 
             if (open) {
-                var priceTxt by remember { mutableStateOf(TextFieldValue(curPrice.toString())) }
-                var qtyTxt   by remember { mutableStateOf(TextFieldValue(curQty.toString())) }
+                var priceInput by remember { mutableStateOf(curPrice.toString()) }
+                var qtyInput by remember { mutableStateOf(curQty.toString()) }
                 AlertDialog(
                     onDismissRequest = { open = false },
                     confirmButton = {
                         TextButton(onClick = {
-                            scope.launch {
-                                val newPrice = priceTxt.text.toDoubleOrNull() ?: 0.0
-                                val newQty   = qtyTxt.text.toIntOrNull() ?: 0
-                                val ok = apiAdminSetPricing(
-                                    token = token,
-                                    uiKey = p.key,
-                                    pricePerK = newPrice,
-                                    minQty = newQty,
-                                    maxQty = newQty,
-                                    mode = "package"
-                                )
-                                if (ok) { snack = "تم الحفظ"; open = false; refreshKey++ } else snack = "فشل الحفظ"
-                            }
+                            val newPrice = priceInput.toDoubleOrNull()
+                            val newQty   = qtyInput.toIntOrNull()
+                            if (newPrice != null && newQty != null) {
+                                scope.launch {
+                                    val ok = apiAdminSetPricing(p.key, newPrice, newQty, newQty, "package")
+                                    if (ok) { onToast("تم الحفظ."); open = false }
+                                }
+                            } else onToast("تحقق من القيم.")
                         }) { Text("حفظ") }
                     },
                     dismissButton = { TextButton(onClick = { open = false }) { Text("إلغاء") } },
-                    title = { Text("تعديل: ${p.title}") },
-                    text  = {
+                    title = { Text("تعديل ${p.title}", color = OnBg) },
+                    text = {
                         Column {
-                            OutlinedTextField(value = priceTxt, onValueChange = { priceTxt = it }, label = { Text("السعر") }, singleLine = true)
-                            Spacer(Modifier.height(6.dp))
-                            OutlinedTextField(value = qtyTxt, onValueChange = { qtyTxt = it }, label = { Text("الكمية") }, singleLine = true)
+                            OutlinedTextField(value = priceInput, onValueChange = { priceInput = it }, label = { Text("السعر") })
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedTextField(value = qtyInput, onValueChange = { qtyInput = it }, label = { Text("الكمية") })
                         }
                     }
                 )
             }
         }
     }
-    return@Column
 }
 
             }
@@ -1588,7 +1567,6 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
    ========================= */
 data class AmountOption(val label: String, val usd: Int)
 
-private
 private fun priceForItunes(usd: Int): Double {
     return usd.toDouble()
 }

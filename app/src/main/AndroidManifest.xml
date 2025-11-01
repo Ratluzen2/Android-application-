@@ -2,14 +2,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    
     <!-- إذن إشعارات Android 13+ -->
-    <uses-permission
-        android:name="android.permission.POST_NOTIFICATIONS"
-        tools:targetApi="33"/>
-    <!-- إنترنت -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+<!-- إنترنت -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- حالة الشبكة (مطلوب لبعض مكتبات Firebase/تحميل الصور/التحقق من الاتصال) -->
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <!-- (اختياري) لإشعار دائم عند تشغيل خدمة أمامية -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
 
@@ -21,8 +18,11 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.Smm.NoActionBar">
+        <!-- إزالة خدمة المكتبة لمنع الازدواج باستلام رسائل FCM -->
+        <service android:name="com.google.firebase.messaging.FirebaseMessagingService" tools:node="remove" />
 
-        <!-- خدمة FCM لاستقبال الإشعارات -->
+
+        <!-- خدمة FCM لاستقبال الإشعارات حتى لو التطبيق مُغلق -->
         <service
             android:name=".MyFirebaseService"
             android:exported="true">
@@ -31,7 +31,6 @@
             </intent-filter>
         </service>
 
-        <!-- الشاشة الرئيسية -->
         <activity
             android:name=".MainActivity"
             android:exported="true">

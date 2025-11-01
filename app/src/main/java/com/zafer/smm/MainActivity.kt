@@ -105,6 +105,7 @@ import androidx.compose.ui.text.style.TextAlign
 import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import androidx.annotation.Keep
 
 
 
@@ -420,6 +421,7 @@ private suspend fun apiAdminClearPricing(token: String, uiKey: String): Boolean 
 /* =========================
    Public Pricing (read-only for client)
    ========================= */
+@Keep
 data class PublicPricingEntry(
     @SerializedName(value = "pricePerK", alternate = ["price_per_k", "flat_price"])
     val pricePerK: Double = 0.0,

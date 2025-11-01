@@ -926,13 +926,14 @@ class MainActivity : ComponentActivity() {
 
 setContent { AppTheme { UpdatePromptHost(); AppRoot() } }
     }
+        prefetchPricingOnLaunch(this)
 }
 
 /* =========================
    Root
    ========================= */
 @Composable
-private fun PrefetchPricingOnLaunch() {
+private fun // Prefetch moved to onCreate (non-Compose) {
     val ctx = LocalContext.current
     LaunchedEffect(Unit) {
         // Ask server for the current pricing version; skip if unknown (0L)
@@ -1003,7 +1004,7 @@ private fun PrefetchPricingOnLaunch() {
 fun AppRoot() {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    PrefetchPricingOnLaunch()
+    // Prefetch moved to onCreate (non-Compose)
 
     var uid by remember { mutableStateOf(loadOrCreateUid(ctx)) }
     var ownerMode by remember { mutableStateOf(loadOwnerMode(ctx)) }
@@ -1866,6 +1867,74 @@ val ludoGoldPackages = listOf(
 )
 
 @Composable
+
+/* ===== App launch prefetch for pricing (version-based, non-Compose) ===== */
+private fun prefetchPricingOnLaunch(ctx: android.content.Context) {
+    // Run in background; avoid blocking UI
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
+        if (srvVer <= 0L) return@launch
+
+        // --- Topup providers ---
+        val topupPrefixes = listOf("topup.itunes.", "topup.atheer.", "topup.asiacell.", "topup.zain.", "topup.korek.")
+        for (prefix in topupPrefixes) {
+            val amounts = COMMON_AMOUNTS
+            val localVer = PricingCache.getVersion(ctx, prefix, amounts)
+            if (localVer != srvVer) {
+                val keys = amounts.map { prefix + it }
+                val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                if (fresh.isNotEmpty()) {
+                    PricingCache.save(ctx, prefix, amounts, fresh)
+                    PricingCache.saveVersion(ctx, prefix, amounts, srvVer)
+                }
+            }
+        }
+
+        // --- PUBG ---
+        run {
+            val amounts = pubgPackages.mapNotNull { extractDigits(it.label).toIntOrNull() }
+            val prefix = "pkg.pubg."
+            val localVer = PricingCache.getVersion(ctx, prefix, amounts)
+            if (localVer != srvVer) {
+                val keys = amounts.map { prefix + it }
+                val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                if (fresh.isNotEmpty()) {
+                    PricingCache.save(ctx, prefix, amounts, fresh)
+                    PricingCache.saveVersion(ctx, prefix, amounts, srvVer)
+                }
+            }
+        }
+
+        // --- Ludo (Diamonds & Gold) ---
+        run {
+            val diaAmounts = ludoDiamondsPackages.mapNotNull { extractDigits(it.label).toIntOrNull() }
+            val goldAmounts = ludoGoldPackages.mapNotNull { extractDigits(it.label).toIntOrNull() }
+            val diaPrefix = "pkg.ludo.diamonds."
+            val goldPrefix = "pkg.ludo.gold."
+
+            val localDia = PricingCache.getVersion(ctx, diaPrefix, diaAmounts)
+            if (localDia != srvVer) {
+                val keys = diaAmounts.map { diaPrefix + it }
+                val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                if (fresh.isNotEmpty()) {
+                    PricingCache.save(ctx, diaPrefix, diaAmounts, fresh)
+                    PricingCache.saveVersion(ctx, diaPrefix, diaAmounts, srvVer)
+                }
+            }
+
+            val localGold = PricingCache.getVersion(ctx, goldPrefix, goldAmounts)
+            if (localGold != srvVer) {
+                val keys = goldAmounts.map { goldPrefix + it }
+                val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                if (fresh.isNotEmpty()) {
+                    PricingCache.save(ctx, goldPrefix, goldAmounts, fresh)
+                    PricingCache.saveVersion(ctx, goldPrefix, goldAmounts, srvVer)
+                }
+            }
+        }
+    }
+}
+/* ===== End prefetch ===== */
 /* ===== Helpers for PUBG/Ludo package overrides ===== */
 private fun extractDigits(s: String): String = s.filter { it.isDigit() }
 

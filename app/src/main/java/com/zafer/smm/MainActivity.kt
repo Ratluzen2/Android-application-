@@ -532,24 +532,6 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
         }
         else -> emptyList()
     }
-    ,
-        PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
-        PkgSpec("pkg.ludo.diamonds.5080",    "5080 الماسة",      5080,    20.0),
-        PkgSpec("pkg.ludo.diamonds.12750",   "12750 الماسة",     12750,   35.0),
-        PkgSpec("pkg.ludo.diamonds.27200",   "27200 الماسة",     27200,   85.0),
-        PkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
-        PkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
-        PkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),
-        // Gold
-        PkgSpec("pkg.ludo.gold.66680",       "66680 ذهب",        66680,   5.0),
-        PkgSpec("pkg.ludo.gold.219500",      "219500 ذهب",       219500,  10.0),
-        PkgSpec("pkg.ludo.gold.1443000",     "1443000 ذهب",      1443000, 20.0),
-        PkgSpec("pkg.ludo.gold.3627000",     "3627000 ذهب",      3627000, 35.0),
-        PkgSpec("pkg.ludo.gold.9830000",     "9830000 ذهب",      9830000, 85.0),
-        PkgSpec("pkg.ludo.gold.24835000",    "24835000 ذهب",     24835000,165.0),
-        PkgSpec("pkg.ludo.gold.74550000",    "74550000 ذهب",     74550000,475.0),
-        PkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",    124550000,800.0)
-    )
 
     LazyColumn {
         items(pkgs) { p ->
@@ -1671,10 +1653,7 @@ private fun AmountGrid(
                 if (pair.size == 1) Spacer(Modifier.weight(1f).padding(4.dp))
             }
         }
-                if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
-        }
-    }
 }
 
 @Composable
@@ -1804,7 +1783,6 @@ fun PackageGrid(
                         }
                     }
                 }
-                if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }

@@ -1628,6 +1628,8 @@ private fun AmountGrid(
             }
         }
 
+}
+}
 @Composable private fun ConfirmAmountDialog(
     sectionTitle: String,
     usd: Int,
@@ -4124,4 +4126,8 @@ private fun AdminAnnouncementsList(
             androidx.compose.runtime.LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack = null }
         }
     }
+}
+}
+}
+}
 }

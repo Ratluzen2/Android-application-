@@ -1578,9 +1578,142 @@ private fun priceForKorek(usd: Int): Double {
 }
 
 @Composable
-@Composable
 private fun AmountGrid(
     title: String,
+    subtitle: String,
+    labelSuffix: String = "",
+    amounts: List<Int>,
+    keyPrefix: String? = null,
+    priceOf: (Int) -> Double,
+    onSelect: (usd: Int, price: Double) -> Unit,
+    onBack: () -> Unit
+) {
+    val resolved by produceState(initialValue = amounts.map { it to priceOf(it) }, amounts, keyPrefix) {
+        if (keyPrefix.isNullOrBlank()) {
+            value = amounts.map { it to priceOf(it) }
+        } else {
+            val keys = amounts.map { a -> "${keyPrefix}${a}" }
+            val map = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+            val pairs = amounts.map { usd ->
+                val ov = map["${keyPrefix}${usd}"]
+                val newUsd = ov?.minQty?.takeIf { it > 0 } ?: usd
+                val newPrice = ov?.pricePerK ?: priceOf(newUsd)
+                newUsd to newPrice
+            }
+            val dedup = linkedMapOf<Int, Double>()
+            pairs.sortedBy { it.first }.forEach { (u, p) -> dedup[u] = p }
+            value = dedup.entries.map { it.key to it.value }
+        }
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+            .padding(bottom = 100.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Column {
+                Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+
+        resolved.chunked(2).forEach { pair ->
+            Row(Modifier.fillMaxWidth()) {
+                pair.forEach { (usd, price) ->
+                    ElevatedCard(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(4.dp)
+                            .clickable { onSelect(usd, price) },
+                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            val label = if (labelSuffix.isBlank()) "\$${usd}" else "\$${usd} $labelSuffix"
+                            Text(label, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
+                            Spacer(Modifier.height(4.dp))
+                            val priceTxt = if (price % 1.0 == 0.0) price.toInt().toString() else "%.2f".format(price)
+                            Text("السعر: \$${priceTxt}", color = Dim, fontSize = 12.sp)
+                        }
+                    }
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f).padding(4.dp))
+            }
+        }
+    }
+}
+    subtitle: String,
+    labelSuffix: String = "",
+    amounts: List<Int>,
+    keyPrefix: String? = null,
+    priceOf: (Int) -> Double,
+    onSelect: (usd: Int, price: Double) -> Unit,
+    onBack: () -> Unit
+) {
+    val resolved by produceState(initialValue = amounts.map { it to priceOf(it) }, amounts, keyPrefix) {
+        if (keyPrefix.isNullOrBlank()) {
+            value = amounts.map { it to priceOf(it) }
+        } else {
+            val keys = amounts.map { a -> "${keyPrefix}${a}" }
+            val map = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+            val pairs = amounts.map { usd ->
+                val ov = map["${keyPrefix}${usd}"]
+                val newUsd = ov?.minQty?.takeIf { it > 0 } ?: usd
+                val newPrice = ov?.pricePerK ?: priceOf(newUsd)
+                newUsd to newPrice
+            }
+            val dedup = linkedMapOf<Int, Double>()
+            pairs.sortedBy { it.first }.forEach { (u, p) -> dedup[u] = p }
+            value = dedup.entries.map { it.key to it.value }
+        }
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+            .padding(bottom = 100.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Column {
+                Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+
+        resolved.chunked(2).forEach { pair ->
+            Row(Modifier.fillMaxWidth()) {
+                pair.forEach { (usd, price) ->
+                    ElevatedCard(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(4.dp)
+                            .clickable { onSelect(usd, price) },
+                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            val label = if (labelSuffix.isBlank()) "\$${usd}" else "\$${usd} $labelSuffix"
+                            Text(label, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
+                            Spacer(Modifier.height(4.dp))
+                            val priceTxt = if (price % 1.0 == 0.0) price.toInt().toString() else "%.2f".format(price)
+                            Text("السعر: \$${priceTxt}", color = Dim, fontSize = 12.sp)
+                        }
+                    }
+                }
+                if (pair.size == 1) Spacer(Modifier.weight(1f).padding(4.dp))
+            }
+        }
+    }
+}
     subtitle: String,
     labelSuffix: String = "",
     amounts: List<Int>,

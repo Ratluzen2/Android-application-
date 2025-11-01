@@ -1642,7 +1642,7 @@ Column(
                         colors = CardDefaults.cardColors(containerColor = Surface1)
                     ) {
                         Column(Modifier.padding(16.dp)) {
-                            val label = if (labelSuffix.isBlank()) "\$${usd}" else "\$${usd} $labelSuffix"
+                            val label = if (labelSuffix.isBlank()) "\$${effUsd}" else "\$${effUsd} $labelSuffix"
                             Text(label, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
                             Spacer(Modifier.height(4.dp))
                             run {

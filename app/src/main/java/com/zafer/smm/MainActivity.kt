@@ -675,9 +675,9 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                                     token = token,
                                     uiKey = p.key,
                                     pricePerK = newPrice,
-                                    minQty = newQty,
-                                    maxQty = newQty,
-                                    mode = "package"
+                                    minQty    = newQty,
+                                    maxQty    = newQty,
+                                    mode      = "package"
                                 )
                                 if (ok) { snack = "تم الحفظ"; open = false; refreshKey++ } else snack = "فشل الحفظ"
                             }
@@ -687,19 +687,19 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                     title = { Text("تعديل: ${p.title}") },
                     text  = {
                         Column {
-                        Column {
                             OutlinedTextField(value = priceTxt, onValueChange = { priceTxt = it }, label = { Text("السعر") }, singleLine = true)
+                            Spacer(Modifier.height(6.dp))
                             OutlinedTextField(value = qtyTxt, onValueChange = { qtyTxt = it }, label = { Text("الكمية") }, singleLine = true)
-                            OutlinedTextField(value = qtyTxt, onValueChange = { qtyTxt = it }, label = { Text("الكمية") }, singleLine = true)
+                        }
                     }
                 )
             }
         }
     }
-    return@Column
-}
-
-            }
+// FIX_REMOVED
+// FIX_REMOVED
+// FIX_REMOVED
+// FIX_REMOVED
             Spacer(Modifier.height(10.dp))
 
             LazyColumn {
@@ -753,7 +753,6 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
                             dismissButton = { TextButton(onClick = { showEdit = false }) { Text("إلغاء") } },
                             title = { Text("تعديل: $key") },
                             text = {
-                                Column {
                                 Column {
                                     OutlinedTextField(value = price, onValueChange = { price = it }, label = { Text("السعر المباشر") }, singleLine = true)
                                     Spacer(Modifier.height(6.dp))

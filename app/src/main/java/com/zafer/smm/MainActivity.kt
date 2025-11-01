@@ -415,11 +415,11 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
     var refreshKey by remember { mutableStateOf(0) }
     var snack by remember { mutableStateOf<String?>(null) }
 
-    val cats = listOf(
-        
-        "مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
+    val cats = listOf("مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
         "مشاهدات انستغرام", "لايكات انستغرام", "متابعين انستغرام", "مشاهدات بث انستا", "خدمات التليجرام",
         "ببجي", "لودو"
+    ,
+        "ايتونز", "أثير", "اسياسيل", "كورك"
     )
 
     fun servicesFor(cat: String): List<ServiceDef> {
@@ -487,17 +487,52 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
     data class PkgSpec(val key: String, val title: String, val defQty: Int, val defPrice: Double)
     val scope = rememberCoroutineScope()
 
-    val pkgs: List<PkgSpec> = if (selectedCat == "ببجي") listOf(
-        PkgSpec("pkg.pubg.60",   "60 شدة",    60,    2.0),
-        PkgSpec("pkg.pubg.325",  "325 شدة",   325,   9.0),
-        PkgSpec("pkg.pubg.660",  "660 شدة",   660,   15.0),
-        PkgSpec("pkg.pubg.1800", "1800 شدة",  1800,  40.0),
-        PkgSpec("pkg.pubg.3850", "3850 شدة",  3850,  55.0),
-        PkgSpec("pkg.pubg.8100", "8100 شدة",  8100,  100.0),
-        PkgSpec("pkg.pubg.16200","16200 شدة", 16200, 185.0)
-    ) else listOf(
-        // Diamonds
-        PkgSpec("pkg.ludo.diamonds.810",     "810 الماسة",       810,     5.0),
+    
+    val pkgs: List<PkgSpec> = when (selectedCat) {
+        "ببجي" -> listOf(
+            PkgSpec("pkg.pubg.60",   "60 شدة",    60,    2.0),
+            PkgSpec("pkg.pubg.325",  "325 شدة",   325,   9.0),
+            PkgSpec("pkg.pubg.660",  "660 شدة",   660,   15.0),
+            PkgSpec("pkg.pubg.1800", "1800 شدة",  1800,  40.0),
+            PkgSpec("pkg.pubg.3850", "3850 شدة",  3850,  55.0),
+            PkgSpec("pkg.pubg.8100", "8100 شدة",  8100,  100.0),
+            PkgSpec("pkg.pubg.16200","16200 شدة", 16200, 185.0)
+        )
+        "لودو" -> listOf(
+            // Diamonds
+            PkgSpec("pkg.ludo.diamonds.810",     "810 الماسة",       810,     5.0),
+            PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
+            PkgSpec("pkg.ludo.diamonds.3180",    "3180 الماسة",      3180,    15.0),
+            PkgSpec("pkg.ludo.diamonds.8860",    "8860 الماسة",      8860,    35.0),
+            PkgSpec("pkg.ludo.diamonds.27730",   "27730 الماسة",     27730,   85.0),
+            PkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
+            PkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
+            PkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),
+            // Gold
+            PkgSpec("pkg.ludo.gold.66680",       "66680 ذهب",        66680,   5.0),
+            PkgSpec("pkg.ludo.gold.219500",      "219500 ذهب",       219500,  10.0),
+            PkgSpec("pkg.ludo.gold.1443000",     "1443000 ذهب",      1443000, 20.0),
+            PkgSpec("pkg.ludo.gold.3627000",     "3627000 ذهب",      3627000, 35.0),
+            PkgSpec("pkg.ludo.gold.9830000",     "9830000 ذهب",      9830000, 85.0),
+            PkgSpec("pkg.ludo.gold.24835000",    "24835000 ذهب",     24835000,165.0),
+            PkgSpec("pkg.ludo.gold.74550000",    "74550000 ذهب",     74550000,475.0),
+            PkgSpec("pkg.ludo.gold.124550000",   "124550000 ذهب",    124550000,800.0)
+        )
+        "ايتونز" -> commonAmounts.map { usd ->
+            PkgSpec("topup.itunes.$" + "usd", "${usd}$ ايتونز", usd, priceForItunes(usd))
+        }
+        "أثير" -> commonAmounts.map { usd ->
+            PkgSpec("topup.atheer.$" + "usd", "${usd}$ اثير", usd, priceForAtheerOrAsiacell(usd))
+        }
+        "اسياسيل" -> commonAmounts.map { usd ->
+            PkgSpec("topup.asiacell.$" + "usd", "${usd}$ اسياسيل", usd, priceForAtheerOrAsiacell(usd))
+        }
+        "كورك" -> commonAmounts.map { usd ->
+            PkgSpec("topup.korek.$" + "usd", "${usd}$ كورك", usd, priceForKorek(usd))
+        }
+        else -> emptyList()
+    }
+    ,
         PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
         PkgSpec("pkg.ludo.diamonds.5080",    "5080 الماسة",      5080,    20.0),
         PkgSpec("pkg.ludo.diamonds.12750",   "12750 الماسة",     12750,   35.0),
@@ -1579,6 +1614,7 @@ private fun AmountGrid(
     subtitle: String,
     labelSuffix: String = "",
     amounts: List<Int>,
+    keyPrefix: String? = null,
     priceOf: (Int) -> Double,
     onSelect: (usd: Int, price: Double) -> Unit,
     onBack: () -> Unit
@@ -1594,27 +1630,47 @@ private fun AmountGrid(
         }
         Spacer(Modifier.height(12.dp))
 
-        val rows = amounts.chunked(2)
+        
+        // Build effective pricing with optional overrides (bulk)
+        val keyList = remember(amounts, keyPrefix) { if (keyPrefix != null) amounts.map { "$keyPrefix$it" } else emptyList() }
+        val effectiveMap by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keyList) {
+            value = try { apiPublicPricingBulk(keyList) } catch (_: Throwable) { emptyMap() }
+        }
+
+        data class Amt(val usd: Int, val price: Double)
+        val effectiveAmts = remember(amounts, effectiveMap) {
+            amounts.map { usd0 ->
+                val ov = if (keyPrefix != null) effectiveMap["${'$'}keyPrefix${'$'}usd0"] else null
+                val effUsd = ov?.minQty?.takeIf { it > 0 } ?: usd0
+                val effPrice = ov?.pricePerK ?: priceOf(usd0)
+                Amt(effUsd, effPrice)
+            }
+        }
+
+        val rows = effectiveAmts.chunked(2)
         rows.forEach { pair ->
             Row(Modifier.fillMaxWidth()) {
-                pair.forEach { usd ->
-                    val price = String.format(java.util.Locale.getDefault(), "%.2f", priceOf(usd))
+                pair.forEach { item ->
+                    val price = String.format(java.util.Locale.getDefault(), "%.2f", item.price)
                     ElevatedCard(
                         modifier = Modifier.weight(1f)
                             .padding(4.dp)
-                            .clickable { onSelect(usd, priceOf(usd)) },
+                            .clickable { onSelect(item.usd, item.price) },
                         colors = CardDefaults.elevatedCardColors(
                             containerColor = Surface1,
                             contentColor = OnBg
                         )
                     ) {
                         Column(Modifier.padding(16.dp)) {
-                            Text("$usd${"$"}${if (labelSuffix.isNotBlank()) labelSuffix else ""}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
+                            Text("${'$'}{item.usd}${'$'}${if (labelSuffix.isNotBlank()) labelSuffix else ""}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
                             Spacer(Modifier.height(4.dp))
-                            Text("السعر: $price$", color = Dim, fontSize = 12.sp)
+                            Text("السعر: ${'$'}price${'$'}", color = Dim, fontSize = 12.sp)
                         }
                     }
                 }
+                if (pair.size == 1) Spacer(Modifier.weight(1f).padding(4.dp))
+            }
+        }
                 if (pair.size == 1) Spacer(Modifier.weight(1f))
             }
         }
@@ -1838,45 +1894,47 @@ fun ConfirmPackageIdDialog(
         "قسم خدمات الودو"       -> listOf("شراء الماسات لودو", "شراء ذهب لودو")
         else -> emptyList()
     }
-
     if (selectedManualFlow == null) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp)
-                .padding(bottom = 100.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
-                Spacer(Modifier.width(6.dp))
-                Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-            }
-            Spacer(Modifier.height(10.dp))
 
-            items.forEach { name ->
-                ElevatedCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                        .clickable { selectedManualFlow = name },
-                    colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
-                ) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.ChevronLeft, null, tint = Accent)
-                        Spacer(Modifier.width(8.dp))
-                        Text(name, fontWeight = FontWeight.SemiBold, color = OnBg)
-                    }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg) }
+            Spacer(Modifier.width(6.dp))
+            Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
+        }
+        Spacer(Modifier.height(10.dp))
+
+        items.forEach { name ->
+            ElevatedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .clickable {
+                        selectedManualFlow = name
+                    },
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = Surface1,
+                    contentColor = OnBg
+                )
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.ChevronLeft, null, tint = Accent)
+                    Spacer(Modifier.width(8.dp))
+                    Text(name, fontWeight = FontWeight.SemiBold, color = OnBg)
                 }
             }
         }
-    } else {
+    }
+
+    // ----- Manual flows UI -----
         when (selectedManualFlow) {
             "شراء رصيد ايتونز" -> {
                 AmountGrid(
                     title = "شراء رصيد ايتونز",
                     subtitle = "كل 5$ = 9$",
                     labelSuffix = "ايتونز",
+                    keyPrefix = "topup.itunes.",
+
                     amounts = commonAmounts,
                     priceOf = { usd -> priceForItunes(usd) },
                     onSelect = { usd, price ->
@@ -1891,6 +1949,8 @@ fun ConfirmPackageIdDialog(
                     title = "شراء رصيد اثير",
                     subtitle = "كل 5$ = 7$",
                     labelSuffix = "اثير",
+                    keyPrefix = "topup.atheer.",
+
                     amounts = commonAmounts,
                     priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
                     onSelect = { usd, price ->
@@ -1905,6 +1965,8 @@ fun ConfirmPackageIdDialog(
                     title = "شراء رصيد اسياسيل",
                     subtitle = "كل 5$ = 7$",
                     labelSuffix = "اسياسيل",
+                    keyPrefix = "topup.asiacell.",
+
                     amounts = commonAmounts,
                     priceOf = { usd -> priceForAtheerOrAsiacell(usd) },
                     onSelect = { usd, price ->
@@ -1919,6 +1981,8 @@ fun ConfirmPackageIdDialog(
                     title = "شراء رصيد كورك",
                     subtitle = "كل 5$ = 7$",
                     labelSuffix = "كورك",
+                    keyPrefix = "topup.korek.",
+
                     amounts = commonAmounts,
                     priceOf = { usd -> priceForKorek(usd) },
                     onSelect = { usd, price ->
@@ -1937,7 +2001,7 @@ fun ConfirmPackageIdDialog(
                         pendingPkgLabel = opt.label
                         pendingPkgPrice = opt.priceUsd
                     },
-                    onBack = { selectedManualFlow = null; pendingPkgLabel = null; pendingPkgPrice = null }
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
                 )
             }
             "شراء الماسات لودو" -> {
@@ -1949,7 +2013,7 @@ fun ConfirmPackageIdDialog(
                         pendingPkgLabel = opt.label
                         pendingPkgPrice = opt.priceUsd
                     },
-                    onBack = { selectedManualFlow = null; pendingPkgLabel = null; pendingPkgPrice = null }
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
                 )
             }
             "شراء ذهب لودو" -> {
@@ -1961,62 +2025,62 @@ fun ConfirmPackageIdDialog(
                         pendingPkgLabel = opt.label
                         pendingPkgPrice = opt.priceUsd
                     },
-                    onBack = { selectedManualFlow = null; pendingPkgLabel = null; pendingPkgPrice = null }
+                    onBack = { selectedManualFlow = null; pendingUsd = null; pendingPrice = null }
                 )
             }
+
         }
     }
 
-    // حوارات التأكيد تبقى خارج شرط العرض لضمان عملها
+    
     if (selectedManualFlow in listOf("شحن شدات ببجي","شراء الماسات لودو","شراء ذهب لودو") &&
         pendingPkgLabel != null && pendingPkgPrice != null) {
-        ConfirmPackageIdDialog(
-            sectionTitle = selectedManualFlow!!,
-            label = pendingPkgLabel!!,
-            priceUsd = pendingPkgPrice!!,
-            onConfirm = { accountId ->
-                val flow = selectedManualFlow
-                val priceInt = pendingPkgPrice
-                scope.launch {
-                    if (flow != null && priceInt != null) {
-                        val bal = apiGetBalance(uid) ?: 0.0
-                        if (bal < priceInt) {
-                            onToast("رصيدك غير كافٍ. السعر: ${'$'}$priceInt | رصيدك: ${"%.2f".format(bal)}${'$'}")
+    ConfirmPackageIdDialog(
+        sectionTitle = selectedManualFlow!!,
+        label = pendingPkgLabel!!,
+        priceUsd = pendingPkgPrice!!,
+        onConfirm = { accountId ->
+            val flow = selectedManualFlow
+            val priceInt = pendingPkgPrice
+            scope.launch {
+                if (flow != null && priceInt != null) {
+                    val bal = apiGetBalance(uid) ?: 0.0
+                    if (bal < priceInt) {
+                        onToast("رصيدك غير كافٍ. السعر: ${'$'}$priceInt | رصيدك: ${"%.2f".format(bal)}${'$'}")
+                    } else {
+                        val product = when (flow) {
+                            "شحن شدات ببجي" -> "pubg_uc"
+                            "شراء الماسات لودو" -> "ludo_diamonds"
+                            "شراء ذهب لودو" -> "ludo_gold"
+                            else -> "manual"
+                        }
+                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, accountId)
+                        if (ok) {
+                            onToast("تم استلام طلبك (${pendingPkgLabel}).")
+                            onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
+                            onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} (Player: ${accountId}) يحتاج مراجعة.", forOwner = true))
                         } else {
-                            val product = when (flow) {
-                                "شحن شدات ببجي" -> "pubg_uc"
-                                "شراء الماسات لودو" -> "ludo_diamonds"
-                                "شراء ذهب لودو" -> "ludo_gold"
-                                else -> "manual"
-                            }
-                            val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, accountId)
-                            if (ok) {
-                                onToast("تم استلام طلبك (${pendingPkgLabel}).")
-                                onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
-                                onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} (Player: ${accountId}) يحتاج مراجعة.", forOwner = true))
+                            val msg = (txt ?: "").lowercase()
+                            if (msg.contains("insufficient")) {
+                                onToast("رصيدك غير كافٍ لإتمام العملية.")
                             } else {
-                                val msg = (txt ?: "").lowercase()
-                                if (msg.contains("insufficient")) {
-                                    onToast("رصيدك غير كافٍ لإتمام العملية.")
-                                } else {
-                                    onToast("تعذر إرسال الطلب. حاول لاحقًا.")
-                                }
+                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
                             }
                         }
                     }
-                    pendingPkgLabel = null
-                    pendingPkgPrice = null
-                    selectedManualFlow = null
                 }
-            },
-            onDismiss = {
                 pendingPkgLabel = null
                 pendingPkgPrice = null
+                selectedManualFlow = null
             }
-        )
-    }
-
-    if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
+        },
+        onDismiss = {
+            pendingPkgLabel = null
+            pendingPkgPrice = null
+        }
+    )
+}
+if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         ConfirmAmountDialog(
             sectionTitle = selectedManualFlow!!,
             usd = pendingUsd!!,
@@ -2035,7 +2099,7 @@ fun ConfirmPackageIdDialog(
                         }
                         val (ok, txt) = apiCreateManualPaidOrder(uid, product, amount)
                         if (ok) {
-                            val label = "$flow ${amount}${'$'}"
+                            val label = "$flow ${amount}$"
                             onToast("تم استلام طلبك ($label).")
                             onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $label للمراجعة.", forOwner = false))
                             onAddNotice(AppNotice("طلب جديد", "طلب $label من UID=$uid يحتاج مراجعة.", forOwner = true))
@@ -2059,6 +2123,7 @@ fun ConfirmPackageIdDialog(
             }
         )
     }
+
 }
 @Composable private fun WalletScreen(
     uid: String,

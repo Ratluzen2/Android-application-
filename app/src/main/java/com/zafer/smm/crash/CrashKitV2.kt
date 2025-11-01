@@ -1,14 +1,14 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package com.zafer.smm.crash
 
 import android.app.Activity
 import android.app.Application
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.content.Intent
+import android.content.*
+import android.database.Cursor
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -16,7 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -29,10 +28,8 @@ import java.util.*
 import kotlin.system.exitProcess
 
 /**
- * CrashKitV2 — ملف واحد يلتقط أي كراش، يحفظ التقرير، ويعرضه تلقائيًا عند أول تشغيل لاحق.
- *
- * الإعداد: أضِف السطر التالي داخل onCreate في MainActivity قبل setContent {..}
- *     com.zafer.smm.crash.CrashKitV2.init(application)
+ * CrashKitV2 — يلتقط أي كراش، يحفظ تقريرًا، ويعرض شاشة السجل تلقائيًا في أول تشغيل لاحق.
+ * هذه النسخة تُثبّت نفسها مبكرًا جدًا عبر ContentProvider حتى لو الكراش يحدث قبل MainActivity.
  */
 object CrashKitV2 {
     private const val FILE_NAME = "crash_latest.txt"
@@ -62,29 +59,23 @@ object CrashKitV2 {
                 exitProcess(10)
             }
         }
+    }
 
-        // اعرض التقرير تلقائيًا عند أول Activity بعد تشغيل التطبيق
-        app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
-            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
-                val prefs = app.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-                val pending = prefs.getBoolean(KEY_PENDING, false)
-                val file = File(app.filesDir, FILE_NAME)
-                if (pending && file.exists()) {
-                    // افتح شاشة السجل ثم نظف العلامة
-                    val i = Intent(activity, CrashReportActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    }
-                    activity.startActivity(i)
-                    prefs.edit().putBoolean(KEY_PENDING, false).apply()
+    /** يُظهر شاشة السجل فور تشغيل التطبيق إذا كان هناك تقرير مُعلّق. */
+    fun showIfPending(app: Application) {
+        val prefs = app.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        val pending = prefs.getBoolean(KEY_PENDING, false)
+        val file = File(app.filesDir, FILE_NAME)
+        if (pending && file.exists()) {
+            // شغّل على الخيط الرئيسي لضمان سلامة بدء النشاط
+            Handler(Looper.getMainLooper()).post {
+                val i = Intent(app, CrashReportActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
                 }
+                app.startActivity(i)
+                prefs.edit().putBoolean(KEY_PENDING, false).apply()
             }
-            override fun onActivityStarted(activity: Activity) {}
-            override fun onActivityResumed(activity: Activity) {}
-            override fun onActivityPaused(activity: Activity) {}
-            override fun onActivityStopped(activity: Activity) {}
-            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-            override fun onActivityDestroyed(activity: Activity) {}
-        })
+        }
     }
 
     private fun buildReport(ctx: Context, thread: Thread, throwable: Throwable): String {
@@ -118,7 +109,23 @@ object CrashKitV2 {
     }
 }
 
-/** شاشة Compose لعرض تقرير الأعطال مع نسخ/مشاركة/مسح. */
+/**
+ * مزوّد محتوى بسيط للتثبيت المبكر بدون أي اعتماديات إضافية.
+ * يُستدعى قبل إنشاء الأنشطة؛ ينصّب CrashKitV2 ويعرض شاشة السجل إن وجدت.
+ */
+class CrashInitProvider : ContentProvider() {
+    override fun onCreate(): Boolean {
+        val app = context?.applicationContext as? Application ?: return true
+        CrashKitV2.init(app)
+        CrashKitV2.showIfPending(app)
+        return true
+    }
+    override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? = null
+    override fun getType(uri: Uri): String? = null
+    override fun insert(uri: Uri, values: ContentValues?): Uri? = null
+    override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int = 0
+    override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?): Int = 0
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -187,9 +194,14 @@ private fun CrashReportScreen(ctx: Context) {
     }
 }
 
+/** Activity تعرض شاشة السجل. */
 class CrashReportActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MaterialTheme { CrashReportScreen(this@CrashReportActivity) } }
-}
+        setContent {
+            MaterialTheme {
+                CrashReportScreen(this@CrashReportActivity)
+            }
+        }
+    }
 }

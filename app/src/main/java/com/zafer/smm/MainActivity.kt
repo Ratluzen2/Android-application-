@@ -380,6 +380,90 @@ private suspend fun apiAdminClearPricing(token: String, uiKey: String): Boolean 
    Public Pricing (read-only for client)
    ========================= */
 data class PublicPricingEntry(val pricePerK: Double, val minQty: Int, val maxQty: Int, val mode: String = "per_k")
+// ---- Pricing Push+Cache (SharedPreferences + StateFlow) ----
+object PricingCache {
+    private const val PREF = "pricing_cache"
+    private const val KEY_MAP = "map_json"
+    private const val KEY_VER = "version"
+
+    private val _flow = kotlinx.coroutines.flow.MutableStateFlow<Map<String, PublicPricingEntry>>(emptyMap())
+    val flow: kotlinx.coroutines.flow.StateFlow<Map<String, PublicPricingEntry>> get() = _flow
+    @Volatile private var initialized = false
+
+    private fun parseJson(json: String?): Map<String, PublicPricingEntry> {
+        if (json.isNullOrEmpty()) return emptyMap()
+        return try {
+            val o = org.json.JSONObject(json)
+            o.keys().asSequence().associateWith { k ->
+                val v = o.getJSONObject(k)
+                PublicPricingEntry(
+                    pricePerK = v.optDouble("price", 0.0),
+                    minQty = v.optInt("minQty", 0),
+                    maxQty = v.optInt("maxQty", Int.MAX_VALUE)
+                )
+            }
+        } catch (_: Throwable) { emptyMap() }
+    }
+
+    private fun toJson(map: Map<String, PublicPricingEntry>): String {
+        val o = org.json.JSONObject()
+        map.forEach { (k, v) ->
+            val x = org.json.JSONObject()
+            x.put("price", v.pricePerK)
+            x.put("minQty", v.minQty)
+            x.put("maxQty", v.maxQty)
+            o.put(k, x)
+        }
+        return o.toString()
+    }
+
+    fun init(ctx: android.content.Context) {
+        if (initialized) return
+        val sp = ctx.getSharedPreferences(PREF, android.content.Context.MODE_PRIVATE)
+        val map = parseJson(sp.getString(KEY_MAP, null))
+        _flow.value = map
+        initialized = true
+    }
+
+    fun getVersion(ctx: android.content.Context): Long {
+        val sp = ctx.getSharedPreferences(PREF, android.content.Context.MODE_PRIVATE)
+        return sp.getLong(KEY_VER, 0L)
+    }
+
+    private fun save(ctx: android.content.Context, map: Map<String, PublicPricingEntry>, version: Long? = null) {
+        val sp = ctx.getSharedPreferences(PREF, android.content.Context.MODE_PRIVATE)
+        sp.edit().putString(KEY_MAP, toJson(map)).apply()
+        if (version != null) sp.edit().putLong(KEY_VER, version).apply()
+        _flow.value = map
+    }
+
+    suspend fun seedIfEmpty(ctx: android.content.Context, keys: List<String>, loader: suspend (List<String>) -> Map<String, PublicPricingEntry>) {
+        init(ctx)
+        val cur = _flow.value
+        val missing = keys.any { it !in cur }
+        if (missing) {
+            val fetched = try { loader(keys) } catch (_: Throwable) { emptyMap() }
+            if (fetched.isNotEmpty()) {
+                val merged = cur.toMutableMap().apply { putAll(fetched) }
+                save(ctx, merged)
+            }
+        }
+    }
+
+    // Apply partial changes from push
+    fun applyChanges(ctx: android.content.Context, version: Long?, changes: Map<String, PublicPricingEntry>) {
+        init(ctx)
+        val merged = _flow.value.toMutableMap().apply { putAll(changes) }
+        save(ctx, merged, version)
+    }
+
+    // Replace with snapshot
+    fun replaceAll(ctx: android.content.Context, version: Long?, snapshot: Map<String, PublicPricingEntry>) {
+        init(ctx)
+        save(ctx, snapshot, version)
+    }
+}
+
 
 private suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, PublicPricingEntry> {
     if (keys.isEmpty()) return emptyMap()
@@ -403,6 +487,54 @@ private suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, Public
         }
         out
     } catch (_: Exception) { emptyMap() }
+private suspend fun apiPublicPricingVersion(): Long? {
+    return try {
+        val (code, txt) = httpGet("/api/public/pricing/version")
+        if (code !in 200..299 || txt == null) return null
+        // Accept either {"version": 42} or a plain number
+        val t = txt.trim()
+        if (t.startsWith("{")) {
+            val o = org.json.JSONObject(t)
+            when {
+                o.has("version") -> o.optLong("version")
+                o.has("ver")     -> o.optLong("ver")
+                else             -> null
+            }
+        } else t.toLongOrNull()
+    } catch (_: Throwable) { null }
+}
+
+private suspend fun apiPublicPricingSnapshot(): Pair<Long?, Map<String, PublicPricingEntry>>? {
+    return try {
+        val (code, txt) = httpGet("/api/public/pricing/snapshot")
+        if (code !in 200..299 || txt == null) return null
+        val root = org.json.JSONObject(txt)
+        var version: Long? = null
+        if (root.has("version")) version = root.optLong("version")
+        if (root.has("ver")) version = root.optLong("ver")
+
+        // Map can be under 'map' or 'data' or root itself
+        val mapObj = when {
+            root.has("map")  -> root.getJSONObject("map")
+            root.has("data") -> root.getJSONObject("data")
+            else             -> root
+        }
+        val iter = mapObj.keys()
+        val out = mutableMapOf<String, PublicPricingEntry>()
+        while (iter.hasNext()) {
+            val k = iter.next()
+            val obj = mapObj.optJSONObject(k) ?: continue
+            out[k] = PublicPricingEntry(
+                pricePerK = obj.optDouble("price_per_k", obj.optDouble("price", 0.0)),
+                minQty    = obj.optInt("min_qty", obj.optInt("minQty", 0)),
+                maxQty    = obj.optInt("max_qty", obj.optInt("maxQty", 0)),
+                mode      = obj.optString("mode", "per_k")
+            )
+        }
+        version to out
+    } catch (_: Throwable) { null }
+}
+
 }
 
 @Composable
@@ -835,6 +967,20 @@ class MainActivity : ComponentActivity() {
     android.util.Log.e("FCM", "Exception while getting token", e)
 }
 
+
+// === FCM topic subscription for pricing updates ===
+try {
+    com.google.firebase.messaging.FirebaseMessaging.getInstance()
+        .subscribeToTopic("pricing")
+        .addOnCompleteListener { t ->
+            android.util.Log.i("FCM", "Subscribed to 'pricing' topic: ${t.isSuccessful}")
+        }
+} catch (e: Exception) {
+    android.util.Log.w("FCM", "subscribeToTopic(pricing) failed: " + (e.message ?: ""))
+}
+
+// Initialize PricingCache once on app start
+try { PricingCache.init(this) } catch (_: Throwable) {}
 setContent { AppTheme { UpdatePromptHost(); AppRoot() } }
     }
 }
@@ -1655,7 +1801,7 @@ private fun AmountGrid(
                         Column(Modifier.padding(16.dp)) {
                             Text("$usd${"$"}${if (labelSuffix.isNotBlank()) labelSuffix else ""}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
                             Spacer(Modifier.height(4.dp))
-                            Text("السعر: $price$", color = Dim, fontSize = 12.sp)
+                            Text("السعر: ${price}${'$'}", color = Dim, fontSize = 12.sp)
                         }
                     }
                 }
@@ -4166,6 +4312,59 @@ private fun AdminAnnouncementsList(
             Spacer(Modifier.height(10.dp))
             Text(it, color = OnBg)
             androidx.compose.runtime.LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack = null }
+        }
+    }
+}
+
+
+
+// --- FCM Pricing Messaging Service (merged into MainActivity.kt) ---
+class PricingMessagingService : com.google.firebase.messaging.FirebaseMessagingService() {
+
+    override fun onMessageReceived(message: com.google.firebase.messaging.RemoteMessage) {
+        val data = message.data ?: return
+        val type = data["type"] ?: return
+        if (type != "pricing_update") return
+
+        val ctx: android.content.Context = applicationContext
+        val version = data["version"]?.toLongOrNull()
+
+        try {
+            when {
+                data.containsKey("changes") -> {
+                    val arr = org.json.JSONArray(data["changes"])
+                    val map = mutableMapOf<String, PublicPricingEntry>()
+                    for (i in 0 until arr.length()) {
+                        val o = arr.getJSONObject(i)
+                        val key = o.getString("key")
+                        val price = o.optDouble("price", 0.0)
+                        val min = o.optInt("minQty", 0)
+                        val max = o.optInt("maxQty", Int.MAX_VALUE)
+                        map[key] = PublicPricingEntry(pricePerK = price, minQty = min, maxQty = max)
+                    }
+                    PricingCache.applyChanges(ctx, version, map)
+                }
+                data.containsKey("snapshot") -> {
+                    val snap = org.json.JSONObject(data["snapshot"])
+                    val keys = snap.keys()
+                    val map = mutableMapOf<String, PublicPricingEntry>()
+                    while (keys.hasNext()) {
+                        val k = keys.next()
+                        val v = snap.getJSONObject(k)
+                        map[k] = PublicPricingEntry(
+                            pricePerK = v.optDouble("price", 0.0),
+                            minQty = v.optInt("minQty", 0),
+                            maxQty = v.optInt("maxQty", Int.MAX_VALUE)
+                        )
+                    }
+                    PricingCache.replaceAll(ctx, version, map)
+                }
+                data.containsKey("snapshot_url") -> {
+                    // Optional: handle snapshot_url if backend sends a URL to fetch full snapshot.
+                }
+            }
+        } catch (_: Throwable) {
+            // Ignore malformed payloads to avoid crashing FCM service
         }
     }
 }

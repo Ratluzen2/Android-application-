@@ -166,7 +166,6 @@ object AppNotifier {
             .setContentIntent(pi)
         NotificationManagerCompat.from(ctx).notify((System.currentTimeMillis()%Int.MAX_VALUE).toInt(), builder.build())
     }
-}
 
 @Composable
 private fun NoticeBody(text: String) {
@@ -536,7 +535,6 @@ private suspend fun apiPublicPricingSnapshot(): Pair<Long?, Map<String, PublicPr
     } catch (_: Throwable) { null }
 }
 
-}
 
 @Composable
 private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
@@ -766,7 +764,6 @@ if (selectedCat == "ببجي" || selectedCat == "لودو") {
             }
         }
     }
-}
 
 @Composable
 private fun GlobalPricingCard(
@@ -1265,7 +1262,6 @@ Column(
             actionText = "افتح تيليجرام", onClick = { uri.openUri("https://t.me/z396r") }, icon = Icons.Filled.Send
         )
     }
-}
 @Composable private fun ContactCard(
     title: String, subtitle: String, actionText: String,
     onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector
@@ -1574,7 +1570,6 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
             }
         )
     }
-}
 
 @Composable private fun ServiceOrderDialog(
     uid: String, service: ServiceDef,
@@ -1811,7 +1806,6 @@ private fun AmountGrid(
             }
         }
     }
-}
 
 @Composable
 private fun ConfirmAmountDialog(
@@ -1903,7 +1897,6 @@ private fun packagesWithOverrides(
         }
     }
     return result
-}
 @Composable
 fun PackageGrid(
     title: String,
@@ -1944,7 +1937,6 @@ fun PackageGrid(
             }
         }
     }
-}
 
 @Composable
 fun ConfirmPackageDialog(
@@ -1969,7 +1961,6 @@ fun ConfirmPackageDialog(
             }
         }
     )
-}
 
 @Composable
 fun ConfirmPackageIdDialog(
@@ -2007,7 +1998,6 @@ fun ConfirmPackageIdDialog(
             }
         }
     )
-}
 
 @Composable private fun ManualSectionsScreen(
     title: String,
@@ -2260,7 +2250,6 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         )
     }
 
-}
 @Composable private fun WalletScreen(
     uid: String,
     noticeTick: Int = 0,
@@ -2833,7 +2822,6 @@ Row {
             }
         )
     }
-}
 
 @Composable
 private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
@@ -3321,7 +3309,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
         NavItem(current == Tab.ORDERS, { onChange(Tab.ORDERS) }, Icons.Filled.ShoppingCart, "الطلبات")
         NavItem(current == Tab.SUPPORT, { onChange(Tab.SUPPORT) }, Icons.Filled.ChatBubble, "الدعم")
     }
-}
 @Composable private fun RowScope.NavItem(
     selected: Boolean, onClick: () -> Unit,
     icon: androidx.compose.ui.graphics.vector.ImageVector, label: String
@@ -3987,7 +3974,6 @@ class OrderDoneCheckWorker(appContext: Context, params: WorkerParameters) : Coro
             WorkManager.getInstance(context.applicationContext).enqueue(once)
         }
     }
-}
 
 @Composable
 private fun FixedTopBar(
@@ -4089,7 +4075,6 @@ private fun NoticeCenterDialog(
             }
         }
     )
-}
 
 @Composable
 private fun NotificationBellCentered(
@@ -4185,7 +4170,6 @@ private fun AdminAnnouncementsHub(
             "list" -> AdminAnnouncementsList(token = token, onBack = { screen = null })
         }
     }
-}
 
 @Composable
 private fun AdminAnnouncementsList(

@@ -466,9 +466,9 @@ if (loading) { CircularProgressIndicator(color = Accent); return@Column }
             cats.chunked(2).forEach { row ->
                 Row(Modifier.fillMaxWidth()) {
                     row.forEach { c ->
-                        ElevatedCard(
+                        Card(
                             modifier = Modifier.weight(1f).padding(4.dp).clickable { selectedCat = c },
-                            colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                            colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
                         ) { Text(c, Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold) }
                     }
                     if (row.size == 1) Spacer(Modifier.weight(1f))
@@ -539,9 +539,9 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
             val curQty   = if (ov != null && ov.minQty > 0) ov.minQty else p.defQty
 
             var open by remember { mutableStateOf(false) }
-            ElevatedCard(
+            Card(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
             ) {
                 Column(Modifier.padding(16.dp)) {
                     Text(p.title, fontWeight = FontWeight.SemiBold, color = OnBg)
@@ -606,9 +606,9 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
                     val key = svc.uiKey
                     val ov  = overrides[key]
                     val has = ov != null
-                    ElevatedCard(
+                    Card(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                        colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Text(key, fontWeight = FontWeight.SemiBold, color = OnBg)
@@ -680,12 +680,12 @@ private fun GlobalPricingCard(
     var open by remember { mutableStateOf(false) }
     val ov = overrides[key]
 
-    ElevatedCard(
+    Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(4.dp)
                 .clickable { open = true },
-        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+        colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
     ) {
         Text(title, Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold)
     }
@@ -1155,9 +1155,9 @@ Column(
     title: String, subtitle: String, actionText: String,
     onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector
 ) {
-    ElevatedCard(
+    Card(
         modifier = Modifier.fillMaxWidth().clickable { onClick() },
-        colors = CardDefaults.elevatedCardColors(
+        colors = CardDefaults.cardColors(
             containerColor = Surface1,
             contentColor = OnBg
         )
@@ -1364,12 +1364,12 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
             Text("الخدمات", color = OnBg, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
             serviceCategories.forEach { cat ->
-                ElevatedCard(
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
                         .clickable { selectedCategory = cat },
-                    colors = CardDefaults.elevatedCardColors(
+                    colors = CardDefaults.cardColors(
                         containerColor = Surface1,
                         contentColor = OnBg
                     )
@@ -1418,12 +1418,12 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
             Spacer(Modifier.height(10.dp))
 
             inCat.forEach { svc ->
-                ElevatedCard(
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(bottom = 8.dp)
                         .clickable { selectedService = svc },
-                    colors = CardDefaults.elevatedCardColors(
+                    colors = CardDefaults.cardColors(
                         containerColor = Surface1,
                         contentColor = OnBg
                     )
@@ -1588,15 +1588,6 @@ private fun AmountGrid(
     onSelect: (usd: Int, price: Double) -> Unit,
     onBack: () -> Unit
 ) {
-    // Fetch dynamic overrides when a keyPrefix is provided (e.g., "topup.itunes.", "topup.asiacell.", etc.)
-    val pricingMap by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keyPrefix, amounts) {
-        value = if (keyPrefix != null) {
-            try { apiPublicPricingBulk(amounts.map { keyPrefix + it }) } catch (_: Throwable) { emptyMap() }
-        } else {
-            emptyMap()
-        }
-    }
-
     Column(
         Modifier
             .fillMaxSize()
@@ -1617,25 +1608,16 @@ private fun AmountGrid(
         amounts.chunked(2).forEach { pair ->
             Row(Modifier.fillMaxWidth()) {
                 pair.forEach { usd ->
-                    val ov = if (keyPrefix != null) pricingMap[(keyPrefix + usd.toString())] else null
-                    val finalUsd = ov?.minQty?.takeIf { it > 0 } ?: usd
-                    val price = ov?.pricePerK ?: priceOf(usd)
-                    ElevatedCard(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(4.dp)
-                            .clickable { onSelect(finalUsd, price) },
-                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
-
-                    ElevatedCard(
+                    val price = priceOf(usd)
+                    Card(
                         modifier = Modifier
                             .weight(1f)
                             .padding(4.dp)
                             .clickable { onSelect(usd, price) },
-                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+                        colors = CardDefaults.cardColors(containerColor = Surface1)
                     ) {
                         Column(Modifier.padding(16.dp)) {
-                            val label = if (labelSuffix.isBlank()) "\$${finalUsd}" else "\$${finalUsd} $labelSuffix"
+                            val label = if (labelSuffix.isBlank()) "\$${usd}" else "\$${usd} $labelSuffix"
                             Text(label, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = OnBg)
                             Spacer(Modifier.height(4.dp))
                             run {
@@ -1769,11 +1751,11 @@ fun PackageGrid(
         rows.forEach { pair ->
             Row(Modifier.fillMaxWidth()) {
                 pair.forEach { opt ->
-                    ElevatedCard(
+                    Card(
                         modifier = Modifier.weight(1f)
                             .padding(4.dp)
                             .clickable { onSelect(opt) },
-                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1)
+                        colors = CardDefaults.cardColors(containerColor = Surface1)
                     ) {
                         Column(Modifier.padding(12.dp)) {
                             Text(opt.label, fontWeight = FontWeight.SemiBold, color = OnBg)
@@ -1883,14 +1865,14 @@ fun ConfirmPackageIdDialog(
         Spacer(Modifier.height(10.dp))
 
         items.forEach { name ->
-            ElevatedCard(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 8.dp)
                     .clickable {
                         selectedManualFlow = name
                     },
-                colors = CardDefaults.elevatedCardColors(
+                colors = CardDefaults.cardColors(
                     containerColor = Surface1,
                     contentColor = OnBg
                 )
@@ -2133,7 +2115,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         Text("طرق الشحن:", fontWeight = FontWeight.SemiBold, color = OnBg)
         Spacer(Modifier.height(8.dp))
 
-        ElevatedCard(
+        Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 8.dp)
@@ -2146,7 +2128,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                         askAsiacell = true
                     }
                 },
-            colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+            colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Filled.SimCard, null, tint = Accent)
@@ -2162,12 +2144,12 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             "شحن عبر زين كاش",
             "شحن عبر عملات رقمية (USDT)"
         ).forEach {
-            ElevatedCard(
+            Card(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable {
                     onToast("لإتمام الشحن تواصل مع الدعم (واتساب/تيليجرام).")
                     onAddNotice(AppNotice("شحن رصيد", "يرجى التواصل مع الدعم لإكمال شحن: $it", forOwner = false))
                 },
-                colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
             ) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.AttachMoney, null, tint = Accent)
@@ -2271,9 +2253,9 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             orders.isNullOrEmpty() -> Text("لا توجد طلبات حتى الآن.", color = Dim)
             else -> LazyColumn {
                 items(orders!!) { o ->
-                    ElevatedCard(
+                    Card(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                        colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Text(o.title, fontWeight = FontWeight.SemiBold, color = OnBg)
@@ -2578,9 +2560,9 @@ if (itemFilter == null || itemFilter.invoke(item)) {
                     val dt = if (o.createdAt > 0) {
                         SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(o.createdAt))
                     } else ""
-                    ElevatedCard(
+                    Card(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                        colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Text(o.title, fontWeight = FontWeight.SemiBold, color = OnBg)
@@ -2755,9 +2737,9 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
             cats.chunked(2).forEach { row ->
                 Row(Modifier.fillMaxWidth()) {
                     row.forEach { c ->
-                        ElevatedCard(
+                        Card(
                             modifier = Modifier.weight(1f).padding(4.dp).clickable { selectedCat = c },
-                            colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                            colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
                         ) { Text(c, Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold) }
                     }
                     if (row.size == 1) Spacer(Modifier.weight(1f))
@@ -2780,9 +2762,9 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                     val baseId = servicesCatalog.first { it.uiKey == svc.uiKey }.serviceId
                     val curId = overrides[svc.uiKey] ?: baseId
                     val hasOverride = overrides.containsKey(svc.uiKey)
-                    ElevatedCard(
+                    Card(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                        colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Text(svc.uiKey, fontWeight = FontWeight.SemiBold, color = OnBg)
@@ -2888,9 +2870,9 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                     val dt = if (c.createdAt > 0) {
                         SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(c.createdAt))
                     } else ""
-                    ElevatedCard(
+                    Card(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                        colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Text("طلب #${c.id}", fontWeight = FontWeight.SemiBold, color = OnBg)
@@ -3090,9 +3072,9 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
             rows!!.isEmpty() -> Text("لا توجد بيانات.", color = Dim)
             else -> LazyColumn {
                 items(rows!!) { (u, state, bal) ->
-                    ElevatedCard(
+                    Card(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                        colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
                     ) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -4070,9 +4052,9 @@ private fun AdminAnnouncementsList(
                         val ann = list[idx]
                         var showEdit by remember { mutableStateOf(false) }
                         var showDelete by remember { mutableStateOf(false) }
-                        ElevatedCard(
+                        Card(
                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                            colors = CardDefaults.elevatedCardColors(containerColor = Surface1, contentColor = OnBg)
+                            colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
                         ) {
                             Column(Modifier.padding(16.dp)) {
                                 Text(ann.title ?: "إعلان مهم 📢", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = OnBg)

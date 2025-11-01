@@ -1812,9 +1812,8 @@ private fun packagesWithOverrides(
         val amounts = base.mapNotNull { opt -> opt.label.filter { it.isDigit() }.toIntOrNull() }
         val keys = amounts.map { "$keyPrefix$it" }
 
-        
-        // Try cache with revision check
         var map = PricingCache.load(ctx, keyPrefix, amounts)
+        // Version-based refresh only
         val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
         val localVer = PricingCache.getVersion(ctx, keyPrefix, amounts)
         val needRefresh = (srvVer > 0L && srvVer != localVer) || map.isEmpty()

@@ -1799,7 +1799,6 @@ val ludoGoldPackages = listOf(
     PackageOption("124550000 ذهب", 800)
 )
 
-}
 /* ===== App launch prefetch for pricing (version-based, non-Compose) ===== */
 private fun prefetchPricingOnLaunch(ctx: android.content.Context) {
     // Run in background; avoid blocking UI

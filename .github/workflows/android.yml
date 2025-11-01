@@ -135,7 +135,7 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\r' | base64 -d > keystore.jks
+            echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\\r' | base64 -d > keystore.jks
             echo "HAS_KEYSTORE=true" >> $GITHUB_ENV
           else
             echo "HAS_KEYSTORE=false" >> $GITHUB_ENV
@@ -166,7 +166,18 @@ jobs:
             fi
           fi
 
-      - name: Upload logs (always)
+      
+      - name: Compile Kotlin (surface MainActivity errors)
+        if: always()
+        working-directory: ${{ env.PROJECT_DIR }}
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/build_logs"
+          chmod +x ./gradlew || true
+          ./gradlew :app:compileReleaseKotlin --stacktrace --console=plain -Dkotlin.colors.enabled=false 2>&1 | tee "$GITHUB_WORKSPACE/build_logs/kotlin_compile.log" || true
+          grep -nE "^e: |Unresolved reference|Type mismatch|Unresolved symbol|Conflicting overloads|Expecting" "$GITHUB_WORKSPACE/build_logs/kotlin_compile.log" > "$GITHUB_WORKSPACE/build_logs/kotlin_errors_only.txt" || true
+
+- name: Upload logs (always)
         if: always()
         uses: actions/upload-artifact@v4
         with:

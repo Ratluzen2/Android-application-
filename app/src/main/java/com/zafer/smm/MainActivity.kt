@@ -3604,7 +3604,6 @@ private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     val (code, txt) = httpPost("/api/orders/create/manual", body)
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
-
 suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int, accountId: String? = null): Pair<Boolean, String?> {
     val body = JSONObject()
         .put("uid", uid)
@@ -3612,9 +3611,10 @@ suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int, acc
         .put("usd", usd)
     if (!accountId.isNullOrBlank()) body.put("account_id", accountId)
     val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
-    val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true)
+    val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true || txt?.contains("success", true) == true)
     return Pair(ok, txt)
 }
+
 
 private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
     val (code, txt) = httpGet("/api/orders/my?uid=$uid")

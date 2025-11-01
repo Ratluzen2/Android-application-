@@ -556,8 +556,8 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
                         if (ov != null) {
                             OutlinedButton(onClick = {
                                 scope.launch {
-                                    val ok = apiAdminClearPricing(p.key)
-                                    if (ok) onToast("تم حذف التعديل.")
+                                    val ok = apiAdminClearPricing(token, p.key)
+                                    if (ok) { snack = "تم حذف التعديل"; refreshKey++ } else snack = "فشل الحذف"
                                 }
                             }) { Text("حذف التعديل") }
                         }
@@ -576,10 +576,10 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
                             val newQty   = qtyInput.toIntOrNull()
                             if (newPrice != null && newQty != null) {
                                 scope.launch {
-                                    val ok = apiAdminSetPricing(p.key, newPrice, newQty, newQty, "package")
-                                    if (ok) { onToast("تم الحفظ."); open = false }
+                                    val ok = apiAdminSetPricing(token, p.key, newPrice, newQty, newQty, "package")
+                                    if (ok) { snack = "تم الحفظ"; open = false; refreshKey++ } else snack = "فشل الحفظ"
                                 }
-                            } else onToast("تحقق من القيم.")
+                            } else snack = "تحقق من القيم."
                         }) { Text("حفظ") }
                     },
                     dismissButton = { TextButton(onClick = { open = false }) { Text("إلغاء") } },
@@ -1627,8 +1627,6 @@ private fun AmountGrid(
                 if (pair.size == 1) Spacer(Modifier.weight(1f).padding(4.dp))
             }
         }
-    }
-}
     }
 }
 

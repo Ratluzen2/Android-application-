@@ -208,33 +208,6 @@ object AppNotifier {
             val age = System.currentTimeMillis() - ts
             return age < ttlHours * 60L * 60L * 1000L
         }
-        // --- Raw keys caching (for arbitrary ui_key lists used by catalog overlays) ---
-        private fun verKeyRaw(keys: List<String>) = "ver_raw:" + keys.sorted().joinToString("|")
-        private fun dataKeyRaw(keys: List<String>) = "data_raw:" + keys.sorted().joinToString("|")
-
-        fun getVersionRaw(ctx: Context, keys: List<String>): Long =
-            prefs(ctx).getLong(verKeyRaw(keys), 0L)
-
-        fun saveVersionRaw(ctx: Context, keys: List<String>, ver: Long) {
-            prefs(ctx).edit().putLong(verKeyRaw(keys), ver).apply()
-        }
-
-        fun loadRaw(ctx: Context, keys: List<String>): Map<String, PublicPricingEntry> {
-            val k = dataKeyRaw(keys)
-            val json = prefs(ctx).getString(k, null) ?: return emptyMap()
-            return try {
-                val type = object : TypeToken<Map<String, PublicPricingEntry>>() {}.type
-                Gson().fromJson<Map<String, PublicPricingEntry>>(json, type) ?: emptyMap()
-            } catch (_: Throwable) { emptyMap() }
-        }
-
-        fun saveRaw(ctx: Context, keys: List<String>, data: Map<String, PublicPricingEntry>) {
-            val k = dataKeyRaw(keys)
-            prefs(ctx).edit()
-                .putString(k, Gson().toJson(data))
-                .apply()
-        }
-
     }
     // -------------------------------------------------------------------------------
     @Composable
@@ -1485,24 +1458,9 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
     }
 
     // Overlay live pricing on top of catalog using produceState (no try/catch around composables)
-
-    val ctx = LocalContext.current
-    val keys = remember(inCat, selectedCategory) { inCat.map { it.uiKey }.sorted() }
-    var effectiveMap by remember(keys) { mutableStateOf<Map<String, PublicPricingEntry>>(emptyMap()) }
-    LaunchedEffect(keys) {
-        val cached = PricingCache.loadRaw(ctx, keys)
-        if (cached.isNotEmpty()) effectiveMap = cached
-        val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
-        val localVer = PricingCache.getVersionRaw(ctx, keys)
-        val needRefresh = (srvVer > 0L && srvVer != localVer) || effectiveMap.isEmpty()
-        if (needRefresh) {
-            val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
-            if (fresh.isNotEmpty()) {
-                effectiveMap = fresh
-                PricingCache.saveRaw(ctx, keys, fresh)
-                if (srvVer > 0L) PricingCache.saveVersionRaw(ctx, keys, srvVer)
-            }
-        }
+    val keys = remember(inCat, selectedCategory) { inCat.map { it.uiKey } }
+    val effectiveMap by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keys) {
+        value = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
     }
     val listToShow = remember(inCat, effectiveMap) {
         inCat.map { s ->
@@ -1510,7 +1468,6 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
             if (ov != null) s.copy(min = ov.minQty, max = ov.maxQty, pricePerK = ov.pricePerK) else s
         }
     }
-
     if (inCat.isNotEmpty()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1703,21 +1660,9 @@ private fun AmountGrid(
         var map by remember(keys) { mutableStateOf<Map<String, PublicPricingEntry>>(emptyMap()) }
 
         LaunchedEffect(keys) {
-            // load from cache immediately
-            cached = PricingCache.load(ctx, keyPrefix!!, amounts)
-            if (cached.isNotEmpty()) map = cached
-
-            val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
-            val localVer = PricingCache.getVersion(ctx, keyPrefix!!, amounts)
-            val needRefresh = (srvVer > 0L && srvVer != localVer) || map.isEmpty()
-
-            if (needRefresh) {
-                val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
-                if (fresh.isNotEmpty()) {
-                    map = fresh
-                    PricingCache.save(ctx, keyPrefix!!, amounts, fresh)
-                    if (srvVer > 0L) PricingCache.saveVersion(ctx, keyPrefix!!, amounts, srvVer)
-                }
+            val cachedNow = PricingCache.load(ctx, keyPrefix!!, amounts)
+            if (cachedNow.isNotEmpty()) {
+                map = cachedNow
             }
         }
         map
@@ -1924,20 +1869,7 @@ private fun packagesWithOverrides(
         val amounts = base.mapNotNull { opt -> opt.label.filter { it.isDigit() }.toIntOrNull() }
         val keys = amounts.map { "$keyPrefix$it" }
 
-        var map = PricingCache.load(ctx, keyPrefix, amounts)
-        // Version-based refresh only
-        val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
-        val localVer = PricingCache.getVersion(ctx, keyPrefix, amounts)
-        val needRefresh = (srvVer > 0L && srvVer != localVer) || map.isEmpty()
-
-        if (needRefresh) {
-            val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
-            if (fresh.isNotEmpty()) {
-                map = fresh
-                PricingCache.save(ctx, keyPrefix, amounts, fresh)
-                if (srvVer > 0L) PricingCache.saveVersion(ctx, keyPrefix, amounts, srvVer)
-            }
-        }
+        val map = PricingCache.load(ctx, keyPrefix, amounts)
 
         value = base.map { opt ->
             val qtyStr = opt.label.filter { it.isDigit() }

@@ -2190,6 +2190,26 @@ fun ConfirmPackageIdDialog(
                 )
             }
             "شحن شدات ببجي" -> {
+                // One-time version check & cache refresh for PUBG (on screen entry)
+                run {
+                    val ctx = LocalContext.current
+                    LaunchedEffect("pubg_once") {
+                        val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
+                        if (srvVer > 0L) {
+                            val prefix = "pkg.pubg."
+                            val amounts = pubgPackages.mapNotNull { extractDigits(it.label).toIntOrNull() }
+                            val localVer = PricingCache.getVersion(ctx, prefix, amounts)
+                            if (localVer != srvVer) {
+                                val keys = amounts.map { prefix + it }
+                                val fresh = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                                if (fresh.isNotEmpty()) {
+                                    PricingCache.save(ctx, prefix, amounts, fresh)
+                                    PricingCache.saveVersion(ctx, prefix, amounts, srvVer)
+                                }
+                            }
+                        }
+                    }
+                }
                 PackageGrid(
                     title = "شحن شدات ببجي",
                     subtitle = "اختر الباقة",
@@ -2202,6 +2222,26 @@ fun ConfirmPackageIdDialog(
                 )
             }
             "شراء الماسات لودو" -> {
+                // One-time version check & cache refresh for Ludo Diamonds (on screen entry)
+                run {
+                    val ctx = LocalContext.current
+                    LaunchedEffect("ludo_dia_once") {
+                        val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
+                        if (srvVer > 0L) {
+                            val prefix = "pkg.ludo.diamonds."
+                            val amounts = ludoDiamondsPackages.mapNotNull { extractDigits(it.label).toIntOrNull() }
+                            val localVer = PricingCache.getVersion(ctx, prefix, amounts)
+                            if (localVer != srvVer) {
+                                val keys = amounts.map { prefix + it }
+                                val fresh = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                                if (fresh.isNotEmpty()) {
+                                    PricingCache.save(ctx, prefix, amounts, fresh)
+                                    PricingCache.saveVersion(ctx, prefix, amounts, srvVer)
+                                }
+                            }
+                        }
+                    }
+                }
                 PackageGrid(
                     title = "شراء الماسات لودو",
                     subtitle = "اختر الباقة",
@@ -2214,6 +2254,26 @@ fun ConfirmPackageIdDialog(
                 )
             }
             "شراء ذهب لودو" -> {
+                // One-time version check & cache refresh for Ludo Gold (on screen entry)
+                run {
+                    val ctx = LocalContext.current
+                    LaunchedEffect("ludo_gold_once") {
+                        val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
+                        if (srvVer > 0L) {
+                            val prefix = "pkg.ludo.gold."
+                            val amounts = ludoGoldPackages.mapNotNull { extractDigits(it.label).toIntOrNull() }
+                            val localVer = PricingCache.getVersion(ctx, prefix, amounts)
+                            if (localVer != srvVer) {
+                                val keys = amounts.map { prefix + it }
+                                val fresh = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                                if (fresh.isNotEmpty()) {
+                                    PricingCache.save(ctx, prefix, amounts, fresh)
+                                    PricingCache.saveVersion(ctx, prefix, amounts, srvVer)
+                                }
+                            }
+                        }
+                    }
+                }
                 PackageGrid(
                     title = "شراء ذهب لودو",
                     subtitle = "اختر الباقة",

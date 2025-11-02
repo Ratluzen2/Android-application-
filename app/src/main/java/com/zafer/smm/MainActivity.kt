@@ -209,59 +209,6 @@ object AppNotifier {
             return age < ttlHours * 60L * 60L * 1000L
         }
     }
-    
-    // --- API Services Pricing cache (per category) with server version ---
-    private object ApiPricingCache {
-        private const val PREF = "api_pricing_cache_v1"
-        private fun prefs(ctx: Context): SharedPreferences =
-            ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-
-        private fun mapKey(cat: String) = "map:" + cat
-        private fun verKey(cat: String) = "ver:" + cat
-
-        fun load(ctx: Context, cat: String): Map<String, PublicPricingEntry> {
-            if (cat.isEmpty()) return emptyMap()
-            val s = prefs(ctx).getString(mapKey(cat), null) ?: return emptyMap()
-            return try {
-                val obj = org.json.JSONObject(s)
-                val out = mutableMapOf<String, PublicPricingEntry>()
-                val it = obj.keys()
-                while (it.hasNext()) {
-                    val k = it.next()
-                    val v = obj.optJSONObject(k) ?: continue
-                    out[k] = PublicPricingEntry(
-                        pricePerK = v.optDouble("price_per_k", 0.0),
-                        minQty    = v.optInt("min_qty", 0),
-                        maxQty    = v.optInt("max_qty", 0),
-                        mode      = v.optString("mode", "per_k")
-                    )
-                }
-                out
-            } catch (_: Throwable) { emptyMap() }
-        }
-
-        fun save(ctx: Context, cat: String, map: Map<String, PublicPricingEntry>) {
-            if (cat.isEmpty() || map.isEmpty()) return
-            val obj = org.json.JSONObject()
-            for ((k, v) in map) {
-                val o = org.json.JSONObject()
-                    .put("price_per_k", v.pricePerK)
-                    .put("min_qty", v.minQty)
-                    .put("max_qty", v.maxQty)
-                    .put("mode", v.mode)
-                obj.put(k, o)
-            }
-            prefs(ctx).edit().putString(mapKey(cat), obj.toString()).apply()
-            prefs(ctx).edit().putLong("ts:" + mapKey(cat), System.currentTimeMillis()).apply()
-        }
-
-        fun getVersion(ctx: Context, cat: String): Long =
-            prefs(ctx).getLong(verKey(cat), 0L)
-
-        fun saveVersion(ctx: Context, cat: String, ver: Long) {
-            prefs(ctx).edit().putLong(verKey(cat), ver).apply()
-        }
-    }
     // -------------------------------------------------------------------------------
     @Composable
 private fun NoticeBody(text: String) {
@@ -1512,40 +1459,17 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
     }
 
     // Overlay live pricing on top of catalog using produceState (no try/catch around composables)
-    // Overlay live pricing on top of catalog with cache + version (same behavior as manual sections)
-    val apiCtx = LocalContext.current
     val keys = remember(inCat, selectedCategory) { inCat.map { it.uiKey } }
-
-    var apiEffectiveMap by remember(selectedCategory) { mutableStateOf<Map<String, PublicPricingEntry>>(emptyMap()) }
-
-    LaunchedEffect(selectedCategory) {
-        // load cached map for this category immediately
-        val cat = selectedCategory ?: ""
-        val cached = ApiPricingCache.load(apiCtx, cat)
-        if (cached.isNotEmpty()) apiEffectiveMap = cached
-
-        // check server version and refresh if needed
-        val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
-        val localVer = ApiPricingCache.getVersion(apiCtx, cat)
-        val needRefresh = (srvVer > 0L && srvVer != localVer) || apiEffectiveMap.isEmpty()
-
-        if (needRefresh) {
-            val fresh = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
-            if (fresh.isNotEmpty()) {
-                apiEffectiveMap = fresh
-                ApiPricingCache.save(apiCtx, cat, fresh)
-                if (srvVer > 0L) ApiPricingCache.saveVersion(apiCtx, cat, srvVer)
-            }
-        }
+    val effectiveMap by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keys) {
+        value = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
     }
-
-    val listToShow = remember(inCat, apiEffectiveMap) {
+    val listToShow = remember(inCat, effectiveMap) {
         inCat.map { s ->
-            val ov = apiEffectiveMap[s.uiKey]
+            val ov = effectiveMap[s.uiKey]
             if (ov != null) s.copy(min = ov.minQty, max = ov.maxQty, pricePerK = ov.pricePerK) else s
         }
     }
-    if (inCat.isNotEmpty()) {
+    if (listToShow.isNotEmpty()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { selectedCategory = null }) {
@@ -1556,7 +1480,7 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
             }
             Spacer(Modifier.height(10.dp))
 
-            inCat.forEach { svc ->
+            listToShow.forEach { svc ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()

@@ -433,7 +433,7 @@ data class PublicPricingEntry(
     val mode: String = "per_k"
 )
 
-private suspend fun apiPublicPricingBulk(keys: List<String>): Map<String, PublicPricingEntry> {
+private suspend fun /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys: List<String>): Map<String, PublicPricingEntry> {
     if (keys.isEmpty()) return emptyMap()
     val encoded = keys.joinToString(",") { java.net.URLEncoder.encode(it, "UTF-8") }
     val (code, txt) = httpGet("/api/public/pricing/bulk?keys=$encoded")
@@ -887,6 +887,24 @@ private val serviceCategories = listOf(
    ========================= */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+
+// --- Pricing prefetch on app launch (runs once if version changed) ---
+PricingCache.init(applicationContext)
+val neededKeys = buildSet {
+    add("cat.pubg"); add("cat.ludo")
+    listOf(5,10,15,20,25,30,40,50,100).forEach { usd ->
+        add("topup.itunes.$usd")
+        add("topup.atheer.$usd")
+        add("topup.asiacell.$usd")
+        add("topup.korek.$usd")
+    }
+    // TODO: add API ui_keys you use, e.g. api.tiktok.views, api.instagram.likes, ...
+}
+val baseUrl = BASE_URL // make sure your existing constant is used
+lifecycleScope.launch {
+    try { PricingCache.refreshIfNeeded(baseUrl, neededKeys) } catch (_: Throwable) {}
+}
+
         super.onCreate(savedInstanceState)
         
         AppNotifier.ensureChannel(this)
@@ -1460,7 +1478,7 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
     // Overlay live pricing on top of catalog using produceState (no try/catch around composables)
     val keys = remember(inCat, selectedCategory) { inCat.map { it.uiKey } }
     val effectiveMap by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keys) {
-        value = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+        value = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
     }
     val listToShow = remember(inCat, effectiveMap) {
         inCat.map { s ->
@@ -1660,9 +1678,21 @@ private fun AmountGrid(
         var map by remember(keys) { mutableStateOf<Map<String, PublicPricingEntry>>(emptyMap()) }
 
         LaunchedEffect(keys) {
-            val cachedNow = PricingCache.load(ctx, keyPrefix!!, amounts)
-            if (cachedNow.isNotEmpty()) {
-                map = cachedNow
+            // load from cache immediately
+            cached = PricingCache.load(ctx, keyPrefix!!, amounts)
+            if (cached.isNotEmpty()) map = cached
+
+            val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
+            val localVer = PricingCache.getVersion(ctx, keyPrefix!!, amounts)
+            val needRefresh = (srvVer > 0L && srvVer != localVer) || map.isEmpty()
+
+            if (needRefresh) {
+                val fresh = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                if (fresh.isNotEmpty()) {
+                    map = fresh
+                    PricingCache.save(ctx, keyPrefix!!, amounts, fresh)
+                    if (srvVer > 0L) PricingCache.saveVersion(ctx, keyPrefix!!, amounts, srvVer)
+                }
             }
         }
         map
@@ -1802,7 +1832,7 @@ private fun prefetchPricingOnLaunch(ctx: android.content.Context) {
             val localVer = PricingCache.getVersion(ctx, prefix, amounts)
             if (localVer != srvVer) {
                 val keys = amounts.map { prefix + it }
-                val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                val fresh = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
                 if (fresh.isNotEmpty()) {
                     PricingCache.save(ctx, prefix, amounts, fresh)
                     PricingCache.saveVersion(ctx, prefix, amounts, srvVer)
@@ -1817,7 +1847,7 @@ private fun prefetchPricingOnLaunch(ctx: android.content.Context) {
             val localVer = PricingCache.getVersion(ctx, prefix, amounts)
             if (localVer != srvVer) {
                 val keys = amounts.map { prefix + it }
-                val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                val fresh = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
                 if (fresh.isNotEmpty()) {
                     PricingCache.save(ctx, prefix, amounts, fresh)
                     PricingCache.saveVersion(ctx, prefix, amounts, srvVer)
@@ -1835,7 +1865,7 @@ private fun prefetchPricingOnLaunch(ctx: android.content.Context) {
             val localDia = PricingCache.getVersion(ctx, diaPrefix, diaAmounts)
             if (localDia != srvVer) {
                 val keys = diaAmounts.map { diaPrefix + it }
-                val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                val fresh = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
                 if (fresh.isNotEmpty()) {
                     PricingCache.save(ctx, diaPrefix, diaAmounts, fresh)
                     PricingCache.saveVersion(ctx, diaPrefix, diaAmounts, srvVer)
@@ -1845,7 +1875,7 @@ private fun prefetchPricingOnLaunch(ctx: android.content.Context) {
             val localGold = PricingCache.getVersion(ctx, goldPrefix, goldAmounts)
             if (localGold != srvVer) {
                 val keys = goldAmounts.map { goldPrefix + it }
-                val fresh = try { apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+                val fresh = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
                 if (fresh.isNotEmpty()) {
                     PricingCache.save(ctx, goldPrefix, goldAmounts, fresh)
                     PricingCache.saveVersion(ctx, goldPrefix, goldAmounts, srvVer)
@@ -1869,7 +1899,20 @@ private fun packagesWithOverrides(
         val amounts = base.mapNotNull { opt -> opt.label.filter { it.isDigit() }.toIntOrNull() }
         val keys = amounts.map { "$keyPrefix$it" }
 
-        val map = PricingCache.load(ctx, keyPrefix, amounts)
+        var map = PricingCache.load(ctx, keyPrefix, amounts)
+        // Version-based refresh only
+        val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
+        val localVer = PricingCache.getVersion(ctx, keyPrefix, amounts)
+        val needRefresh = (srvVer > 0L && srvVer != localVer) || map.isEmpty()
+
+        if (needRefresh) {
+            val fresh = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+            if (fresh.isNotEmpty()) {
+                map = fresh
+                PricingCache.save(ctx, keyPrefix, amounts, fresh)
+                if (srvVer > 0L) PricingCache.saveVersion(ctx, keyPrefix, amounts, srvVer)
+            }
+        }
 
         value = base.map { opt ->
             val qtyStr = opt.label.filter { it.isDigit() }

@@ -208,7 +208,9 @@ object AppNotifier {
             val age = System.currentTimeMillis() - ts
             return age < ttlHours * 60L * 60L * 1000L
         }
-       // --- API Services Pricing cache (per category) with server version ---
+    }
+    
+    // --- API Services Pricing cache (per category) with server version ---
     private object ApiPricingCache {
         private const val PREF = "api_pricing_cache_v1"
         private fun prefs(ctx: Context): SharedPreferences =
@@ -260,7 +262,6 @@ object AppNotifier {
             prefs(ctx).edit().putLong(verKey(cat), ver).apply()
         }
     }
- }
     // -------------------------------------------------------------------------------
     @Composable
 private fun NoticeBody(text: String) {
@@ -1510,7 +1511,8 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
         else -> emptyList()
     }
 
-        // Overlay live pricing on top of catalog with cache + version (same behavior as manual sections)
+    // Overlay live pricing on top of catalog using produceState (no try/catch around composables)
+    // Overlay live pricing on top of catalog with cache + version (same behavior as manual sections)
     val apiCtx = LocalContext.current
     val keys = remember(inCat, selectedCategory) { inCat.map { it.uiKey } }
 
@@ -1543,7 +1545,6 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
             if (ov != null) s.copy(min = ov.minQty, max = ov.maxQty, pricePerK = ov.pricePerK) else s
         }
     }
-}
     if (inCat.isNotEmpty()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

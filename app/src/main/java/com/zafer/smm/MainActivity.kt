@@ -1837,36 +1837,36 @@ private val COMMON_AMOUNTS = listOf(5,10,15,20,25,30,40,50,100)
 /* =========================
    Package Picker (PUBG / Ludo)
    ========================= */
-data class PackageOption(val label: String, val priceUsd: Int)
+data class PackageOption(val label: String, val priceUsd: Double)
 
 val pubgPackages = listOf(
-    PackageOption("60 شدة", 2),
-    PackageOption("325 شدة", 9),
-    PackageOption("660 شدة", 15),
-    PackageOption("1800 شدة", 40),
-    PackageOption("3850 شدة", 55),
-    PackageOption("8100 شدة", 100),
-    PackageOption("16200 شدة", 185)
+    PackageOption("60 شدة", 2.0),
+    PackageOption("325 شدة", 9.0),
+    PackageOption("660 شدة", 15.0),
+    PackageOption("1800 شدة", 40.0),
+    PackageOption("3850 شدة", 55.0),
+    PackageOption("8100 شدة", 100.0),
+    PackageOption("16200 شدة", 185.0)
 )
 val ludoDiamondsPackages = listOf(
-    PackageOption("810 الماسة", 5),
-    PackageOption("2280 الماسة", 10),
-    PackageOption("5080 الماسة", 20),
-    PackageOption("12750 الماسة", 35),
-    PackageOption("27200 الماسة", 85),
-    PackageOption("54900 الماسة", 165),
-    PackageOption("164800 الماسة", 475),
-    PackageOption("275400 الماسة", 800)
+    PackageOption("810 الماسة", 5.0),
+    PackageOption("2280 الماسة", 10.0),
+    PackageOption("5080 الماسة", 20.0),
+    PackageOption("12750 الماسة", 35.0),
+    PackageOption("27200 الماسة", 85.0),
+    PackageOption("54900 الماسة", 165.0),
+    PackageOption("164800 الماسة", 475.0),
+    PackageOption("275400 الماسة", 800.0)
 )
 val ludoGoldPackages = listOf(
-    PackageOption("66680 ذهب", 5),
-    PackageOption("219500 ذهب", 10),
-    PackageOption("1443000 ذهب", 20),
-    PackageOption("3627000 ذهب", 35),
-    PackageOption("9830000 ذهب", 85),
-    PackageOption("24835000 ذهب", 165),
-    PackageOption("74550000 ذهب", 475),
-    PackageOption("124550000 ذهب", 800)
+    PackageOption("66680 ذهب", 5.0),
+    PackageOption("219500 ذهب", 10.0),
+    PackageOption("1443000 ذهب", 20.0),
+    PackageOption("3627000 ذهب", 35.0),
+    PackageOption("9830000 ذهب", 85.0),
+    PackageOption("24835000 ذهب", 165.0),
+    PackageOption("74550000 ذهب", 475.0),
+    PackageOption("124550000 ذهب", 800.0)
 )
 
 /* ===== App launch prefetch for pricing (version-based, non-Compose) ===== */
@@ -1957,7 +1957,7 @@ private fun packagesWithOverrides(
             val newQty = ov?.minQty?.takeIf { it > 0 } ?: qtyStr.toIntOrNull() ?: 0
             val newPrice = ov?.pricePerK ?: opt.priceUsd.toDouble()
             val newLabel = if (newQty > 0) "$newQty $unit" else opt.label
-            PackageOption(newLabel, kotlin.math.round(newPrice).toInt())
+            PackageOption(newLabel, newPrice)
         }
     }
 }
@@ -1994,7 +1994,11 @@ fun PackageGrid(
                         Column(Modifier.padding(12.dp)) {
                             Text(opt.label, fontWeight = FontWeight.SemiBold, color = OnBg)
                             Spacer(Modifier.height(4.dp))
-                            Text("السعر: ${'$'}${opt.priceUsd}", color = Dim, fontSize = 12.sp)
+                            run {
+                            val p = opt.priceUsd
+                            val priceTxt = if (p % 1.0 == 0.0) p.toInt().toString() else "%.2f".format(p)
+                            Text("السعر: $${priceTxt}", color = Dim, fontSize = 12.sp)
+                        }
                         }
                     }
                 }
@@ -2021,7 +2025,7 @@ fun ConfirmPackageDialog(
             Column {
                 Text("الباقة المختارة: $label", color = OnBg, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
-                Text("السعر المستحق: ${'$'}$priceUsd", color = Dim)
+                Text(String.format(java.util.Locale.getDefault(), "السعر المستحق: %.2f$", priceUsd), color = Dim)
                 Spacer(Modifier.height(8.dp))
                 Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 12.sp)
             }
@@ -2033,7 +2037,7 @@ fun ConfirmPackageDialog(
 fun ConfirmPackageIdDialog(
     sectionTitle: String,
     label: String,
-    priceUsd: Int,
+    priceUsd: Double,
     onConfirm: (accountId: String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -2052,7 +2056,7 @@ fun ConfirmPackageIdDialog(
             Column {
                 Text("الباقة المختارة: $label", color = OnBg, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
-                Text("السعر المستحق: ${'$'}$priceUsd", color = Dim)
+                Text(String.format(java.util.Locale.getDefault(), "السعر المستحق: %.2f$", priceUsd), color = Dim)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = accountId,
@@ -2079,7 +2083,7 @@ fun ConfirmPackageIdDialog(
     var pendingUsd by remember { mutableStateOf<Int?>(null) }
     var pendingPrice by remember { mutableStateOf<Double?>(null) }
     var pendingPkgLabel by remember { mutableStateOf<String?>(null) }
-    var pendingPkgPrice by remember { mutableStateOf<Int?>(null) }
+    var pendingPkgPrice by remember { mutableStateOf<Double?>(null) }
 
     val items = when (title) {
         "قسم شراء رصيد ايتونز" -> listOf("شراء رصيد ايتونز")
@@ -2310,7 +2314,7 @@ fun ConfirmPackageIdDialog(
                             "شراء ذهب لودو" -> "ludo_gold"
                             else -> "manual"
                         }
-                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, accountId)
+                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt.toDouble(), accountId)
                         if (ok) {
                             onToast("تم استلام طلبك (${pendingPkgLabel}).")
                             onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
@@ -3733,6 +3737,17 @@ private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
+
+suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Double, accountId: String? = null): Pair<Boolean, String?> {
+    val body = JSONObject()
+        .put("uid", uid)
+        .put("product", product)
+        .put("usd", usd)
+    if (!accountId.isNullOrBlank()) body.put("account_id", accountId)
+    val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
+    val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true)
+    return Pair(ok, txt)
+}
 suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int, accountId: String? = null): Pair<Boolean, String?> {
     val body = JSONObject()
         .put("uid", uid)

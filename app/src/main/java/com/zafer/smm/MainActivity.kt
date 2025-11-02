@@ -1666,7 +1666,8 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
                 // === Notes for Instagram & Telegram services ===
                 if (service.uiKey.contains("انستغرام")) {
                     Spacer(Modifier.height(8.dp))
-                    Text                "يرجى إطفاء زر 'تميز للمراجعة' داخل حسابك الانستغرام قبل ارسال رابط الخدمه لضمان إكمال طلبك!",
+                    Text(
+                        "يرجى إطفاء زر 'تم' (تم التقييد) داخل حسابك الانستغرام قبل إرسال رابط الخدمة لضمان إكمال طلبك!",
                         color = Dim, fontSize = 12.sp
                     )
                 }

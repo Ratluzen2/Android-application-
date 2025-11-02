@@ -1946,26 +1946,11 @@ private fun packagesWithOverrides(
     unit: String
 ): List<PackageOption> {
     val ctx = LocalContext.current
-    val result by produceState(initialValue = base, base) {
-        val amounts = base.mapNotNull { opt -> opt.label.filter { it.isDigit() }.toIntOrNull() }
-        val keys = amounts.map { "$keyPrefix$it" }
-
-        var map = PricingCache.load(ctx, keyPrefix, amounts)
-        // Version-based refresh only
-        val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
-        val localVer = PricingCache.getVersion(ctx, keyPrefix, amounts)
-        val needRefresh = (srvVer > 0L && srvVer != localVer) || map.isEmpty()
-
-        if (needRefresh) {
-            val fresh = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
-            if (fresh.isNotEmpty()) {
-                map = fresh
-                PricingCache.save(ctx, keyPrefix, amounts, fresh)
-                if (srvVer > 0L) PricingCache.saveVersion(ctx, keyPrefix, amounts, srvVer)
-            }
-        }
-
-        value = base.map { opt ->
+    // Cache-only: read overrides from PricingCache that were prefetched by the screen-level effect.
+    val amounts = remember(base) { base.mapNotNull { opt -> opt.label.filter { it.isDigit() }.toIntOrNull() } }
+    val map = remember(keyPrefix, amounts) { PricingCache.load(ctx, keyPrefix, amounts) }
+    return remember(base, map) {
+        base.map { opt ->
             val qtyStr = opt.label.filter { it.isDigit() }
             val k = if (qtyStr.isEmpty()) "" else "$keyPrefix$qtyStr"
             val ov = map[k]
@@ -1975,7 +1960,6 @@ private fun packagesWithOverrides(
             PackageOption(newLabel, kotlin.math.round(newPrice).toInt())
         }
     }
-    return result
 }
 
 @Composable

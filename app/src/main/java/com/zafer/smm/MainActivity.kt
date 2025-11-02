@@ -888,24 +888,7 @@ private val serviceCategories = listOf(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
 
-// --- Pricing prefetch on app launch (runs once if version changed) ---
-PricingCache.init(applicationContext)
-val neededKeys = buildSet {
-    add("cat.pubg"); add("cat.ludo")
-    listOf(5,10,15,20,25,30,40,50,100).forEach { usd ->
-        add("topup.itunes.$usd")
-        add("topup.atheer.$usd")
-        add("topup.asiacell.$usd")
-        add("topup.korek.$usd")
-    }
-    // TODO: add API ui_keys you use, e.g. api.tiktok.views, api.instagram.likes, ...
-}
-val baseUrl = BASE_URL // make sure your existing constant is used
-lifecycleScope.launch {
-    try { PricingCache.refreshIfNeeded(baseUrl, neededKeys) } catch (_: Throwable) {}
-}
-
-        super.onCreate(savedInstanceState)
+super.onCreate(savedInstanceState)
         
         AppNotifier.ensureChannel(this)
         AppNotifier.requestPermissionIfNeeded(this)

@@ -208,6 +208,59 @@ object AppNotifier {
             val age = System.currentTimeMillis() - ts
             return age < ttlHours * 60L * 60L * 1000L
         }
+    // --- API Services Pricing cache (per category) with server version ---
+    private object ApiPricingCache {
+        private const val PREF = "api_pricing_cache_v1"
+        private fun prefs(ctx: Context): SharedPreferences =
+            ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+
+        private fun mapKey(cat: String) = "map:" + cat
+        private fun verKey(cat: String) = "ver:" + cat
+
+        fun load(ctx: Context, cat: String): Map<String, PublicPricingEntry> {
+            if (cat.isEmpty()) return emptyMap()
+            val s = prefs(ctx).getString(mapKey(cat), null) ?: return emptyMap()
+            return try {
+                val obj = org.json.JSONObject(s)
+                val out = mutableMapOf<String, PublicPricingEntry>()
+                val it = obj.keys()
+                while (it.hasNext()) {
+                    val k = it.next()
+                    val v = obj.optJSONObject(k) ?: continue
+                    out[k] = PublicPricingEntry(
+                        pricePerK = v.optDouble("price_per_k", 0.0),
+                        minQty    = v.optInt("min_qty", 0),
+                        maxQty    = v.optInt("max_qty", 0),
+                        mode      = v.optString("mode", "per_k")
+                    )
+                }
+                out
+            } catch (_: Throwable) { emptyMap() }
+        }
+
+        fun save(ctx: Context, cat: String, map: Map<String, PublicPricingEntry>) {
+            if (cat.isEmpty() || map.isEmpty()) return
+            val obj = org.json.JSONObject()
+            for ((k, v) in map) {
+                val o = org.json.JSONObject()
+                    .put("price_per_k", v.pricePerK)
+                    .put("min_qty", v.minQty)
+                    .put("max_qty", v.maxQty)
+                    .put("mode", v.mode)
+                obj.put(k, o)
+            }
+            prefs(ctx).edit().putString(mapKey(cat), obj.toString()).apply()
+            prefs(ctx).edit().putLong("ts:" + mapKey(cat), System.currentTimeMillis()).apply()
+        }
+
+        fun getVersion(ctx: Context, cat: String): Long =
+            prefs(ctx).getLong(verKey(cat), 0L)
+
+        fun saveVersion(ctx: Context, cat: String, ver: Long) {
+            prefs(ctx).edit().putLong(verKey(cat), ver).apply()
+        }
+    }
+
     }
     // -------------------------------------------------------------------------------
     @Composable
@@ -1458,201 +1511,39 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
         else -> emptyList()
     }
 
-    // Overlay live pricing on top of catalog using produceState (no try/catch around composables)
+        // Overlay live pricing on top of catalog with cache + version (same behavior as manual sections)
+    val ctx = LocalContext.current
     val keys = remember(inCat, selectedCategory) { inCat.map { it.uiKey } }
-    val effectiveMap by produceState<Map<String, PublicPricingEntry>>(initialValue = emptyMap(), keys) {
-        value = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+
+    var apiEffectiveMap by remember(selectedCategory) { mutableStateOf<Map<String, PublicPricingEntry>>(emptyMap()) }
+
+    LaunchedEffect(selectedCategory) {
+        // load cached map for this category immediately
+        val cat = selectedCategory ?: ""
+        val cached = ApiPricingCache.load(ctx, cat)
+        if (cached.isNotEmpty()) apiEffectiveMap = cached
+
+        // check server version and refresh if needed
+        val srvVer = try { apiPublicPricingVersion() } catch (_: Throwable) { 0L }
+        val localVer = ApiPricingCache.getVersion(ctx, cat)
+        val needRefresh = (srvVer > 0L && srvVer != localVer) || apiEffectiveMap.isEmpty()
+
+        if (needRefresh) {
+            val fresh = try { /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys) } catch (_: Throwable) { emptyMap() }
+            if (fresh.isNotEmpty()) {
+                apiEffectiveMap = fresh
+                ApiPricingCache.save(ctx, cat, fresh)
+                if (srvVer > 0L) ApiPricingCache.saveVersion(ctx, cat, srvVer)
+            }
+        }
     }
-    val listToShow = remember(inCat, effectiveMap) {
+
+    val listToShow = remember(inCat, apiEffectiveMap) {
         inCat.map { s ->
-            val ov = effectiveMap[s.uiKey]
+            val ov = apiEffectiveMap[s.uiKey]
             if (ov != null) s.copy(min = ov.minQty, max = ov.maxQty, pricePerK = ov.pricePerK) else s
         }
     }
-    if (inCat.isNotEmpty()) {
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).padding(bottom = 100.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { selectedCategory = null }) {
-                    Icon(Icons.Filled.ArrowBack, contentDescription = null, tint = OnBg)
-                }
-                Spacer(Modifier.width(6.dp))
-                Text(selectedCategory!!, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-            }
-            Spacer(Modifier.height(10.dp))
-
-            inCat.forEach { svc ->
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                        .clickable { selectedService = svc },
-                    colors = CardDefaults.cardColors(
-                        containerColor = Surface1,
-                        contentColor = OnBg
-                    )
-                ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(svc.uiKey, fontWeight = FontWeight.SemiBold, color = OnBg)
-                        Text("الكمية: ${svc.min} - ${svc.max}", color = Dim, fontSize = 12.sp)
-                        Text("السعر لكل 1000: ${svc.pricePerK}\$", color = Dim, fontSize = 12.sp)
-                    }
-                }
-            }
-        }
-    } else {
-        ManualSectionsScreen(
-            title = selectedCategory!!,
-            uid = uid,
-            onBack = { selectedCategory = null },
-            onToast = onToast,
-            onAddNotice = onAddNotice
-        )
-    }
-
-    selectedService?.let { svc ->
-        ServiceOrderDialog(
-            uid = uid, service = svc,
-            onDismiss = { selectedService = null },
-            onOrdered = { ok, msg ->
-                onToast(msg)
-                if (ok) {
-                    onAddNotice(AppNotice("طلب جديد (${svc.uiKey})", "تم استلام طلبك وسيتم تنفيذه قريبًا.", forOwner = false))
-                    onAddNotice(AppNotice("طلب خدمات معلّق", "طلب ${svc.uiKey} من UID=$uid بانتظار المعالجة/التنفيذ", forOwner = true))
-                }
-            }
-        )
-    }
-}
-
-@Composable private fun ServiceOrderDialog(
-    uid: String, service: ServiceDef,
-    onDismiss: () -> Unit,
-    onOrdered: (Boolean, String) -> Unit
-) {
-    val scope = rememberCoroutineScope()
-    var link by remember { mutableStateOf("") }
-    var qtyText by remember { mutableStateOf(service.min.toString()) }
-    val qty = qtyText.toIntOrNull() ?: 0
-    val price = ceil((qty / 1000.0) * service.pricePerK * 100) / 100.0
-
-    var loading by remember { mutableStateOf(false) }
-    var userBalance by remember { mutableStateOf<Double?>(null) }
-
-    LaunchedEffect(Unit) { userBalance = apiGetBalance(uid) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(enabled = !loading, onClick = {
-                if (link.isBlank()) { onOrdered(false, "الرجاء إدخال الرابط"); return@TextButton }
-                if (qty < service.min || qty > service.max) { onOrdered(false, "الكمية يجب أن تكون بين ${service.min} و ${service.max}"); return@TextButton }
-                val bal = userBalance ?: 0.0
-                if (bal < price) { onOrdered(false, "رصيدك غير كافٍ. السعر: $price\$ | رصيدك: ${"%.2f".format(bal)}\$"); return@TextButton }
-
-                loading = true
-                val svcName = service.uiKey
-                scope.launch {
-                    val ok = apiCreateProviderOrder(
-                        uid = uid,
-                        serviceId = service.serviceId,
-                        serviceName = svcName,
-                        link = link,
-                        quantity = qty,
-                        price = price
-                    )
-                    loading = false
-                    if (ok) onOrdered(true, "تم إرسال الطلب بنجاح.")
-                    else onOrdered(false, "فشل إرسال الطلب.")
-                    onDismiss()
-                }
-            }) { Text(if (loading) "يرسل" else "شراء") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
-        title = { Text(service.uiKey) },
-        text = {
-            Column {
-                Text("الكمية بين ${service.min} و ${service.max}", color = Dim, fontSize = 12.sp)
-                Spacer(Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = qtyText,
-                    onValueChange = { s -> if (s.all { it.isDigit() }) qtyText = s },
-                    label = { Text("الكمية") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        cursorColor = Accent,
-                        focusedBorderColor = Accent, unfocusedBorderColor = Dim,
-                        focusedLabelColor = OnBg, unfocusedLabelColor = Dim
-                    )
-                )
-                Spacer(Modifier.height(6.dp))
-                OutlinedTextField(
-                    value = link, onValueChange = { link = it },
-                    label = { Text("الرابط (أرسل الرابط وليس اليوزر)") },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        cursorColor = Accent,
-                        focusedBorderColor = Accent, unfocusedBorderColor = Dim,
-                        focusedLabelColor = OnBg, unfocusedLabelColor = Dim
-                    )
-                )
-                // === Notes for Instagram & Telegram services ===
-                if (service.uiKey.contains("انستغرام")) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "يرجى إطفاء زر 'تميز للمراجعة' داخل حسابك الانستغرام قبل ارسال رابط الخدمه لضمان إكمال طلبك!",
-                        color = Dim, fontSize = 12.sp
-                    )
-                }
-                if (service.uiKey.contains("تلي") || service.uiKey.contains("تيليجرام") || service.uiKey.contains("التليجرام")) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "الرجاء إرسال رابط دعوة انضمام وليس رابط القناة ام المجموعة أو اسم المستخدم (مثل: https://t.me/+xxxx).\n"
-                        + "خطوات إنشاء رابط الدعوة الخاص:\n"
-                        + "1. ادخل إلى القناة او المجموعة\n"
-                        + "2. اختر خيار المشتركون.\n"
-                        + "3. اضغط على الدعوة عبر رابط خاص.\n"
-                        + "4. أنشئ رابط دعوة جديد.",
-                        color = Dim, fontSize = 12.sp
-                    )
-                }
-    
-                Spacer(Modifier.height(8.dp))
-                Text("السعر التقريبي: $price\$", fontWeight = FontWeight.SemiBold, color = OnBg)
-                Spacer(Modifier.height(4.dp))
-                Text("رصيدك الحالي: ${userBalance?.let { "%.2f".format(it) } ?: ""}\$", color = Dim, fontSize = 12.sp)
-            }
-        }
-    )
-}
-
-/* =========================
-   Amount Picker (iTunes & Phone Cards)
-   ========================= */
-data class AmountOption(val label: String, val usd: Int)
-
-private fun priceForItunes(usd: Int): Double {
-    return usd.toDouble()
-}
-private fun priceForAtheerOrAsiacell(usd: Int): Double {
-    return usd.toDouble()
-}
-private fun priceForKorek(usd: Int): Double {
-    return usd.toDouble()
-}
-
-@Composable
-private fun AmountGrid(
-    title: String,
-    subtitle: String,
-    labelSuffix: String = "",
-    amounts: List<Int>,
-    keyPrefix: String? = null,
-    priceOf: (Int) -> Double,
-    onSelect: (usd: Int, price: Double) -> Unit,
-    onBack: () -> Unit
-) {
-    
-    
     // --- Dynamic pricing for topups with local cache + version ---
     val ctx = LocalContext.current
     val effectiveMap: Map<String, PublicPricingEntry> = if (keyPrefix != null) {

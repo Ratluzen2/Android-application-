@@ -5,7 +5,6 @@ import androidx.compose.material3.IconButton
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.material3.Card
-import androidx.compose.material3.Switch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.width
@@ -107,6 +106,7 @@ import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import androidx.annotation.Keep
+import kotlinx.coroutines.runBlocking
 
 
 
@@ -299,11 +299,6 @@ private object AdminEndpoints {
     const val pendingLudo     = "/api/admin/pending/ludo"
     const val pendingBalances = "/api/admin/pending/balances"
 
-// Auto-execute switch for API pending services
-const val autoExecStatus = "/api/admin/auto_exec/status"
-const val autoExecToggle = "/api/admin/auto_exec/toggle"
-const val autoExecRun    = "/api/admin/auto_exec/run"
-
     // ✅ الكروت المعلّقة لأسيا سيل
     const val pendingCards    = "/api/admin/pending/cards"
     fun topupCardReject(id: Int) = "/api/admin/topup_cards/$id/reject"
@@ -319,6 +314,11 @@ const val autoExecRun    = "/api/admin/auto_exec/run"
     const val usersCount      = "/api/admin/users/count"
     const val usersBalances   = "/api/admin/users/balances"
     const val providerBalance = "/api/admin/provider/balance"
+    // Auto-exec switch
+    const val autoExecStatus = "/api/admin/auto_exec/status"
+    const val autoExecToggle = "/api/admin/auto_exec/toggle"
+    const val autoExecRun    = "/api/admin/auto_exec/run"
+
 
     // Overrides for service IDs (server-level)
     const val svcIdsList = "/api/admin/service_ids/list"
@@ -2965,75 +2965,6 @@ Row {
     }
 }
 
-@Composable private fun AutoExecHeader(token: String, onAnyRun: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var autoEnabled by remember { mutableStateOf(false) }
-    var busy by remember { mutableStateOf(false) }
-    var lastInfo by remember { mutableStateOf<String?>(null) }
-
-    // Load current status
-    LaunchedEffect(Unit) {
-        runCatching { adminAutoExecStatus(token) }.onSuccess { autoEnabled = it }
-    }
-
-    // Poll/run when enabled
-    LaunchedEffect(autoEnabled) {
-        if (autoEnabled) {
-            while (autoEnabled) {
-                busy = true
-                runCatching { adminAutoExecRun(token, limit = 3, onlyWhenEnabled = true) }
-                busy = false
-                onAnyRun()
-                delay(8000)
-            }
-        }
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Column {
-                    Text("التنفيذ التلقائي لطلبات API", fontWeight = FontWeight.SemiBold, color = OnBg)
-                    Text(if (autoEnabled) "مُفعل: معالجة دفعات كل 8 ثوانٍ" else "متوقف: التنفيذ يدوي فقط", color = Dim, fontSize = 12.sp)
-                }
-                Switch(
-                    checked = autoEnabled,
-                    onCheckedChange = { on ->
-                        autoEnabled = on
-                        scope.launch {
-                            busy = true
-                            val ok = runCatching { adminAutoExecToggle(token, on) }.getOrNull() == true
-                            busy = false
-                            if (!ok) autoEnabled = !on
-                        }
-                    },
-                    enabled = !busy
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    scope.launch {
-                        busy = true
-                        runCatching { adminAutoExecRun(token, limit = 3, onlyWhenEnabled = false) }
-                        busy = false
-                        onAnyRun()
-                    }
-                }, enabled = !busy) { Text("تنفيذ دفعة الآن") }
-                if (busy) {
-                    Spacer(Modifier.width(8.dp))
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                }
-            }
-        }
-    }
-    Spacer(Modifier.height(10.dp))
-}
-
-
 @Composable
 private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -3699,7 +3630,28 @@ private fun saveLastSeen(ctx: Context, forOwner: Boolean, ts: Long = System.curr
     prefs(ctx).edit().putLong(lastSeenKey(forOwner), ts).apply()
 }
 /* شبكة - GET (suspend) */
-private suspend fun httpGet(path: String, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
+private 
+// ======= Auto-Exec (Admin) helpers =======
+private fun adminAutoExecStatus(token: String): Boolean = runBlocking {
+    val (code, txt) = httpGet(AdminEndpoints.autoExecStatus, headers = mapOf("x-admin-password" to token))
+    if (code in 200..299 && !txt.isNullOrBlank()) {
+        try { JSONObject(txt).optBoolean("enabled", false) } catch (_: Exception) { false }
+    } else false
+}
+
+private fun adminAutoExecToggle(token: String, enabled: Boolean): Boolean = runBlocking {
+    val body = JSONObject().put("enabled", enabled)
+    val (code, _) = httpPost(AdminEndpoints.autoExecToggle, body, headers = mapOf("x-admin-password" to token))
+    code in 200..299
+}
+
+private fun adminAutoExecRun(token: String, limit: Int = 3, onlyWhenEnabled: Boolean = true): Boolean = runBlocking {
+    val body = JSONObject().put("limit", limit).put("only_when_enabled", onlyWhenEnabled)
+    val (code, _) = httpPost(AdminEndpoints.autoExecRun, body, headers = mapOf("x-admin-password" to token))
+    code in 200..299
+}
+// ======= /Auto-Exec helpers =======
+suspend fun httpGet(path: String, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
     withContext(Dispatchers.IO) {
         try {
             val url = URL("$API_BASE$path")
@@ -3928,26 +3880,6 @@ private suspend fun apiAdminLogin(password: String): String? {
     return if (code in 200..299) password else null
 } 
 private suspend fun apiAdminPOST(path: String, token: String, body: JSONObject? = null): Boolean {
-
-// -------- Auto Execute (Admin) helpers --------
-suspend fun adminAutoExecStatus(token: String): Boolean {
-    val (code, body) = httpGet(AdminEndpoints.autoExecStatus, headers = mapOf("x-admin-password" to token))
-    if (code in 200..299 && body != null) {
-        return try { JSONObject(body).optBoolean("enabled", false) } catch (_: Exception) { false }
-    }
-    return false
-}
-suspend fun adminAutoExecToggle(token: String, enabled: Boolean): Boolean {
-    val obj = JSONObject().put("enabled", enabled)
-    val (code, _) = httpPost(AdminEndpoints.autoExecToggle, obj, headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
-suspend fun adminAutoExecRun(token: String, limit: Int = 3, onlyWhenEnabled: Boolean = true): Boolean {
-    val obj = JSONObject().put("limit", limit).put("only_when_enabled", onlyWhenEnabled)
-    val (code, _) = httpPost(AdminEndpoints.autoExecRun, obj, headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
-// ----------------------------------------------
     val (code, _) = if (body == null) {
         httpPost(path, JSONObject(), headers = mapOf("x-admin-password" to token))
     } else {

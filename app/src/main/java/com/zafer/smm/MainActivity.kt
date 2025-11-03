@@ -1483,12 +1483,9 @@ private suspend fun uploadUriToFirebase(context: android.content.Context, uri: a
         .addOnFailureListener { e -> d.completeExceptionally(e) }
     return d.await()
 }
-            .addOnFailureListener { e -> deferred.completeExceptionally(e) }
-    }.addOnFailureListener { e -> deferred.completeExceptionally(e) }
-    return deferred.await()
 }
-private suspend fun uploadBytesToFirebase(bytes: ByteArray, path: String): String {
-    ensureFirebaseInitialized(androidx.compose.ui.platform.LocalContext.current)
+private suspend fun uploadBytesToFirebase(context: android.content.Context, bytes: ByteArray, path: String): String {
+    ensureFirebaseInitialized(context)
     ensureFirebaseAuthIfAvailable()
     val storage = com.google.firebase.storage.FirebaseStorage.getInstance()
     val ref = storage.reference.child(path)
@@ -1508,9 +1505,6 @@ private suspend fun uploadBytesToFirebase(bytes: ByteArray, path: String): Strin
         .addOnFailureListener { e -> d.completeExceptionally(e) }
     return d.await()
 }
-            .addOnFailureListener { e -> deferred.completeExceptionally(e) }
-    }.addOnFailureListener { e -> deferred.completeExceptionally(e) }
-    return deferred.await()
 }
 private fun extractVideoThumbnail(context: android.content.Context, uri: android.net.Uri): ByteArray? {
     return try {
@@ -1587,7 +1581,7 @@ val videoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
                             } else if (mediaType == "video" && videoUri != null) {
                                 mediaUrl = uploadUriToFirebase(ctx, videoUri!!, "announcements/videos")
                                 extractVideoThumbnail(ctx, videoUri!!)?.let { bytes ->
-                                    thumbUrl = uploadBytesToFirebase(bytes, "announcements/thumbs/${System.currentTimeMillis()}.jpg")
+                                    thumbUrl = uploadBytesToFirebase(ctx, bytes, "announcements/thumbs/${System.currentTimeMillis()}.jpg")
                                 }
                             }
                         } catch (e: Throwable) { error = "فشل رفع الوسائط: " + (e.message ?: "") ; return@launch } finally { uploading = false }

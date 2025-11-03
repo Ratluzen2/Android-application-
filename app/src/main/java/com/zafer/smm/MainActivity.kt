@@ -3630,7 +3630,6 @@ private fun saveLastSeen(ctx: Context, forOwner: Boolean, ts: Long = System.curr
     prefs(ctx).edit().putLong(lastSeenKey(forOwner), ts).apply()
 }
 /* شبكة - GET (suspend) */
-private 
 // ======= Auto-Exec (Admin) helpers =======
 private fun adminAutoExecStatus(token: String): Boolean = runBlocking {
     val (code, txt) = httpGet(AdminEndpoints.autoExecStatus, headers = mapOf("x-admin-password" to token))

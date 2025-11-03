@@ -54,6 +54,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import com.google.firebase.storage.FirebaseStorage
+
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+
+import androidx.compose.ui.viewinterop.AndroidView
+import android.webkit.WebView
+import android.webkit.WebSettings
+import android.webkit.WebChromeClient
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URLEncoder
@@ -1291,19 +1301,27 @@ Column(
 // =========================
 // Announcements (App-wide)
 // =========================
-data class Announcement(val id: Int? = null, val title: String?, val body: String, val createdAt: Long)
+data class Announcement(val id: Int? = null, val title: String?, val body: String, val createdAt: Long, val imageUrl: String? = null, val videoUrl: String? = null)
 
 
-private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, body: String): Boolean {
+private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, body: String, imageUrl: String? = null, videoUrl: String? = null): Boolean {
     val obj = org.json.JSONObject().put("body", body)
     if (!title.isNullOrBlank()) obj.put("title", title)
+    if (!imageUrl.isNullOrBlank()) obj.put("image_url", imageUrl)
+    if (!videoUrl.isNullOrBlank()) obj.put("video_url", videoUrl)
+    if (!imageUrl.isNullOrBlank()) obj.put("image_url", imageUrl)
+    if (!videoUrl.isNullOrBlank()) obj.put("video_url", videoUrl)
     val (code, _) = httpPost(AdminEndpoints.announcementCreate, obj, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
 
-private suspend fun apiAdminUpdateAnnouncement(token: String, id: Int, title: String?, body: String): Boolean {
+private suspend fun apiAdminUpdateAnnouncement(token: String, id: Int, title: String?, body: String, imageUrl: String? = null, videoUrl: String? = null): Boolean {
     val obj = org.json.JSONObject().put("body", body)
     if (!title.isNullOrBlank()) obj.put("title", title)
+    if (!imageUrl.isNullOrBlank()) obj.put("image_url", imageUrl)
+    if (!videoUrl.isNullOrBlank()) obj.put("video_url", videoUrl)
+    if (!imageUrl.isNullOrBlank()) obj.put("image_url", imageUrl)
+    if (!videoUrl.isNullOrBlank()) obj.put("video_url", videoUrl)
     val (code, _) = httpPost(AdminEndpoints.announcementUpdate(id), obj, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
@@ -1315,54 +1333,94 @@ private suspend fun apiAdminDeleteAnnouncement(token: String, id: Int): Boolean 
 
 
 private suspend fun apiFetchAnnouncements(limit: Int = 50): List<Announcement> {
-    val (code, txt) = httpGet(AdminEndpoints.announcementsList + "?limit=" + limit)
-    if (code !in 200..299 || txt == null) return emptyList()
-    return try {
-        val arr = org.json.JSONArray(txt.trim())
-        val out = mutableListOf<Announcement>()
+    val trimmed = txt.trim()
+    // Accept array or object with {items:[...]}
+    val arr = if (trimmed.startsWith("{")) {
+        val root = org.json.JSONObject(trimmed)
+        root.optJSONArray("items") ?: org.json.JSONArray()
+    } else org.json.JSONArray(trimmed)
 
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            out.add(
-                Announcement(
-                    title = if (o.has("title")) o.optString("title", null) else null,
-                    body = o.optString("body",""),
-                    createdAt = o.optLong("created_at", 0L)
-                )
+    val out = mutableListOf<Announcement>()
+    for (i in 0 until arr.length()) {
+        val o = arr.optJSONObject(i) ?: continue
+        out.add(
+            Announcement(
+                id = if (o.has("id")) o.optInt("id") else null,
+                title = if (o.has("title")) o.optString("title", null) else null,
+                body = o.optString("body",""),
+                createdAt = o.optLong("created_at", 0L),
+                imageUrl = if (o.has("image_url")) o.optString("image_url", null) else null,
+                videoUrl = if (o.has("video_url")) o.optString("video_url", null) else null
             )
-        }
-        out
-    } catch (_: Exception) { emptyList() }
+        )
+    }
+    return out
+
 }
 
 private suspend fun apiFetchAdminAnnouncements(token: String, limit: Int = 200): List<Announcement> {
-    val (code, txt) = httpGet(AdminEndpoints.announcementsAdminList + "?limit=" + limit, headers = mapOf("x-admin-password" to token))
-    if (code !in 200..299 || txt == null) return emptyList()
-    return try {
-        val arr = org.json.JSONArray(txt.trim())
-        val out = mutableListOf<Announcement>()
-        for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
-            val idValue = if (o.has("id")) {
-                val tmp = o.optInt("id", -1)
-                if (tmp > 0) tmp else null
-            } else null
-            out.add(
-                Announcement(
-                    id = idValue,
-                    title = if (o.has("title")) o.optString("title", null) else null,
-                    body = o.optString("body",""),
-                    createdAt = o.optLong("created_at", 0L)
-                )
+    val trimmed = txt.trim()
+    val arr = if (trimmed.startsWith("{")) {
+        val root = org.json.JSONObject(trimmed)
+        root.optJSONArray("items") ?: org.json.JSONArray()
+    } else org.json.JSONArray(trimmed)
+    val out = mutableListOf<Announcement>()
+    for (i in 0 until arr.length()) {
+        val o = arr.optJSONObject(i) ?: continue
+        val idValue = if (o.has("id")) {
+            val tmp = o.optInt("id", -1)
+            if (tmp > 0) tmp else null
+        } else null
+        out.add(
+            Announcement(
+                id = idValue,
+                title = if (o.has("title")) o.optString("title", null) else null,
+                body = o.optString("body",""),
+                createdAt = o.optLong("created_at", 0L),
+                imageUrl = if (o.has("image_url")) o.optString("image_url", null) else null,
+                videoUrl = if (o.has("video_url")) o.optString("video_url", null) else null
             )
-        }
-        out
-    } catch (_: Exception) { emptyList() }
+        )
+    }
+    return out
+
 }
 
 
 
 
+
+@Composable
+private fun AnnouncementMedia(url: String, isVideo: Boolean) {
+    val ctx = LocalContext.current
+    val h = if (isVideo) 220.dp else 180.dp
+    Card(
+        modifier = Modifier.fillMaxWidth().height(h),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        AndroidView(factory = { context ->
+            WebView(context).apply {
+                settings.javaScriptEnabled = true
+                settings.domStorageEnabled = true
+                settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                webChromeClient = WebChromeClient()
+                val html = if (isVideo) {
+                    """
+                    <html><body style='margin:0;padding:0;background:#000'>
+                      <video src='$url' style='width:100%;height:100%' controls playsinline></video>
+                    </body></html>
+                    """.trimIndent()
+                } else {
+                    "<html><body style='margin:0;padding:0;'><img src='$url' style='width:100%;height:100%;object-fit:cover'/></body></html>"
+                }
+                loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
+            }
+        }, update = { wv ->
+            // no-op
+        })
+    }
+    Spacer(Modifier.height(8.dp))
+}
 @Composable
 private fun HomeAnnouncementsList() {
     var list by remember { mutableStateOf<List<Announcement>>(emptyList()) }
@@ -1398,7 +1456,12 @@ private fun HomeAnnouncementsList() {
                         Column(Modifier.padding(16.dp)) {
                             Text(ann.title ?: "إعلان مهم 📢", fontSize = 18.sp, color = OnBg, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(8.dp))
-                            Text(ann.body, fontSize = 16.sp, color = OnBg)
+                            if (ann.videoUrl != null && ann.videoUrl.isNotBlank()) {
+    AnnouncementMedia(url = ann.videoUrl!!, isVideo = true)
+} else if (ann.imageUrl != null && ann.imageUrl.isNotBlank()) {
+    AnnouncementMedia(url = ann.imageUrl!!, isVideo = false)
+}
+Text(ann.body, fontSize = 16.sp, color = OnBg)
                             Spacer(Modifier.height(8.dp))
                             val ts = if (ann.createdAt > 0) ann.createdAt else System.currentTimeMillis()
                             val formatted = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
@@ -1419,6 +1482,13 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
     var title by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
+    var imageUrl by remember { mutableStateOf("") }
+    var videoUrl by remember { mutableStateOf("") }
+    var selectedImage by remember { mutableStateOf<Uri?>(null) }
+    var selectedVideo by remember { mutableStateOf<Uri?>(null) }
+    var uploadingImage by remember { mutableStateOf(false) }
+    var uploadingVideo by remember { mutableStateOf(false) }
+
     var error by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -1434,6 +1504,59 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
         OutlinedTextField(
             value = body, onValueChange = { body = it },
             label = { Text("نص الإعلان") }, minLines = 5, modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+                if (uri != null) {
+                    selectedImage = uri
+                    // Auto-upload image
+                    uploadingImage = true
+                    val ref = FirebaseStorage.getInstance().reference
+                        .child("announcements/images/${System.currentTimeMillis()}.jpg")
+                    ref.putFile(uri)
+                        .addOnSuccessListener { ref.downloadUrl.addOnSuccessListener { url ->
+                            imageUrl = url.toString()
+                            uploadingImage = false
+                        }}
+                        .addOnFailureListener {
+                            uploadingImage = false
+                        }
+                }
+            }
+            val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+                if (uri != null) {
+                    selectedVideo = uri
+                    // Auto-upload video
+                    uploadingVideo = true
+                    val ref = FirebaseStorage.getInstance().reference
+                        .child("announcements/videos/${System.currentTimeMillis()}.mp4")
+                    ref.putFile(uri)
+                        .addOnSuccessListener { ref.downloadUrl.addOnSuccessListener { url ->
+                            videoUrl = url.toString()
+                            uploadingVideo = false
+                        }}
+                        .addOnFailureListener {
+                            uploadingVideo = false
+                        }
+                }
+            }
+            Button(onClick = { pickImage.launch("image/*") }, enabled = !uploadingImage && !uploadingVideo) {
+                Text(if (uploadingImage) "جاري رفع الصورة..." else "اختيار صورة")
+            }
+            Button(onClick = { pickVideo.launch("video/*") }, enabled = !uploadingImage && !uploadingVideo) {
+                Text(if (uploadingVideo) "جاري رفع الفيديو..." else "اختيار فيديو")
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+OutlinedTextField(
+            value = imageUrl, onValueChange = { imageUrl = it }, singleLine = true,
+            label = { Text("رابط صورة (اختياري)") }, modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = videoUrl, onValueChange = { videoUrl = it }, singleLine = true,
+            label = { Text("رابط فيديو (اختياري)") }, modifier = Modifier.fillMaxWidth()
         )
         if (error != null) { Spacer(Modifier.height(6.dp)); Text(error!!, color = Bad, fontSize = 12.sp) }
         Spacer(Modifier.height(12.dp))
@@ -1837,36 +1960,36 @@ private val COMMON_AMOUNTS = listOf(5,10,15,20,25,30,40,50,100)
 /* =========================
    Package Picker (PUBG / Ludo)
    ========================= */
-data class PackageOption(val label: String, val priceUsd: Double)
+data class PackageOption(val label: String, val priceUsd: Int)
 
 val pubgPackages = listOf(
-    PackageOption("60 شدة", 2.0),
-    PackageOption("325 شدة", 9.0),
-    PackageOption("660 شدة", 15.0),
-    PackageOption("1800 شدة", 40.0),
-    PackageOption("3850 شدة", 55.0),
-    PackageOption("8100 شدة", 100.0),
-    PackageOption("16200 شدة", 185.0)
+    PackageOption("60 شدة", 2),
+    PackageOption("325 شدة", 9),
+    PackageOption("660 شدة", 15),
+    PackageOption("1800 شدة", 40),
+    PackageOption("3850 شدة", 55),
+    PackageOption("8100 شدة", 100),
+    PackageOption("16200 شدة", 185)
 )
 val ludoDiamondsPackages = listOf(
-    PackageOption("810 الماسة", 5.0),
-    PackageOption("2280 الماسة", 10.0),
-    PackageOption("5080 الماسة", 20.0),
-    PackageOption("12750 الماسة", 35.0),
-    PackageOption("27200 الماسة", 85.0),
-    PackageOption("54900 الماسة", 165.0),
-    PackageOption("164800 الماسة", 475.0),
-    PackageOption("275400 الماسة", 800.0)
+    PackageOption("810 الماسة", 5),
+    PackageOption("2280 الماسة", 10),
+    PackageOption("5080 الماسة", 20),
+    PackageOption("12750 الماسة", 35),
+    PackageOption("27200 الماسة", 85),
+    PackageOption("54900 الماسة", 165),
+    PackageOption("164800 الماسة", 475),
+    PackageOption("275400 الماسة", 800)
 )
 val ludoGoldPackages = listOf(
-    PackageOption("66680 ذهب", 5.0),
-    PackageOption("219500 ذهب", 10.0),
-    PackageOption("1443000 ذهب", 20.0),
-    PackageOption("3627000 ذهب", 35.0),
-    PackageOption("9830000 ذهب", 85.0),
-    PackageOption("24835000 ذهب", 165.0),
-    PackageOption("74550000 ذهب", 475.0),
-    PackageOption("124550000 ذهب", 800.0)
+    PackageOption("66680 ذهب", 5),
+    PackageOption("219500 ذهب", 10),
+    PackageOption("1443000 ذهب", 20),
+    PackageOption("3627000 ذهب", 35),
+    PackageOption("9830000 ذهب", 85),
+    PackageOption("24835000 ذهب", 165),
+    PackageOption("74550000 ذهب", 475),
+    PackageOption("124550000 ذهب", 800)
 )
 
 /* ===== App launch prefetch for pricing (version-based, non-Compose) ===== */
@@ -1957,7 +2080,7 @@ private fun packagesWithOverrides(
             val newQty = ov?.minQty?.takeIf { it > 0 } ?: qtyStr.toIntOrNull() ?: 0
             val newPrice = ov?.pricePerK ?: opt.priceUsd.toDouble()
             val newLabel = if (newQty > 0) "$newQty $unit" else opt.label
-            PackageOption(newLabel, newPrice)
+            PackageOption(newLabel, kotlin.math.round(newPrice).toInt())
         }
     }
 }
@@ -1994,11 +2117,7 @@ fun PackageGrid(
                         Column(Modifier.padding(12.dp)) {
                             Text(opt.label, fontWeight = FontWeight.SemiBold, color = OnBg)
                             Spacer(Modifier.height(4.dp))
-                            run {
-                            val p = opt.priceUsd
-                            val priceTxt = if (p % 1.0 == 0.0) p.toInt().toString() else "%.2f".format(p)
-                            Text("السعر: $${priceTxt}", color = Dim, fontSize = 12.sp)
-                        }
+                            Text("السعر: ${'$'}${opt.priceUsd}", color = Dim, fontSize = 12.sp)
                         }
                     }
                 }
@@ -2025,7 +2144,7 @@ fun ConfirmPackageDialog(
             Column {
                 Text("الباقة المختارة: $label", color = OnBg, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
-                Text(String.format(java.util.Locale.getDefault(), "السعر المستحق: %.2f$", priceUsd), color = Dim)
+                Text("السعر المستحق: ${'$'}$priceUsd", color = Dim)
                 Spacer(Modifier.height(8.dp))
                 Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 12.sp)
             }
@@ -2037,7 +2156,7 @@ fun ConfirmPackageDialog(
 fun ConfirmPackageIdDialog(
     sectionTitle: String,
     label: String,
-    priceUsd: Double,
+    priceUsd: Int,
     onConfirm: (accountId: String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -2056,7 +2175,7 @@ fun ConfirmPackageIdDialog(
             Column {
                 Text("الباقة المختارة: $label", color = OnBg, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(6.dp))
-                Text(String.format(java.util.Locale.getDefault(), "السعر المستحق: %.2f$", priceUsd), color = Dim)
+                Text("السعر المستحق: ${'$'}$priceUsd", color = Dim)
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = accountId,
@@ -2083,7 +2202,7 @@ fun ConfirmPackageIdDialog(
     var pendingUsd by remember { mutableStateOf<Int?>(null) }
     var pendingPrice by remember { mutableStateOf<Double?>(null) }
     var pendingPkgLabel by remember { mutableStateOf<String?>(null) }
-    var pendingPkgPrice by remember { mutableStateOf<Double?>(null) }
+    var pendingPkgPrice by remember { mutableStateOf<Int?>(null) }
 
     val items = when (title) {
         "قسم شراء رصيد ايتونز" -> listOf("شراء رصيد ايتونز")
@@ -2314,7 +2433,7 @@ fun ConfirmPackageIdDialog(
                             "شراء ذهب لودو" -> "ludo_gold"
                             else -> "manual"
                         }
-                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt.toDouble(), accountId)
+                        val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt, accountId)
                         if (ok) {
                             onToast("تم استلام طلبك (${pendingPkgLabel}).")
                             onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
@@ -2396,6 +2515,13 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     var askAsiacell by remember { mutableStateOf(false) }
     var cardNumber by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
+    var imageUrl by remember { mutableStateOf("") }
+    var videoUrl by remember { mutableStateOf("") }
+    var selectedImage by remember { mutableStateOf<Uri?>(null) }
+    var selectedVideo by remember { mutableStateOf<Uri?>(null) }
+    var uploadingImage by remember { mutableStateOf(false) }
+    var uploadingVideo by remember { mutableStateOf(false) }
+
     val ctx = LocalContext.current
     var banPopup by remember { mutableStateOf<String?>(null) }
 
@@ -3737,17 +3863,6 @@ private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
-
-suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Double, accountId: String? = null): Pair<Boolean, String?> {
-    val body = JSONObject()
-        .put("uid", uid)
-        .put("product", product)
-        .put("usd", usd)
-    if (!accountId.isNullOrBlank()) body.put("account_id", accountId)
-    val (code, txt) = httpPost("/api/orders/create/manual_paid", body)
-    val ok = code in 200..299 && (txt?.contains("ok", true) == true || txt?.contains("order_id", true) == true)
-    return Pair(ok, txt)
-}
 suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int, accountId: String? = null): Pair<Boolean, String?> {
     val body = JSONObject()
         .put("uid", uid)

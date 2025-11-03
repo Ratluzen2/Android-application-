@@ -1,7 +1,7 @@
 package com.zafer.smm
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 import android.util.Log
-import com.google.firebase.ktx.Firebase
-import com.google.firebase.auth.ktx.auth
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.tasks.await
 import com.google.gson.annotations.SerializedName
@@ -4606,7 +4606,7 @@ private suspend fun storageSelfTest(ctx: android.content.Context): Boolean {
         val path = "announcements_media/tests/test_${System.currentTimeMillis()}.txt"
         val ref = storage.reference.child(path)
         val testBytes = "ping-${System.currentTimeMillis()}".toByteArray()
-        Log.d("ANN_UPLOAD", "selfTest bucket=$bucket path=$path user=${Firebase.auth.currentUser?.uid ?: "null"}")
+        Log.d("ANN_UPLOAD", "selfTest bucket=$bucket path=$path user=${FirebaseAuth.getInstance().currentUser?.uid ?: "null"}")
         ref.putBytes(testBytes).await()
         val url = ref.downloadUrl.await().toString()
         Log.d("ANN_UPLOAD", "selfTest OK url=$url")

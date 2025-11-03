@@ -227,7 +227,7 @@ object AppNotifier {
                 val it = obj.keys()
                 while (it.hasNext()) {
                     val k = it.next()
-                    val v = obj.optorg.json.JSONObject(k) ?: continue
+                    val v = obj.optJSONObject(k) ?: continue
                     out[k] = PublicPricingEntry(
                         pricePerK = v.optDouble("price_per_k", 0.0),
                         minQty    = v.optInt("min_qty", 0),
@@ -346,9 +346,9 @@ private suspend fun apiAdminListSvcOverrides(token: String): Map<String, Long> {
         if (trimmed.startsWith("{")) {
             val o = org.json.JSONObject(trimmed)
             if (o.has("list")) {
-                val arr = o.optorg.json.JSONArray("list") ?: org.json.JSONArray()
+                val arr = o.optJSONArray("list") ?: org.json.JSONArray()
                 for (i in 0 until arr.length()) {
-                    val it = arr.optorg.json.JSONObject(i) ?: continue
+                    val it = arr.optJSONObject(i) ?: continue
                     val k = it.optString("ui_key", "")
                     val v = it.optLong("service_id", 0L)
                     if (k.isNotBlank() && v > 0) result[k] = v
@@ -394,9 +394,9 @@ private suspend fun apiAdminFetchPendingServices(token: String): List<PendingSvc
     return try {
         val out = mutableListOf<PendingSvcItem>()
         val o = org.json.JSONObject(txt?.trim() ?: "{}")
-        val arr = o.optorg.json.JSONArray("list") ?: org.json.JSONArray()
+        val arr = o.optJSONArray("list") ?: org.json.JSONArray()
         for (i in 0 until arr.length()) {
-            val it = arr.optorg.json.JSONObject(i) ?: continue
+            val it = arr.optJSONObject(i) ?: continue
             val id = it.optLong("id", -1)
             val title = it.optString("title", "")
             val qty = it.optInt("quantity", 0)
@@ -437,9 +437,9 @@ private suspend fun apiAdminListPricing(token: String): Map<String, PricingOverr
         if (trimmed.startsWith("{")) {
             val o = org.json.JSONObject(trimmed)
             if (o.has("list")) {
-                val arr = o.optorg.json.JSONArray("list") ?: org.json.JSONArray()
+                val arr = o.optJSONArray("list") ?: org.json.JSONArray()
                 for (i in 0 until arr.length()) {
-                    val it = arr.optorg.json.JSONObject(i) ?: continue
+                    val it = arr.optJSONObject(i) ?: continue
                     val k = it.optString("ui_key", "")
                     val p = it.optDouble("price_per_k", Double.NaN)
                         val min = it.optInt("min_qty", 0)
@@ -489,11 +489,11 @@ private suspend fun /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys: List<Strin
     return try {
         val out = mutableMapOf<String, PublicPricingEntry>()
         val root = org.json.JSONObject(txt?.trim() ?: "{}")
-        val map = root.optorg.json.JSONObject("map") ?: org.json.JSONObject()
+        val map = root.optJSONObject("map") ?: org.json.JSONObject()
         val iter = map.keys()
         while (iter.hasNext()) {
             val k = iter.next()
-            val obj = map.optorg.json.JSONObject(k) ?: continue
+            val obj = map.optJSONObject(k) ?: continue
             out[k] = PublicPricingEntry(
                 pricePerK = obj.optDouble("price_per_k", 0.0),
                 minQty    = obj.optInt("min_qty", 0),
@@ -1322,7 +1322,7 @@ private suspend fun apiFetchAnnouncements(limit: Int = 50): List<Announcement> {
         val out = mutableListOf<Announcement>()
 
         for (i in 0 until arr.length()) {
-            val o = arr.getorg.json.JSONObject(i)
+            val o = arr.getJSONObject(i)
             out.add(
                 Announcement(
                     title = if (o.has("title")) o.optString("title", null) else null,
@@ -1342,7 +1342,7 @@ private suspend fun apiFetchAdminAnnouncements(token: String, limit: Int = 200):
         val arr = org.json.JSONArray(txt.trim())
         val out = mutableListOf<Announcement>()
         for (i in 0 until arr.length()) {
-            val o = arr.getorg.json.JSONObject(i)
+            val o = arr.getJSONObject(i)
             val idValue = if (o.has("id")) {
                 val tmp = o.optInt("id", -1)
                 if (tmp > 0) tmp else null
@@ -2787,13 +2787,13 @@ private fun isApiOrder(o: OrderItem): Boolean {
                 } else {
                     val obj = org.json.JSONObject(trimmed)
                     when {
-                        obj.has("list") -> obj.optorg.json.JSONArray("list") ?: org.json.JSONArray()
-                        obj.has("data") -> obj.optorg.json.JSONArray("data") ?: org.json.JSONArray()
+                        obj.has("list") -> obj.optJSONArray("list") ?: org.json.JSONArray()
+                        obj.has("data") -> obj.optJSONArray("data") ?: org.json.JSONArray()
                         else -> org.json.JSONArray()
                     }
                 }
                 for (i in 0 until arr.length()) {
-                    val o = arr.getorg.json.JSONObject(i)
+                    val o = arr.getJSONObject(i)
                     val item = OrderItem(
                         id = o.optString("id", o.optInt("id", 0).toString()),
                         title = o.optString("title",""),
@@ -3532,7 +3532,7 @@ private fun asiacellPreCheckAndRecord(ctx: Context, digitsRaw: String): Pair<Boo
     // 2) تكرار نفس الرقم: أكثر من مرتين خلال 24 ساعة -> حظر ساعة
     val mapStr = prefs(ctx).getString(PREF_ASIA_CARD_TIMES, "{}")
     val obj = loadJsonObjectOrEmpty(mapStr)
-    val arr = obj.optorg.json.JSONArray(digits) ?: org.json.JSONArray()
+    val arr = obj.optJSONArray(digits) ?: org.json.JSONArray()
     val arrKeep = org.json.JSONArray()
     var sameCardCount = 0
     for (i in 0 until arr.length()) {
@@ -3579,7 +3579,7 @@ private fun loadNotices(ctx: Context): List<AppNotice> {
     return try {
         val arr = org.json.JSONArray(raw)
         (0 until arr.length()).map { i ->
-            val o = arr.getorg.json.JSONObject(i)
+            val o = arr.getJSONObject(i)
             AppNotice(
                 title = o.optString("title"),
                 body = o.optString("body"),
@@ -3754,13 +3754,13 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
         } else {
             val obj = org.json.JSONObject(trimmed)
             when {
-                obj.has("orders") -> obj.optorg.json.JSONArray("orders") ?: org.json.JSONArray()
-                obj.has("list")   -> obj.optorg.json.JSONArray("list") ?: org.json.JSONArray()
+                obj.has("orders") -> obj.optJSONArray("orders") ?: org.json.JSONArray()
+                obj.has("list")   -> obj.optJSONArray("list") ?: org.json.JSONArray()
                 else -> org.json.JSONArray()
             }
         }
         (0 until arr.length()).map { i ->
-            val o = arr.getorg.json.JSONObject(i)
+            val o = arr.getJSONObject(i)
             OrderItem(
                 id = o.optString("id"),
                 title = o.optString("title"),
@@ -3798,7 +3798,7 @@ private suspend fun apiFetchNotificationsByUid(uid: String, limit: Int = 50): Li
             val arr = org.json.JSONArray(txt1!!.trim())
             val out = mutableListOf<AppNotice>()
             for (i in 0 until arr.length()) {
-                val o = arr.getorg.json.JSONObject(i)
+                val o = arr.getJSONObject(i)
                 val title = o.optString("title","إشعار")
                 val body  = o.optString("body","")
                 val tsMs  = o.optLong("created_at", System.currentTimeMillis())
@@ -3816,7 +3816,7 @@ private suspend fun apiFetchNotificationsByUid(uid: String, limit: Int = 50): Li
                 val arr = org.json.JSONArray(txt2!!.trim())
                 val out = mutableListOf<AppNotice>()
                 for (i in 0 until arr.length()) {
-                    val o = arr.getorg.json.JSONObject(i)
+                    val o = arr.getJSONObject(i)
                     val title = o.optString("title","إشعار")
                     val body  = o.optString("body","")
                     val tsMs  = o.optLong("created_at", System.currentTimeMillis())
@@ -3864,14 +3864,14 @@ private suspend fun apiAdminUsersBalances(token: String): List<Triple<String,Str
         } else {
             val root = org.json.JSONObject(trimmed)
             when {
-                root.has("list") -> root.optorg.json.JSONArray("list") ?: org.json.JSONArray()
-                root.has("data") -> root.optorg.json.JSONArray("data") ?: org.json.JSONArray()
+                root.has("list") -> root.optJSONArray("list") ?: org.json.JSONArray()
+                root.has("data") -> root.optJSONArray("data") ?: org.json.JSONArray()
                 else -> org.json.JSONArray()
             }
         }
         val out = mutableListOf<Triple<String,String,Double>>()
         for (i in 0 until arr.length()) {
-            val o = arr.getorg.json.JSONObject(i)
+            val o = arr.getJSONObject(i)
             val uid = o.optString("uid")
             val bal = o.optDouble("balance", 0.0)
             val banned = if (o.optBoolean("is_banned", false)) "محظور" else "نشط"
@@ -3902,7 +3902,7 @@ private fun parseBalancePayload(t: String?): Double? {
                 val o = org.json.JSONObject(s)
                 when {
                     o.has("balance") -> o.optString("balance").toDoubleOrNull() ?: o.optDouble("balance", Double.NaN)
-                    o.has("data") && o.get("data") is JSONObject -> o.getorg.json.JSONObject("data").optDouble("balance", Double.NaN)
+                    o.has("data") && o.get("data") is JSONObject -> o.getJSONObject("data").optDouble("balance", Double.NaN)
                     else -> Double.NaN
                 }.let { if (it.isNaN()) null else it }
             }
@@ -3919,7 +3919,7 @@ private suspend fun apiAdminFetchPendingCards(token: String): List<PendingCard>?
         val arr = org.json.JSONArray(t.trim())
         val out = mutableListOf<PendingCard>()
         for (i in 0 until arr.length()) {
-            val o = arr.getorg.json.JSONObject(i)
+            val o = arr.getJSONObject(i)
             out += PendingCard(
                 id = o.optInt("id"),
                 uid = o.optString("uid"),

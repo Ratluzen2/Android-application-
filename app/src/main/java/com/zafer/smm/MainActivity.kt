@@ -1,7 +1,4 @@
 package com.zafer.smm
-import android.util.Log
-import com.google.firebase.storage.FirebaseStorage
-import kotlinx.coroutines.tasks.await
 import com.google.gson.annotations.SerializedName
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
@@ -110,11 +107,6 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import androidx.annotation.Keep
 
-// --- Global application context holder (to avoid LocalContext outside @Composable) ---
-object GAppCtx { @JvmStatic lateinit var ctx: android.content.Context }
-val appCtx: android.content.Context get() = GAppCtx.ctx
-
-
 
 
 
@@ -141,7 +133,7 @@ object AppNotifier {
                 enableVibration(true)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             }
-            val nm = LocalContext.current.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as NotificationManager
+            val nm = ctx.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as NotificationManager
             nm.createNotificationChannel(ch)
         }
     }
@@ -682,7 +674,12 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
             if (open) {
                 var priceInput by remember { mutableStateOf(curPrice.toString()) }
                 var qtyInput by remember { mutableStateOf(curQty.toString()) }
-                val newQty   = qtyInput.toIntOrNull()
+                AlertDialog(
+                    onDismissRequest = { open = false },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            val newPrice = priceInput.toDoubleOrNull()
+                            val newQty   = qtyInput.toIntOrNull()
                             if (newPrice != null && newQty != null) {
                                 scope.launch {
                                     val ok = apiAdminSetPricing(token, p.key, newPrice, newQty, newQty, "package")
@@ -744,7 +741,12 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
                         var price by remember { mutableStateOf(TextFieldValue((ov?.pricePerK ?: svc.pricePerK).toString())) }
                         var min by remember { mutableStateOf(TextFieldValue((ov?.minQty ?: svc.min).toString())) }
                         var max by remember { mutableStateOf(TextFieldValue((ov?.maxQty ?: svc.max).toString())) }
-                        ?: 0.0
+                        AlertDialog(
+                            onDismissRequest = { showEdit = false },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    scope.launch {
+                                        val p = price.text.toDoubleOrNull() ?: 0.0
                                         val mn = min.text.toIntOrNull() ?: 0
                                         val mx = max.text.toIntOrNull() ?: mn
                                         val ok = apiAdminSetPricing(token, key, p, mn, mx, mode = "flat")
@@ -796,7 +798,12 @@ private fun GlobalPricingCard(
 
     if (open) {
         var price by remember { mutableStateOf(TextFieldValue((ov?.pricePerK ?: 0.0).toString())) }
-        ?: 0.0
+        AlertDialog(
+            onDismissRequest = { open = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        val p = price.text.toDoubleOrNull() ?: 0.0
                         val ok = apiAdminSetPricing(token, key, p, 0, 0, mode = "flat")
                         if (ok) { onSnack("تم الحفظ"); open = false; onSaved() } else onSnack("فشل الحفظ")
                     }
@@ -930,8 +937,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
 
 super.onCreate(savedInstanceState)
-        GAppCtx.ctx = applicationContext
-        appCtx = applicationContext
         
         AppNotifier.ensureChannel(this)
         AppNotifier.requestPermissionIfNeeded(this)
@@ -1289,26 +1294,19 @@ Column(
 data class Announcement(val id: Int? = null, val title: String?, val body: String, val createdAt: Long)
 
 
-private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, body: String, mediaType: String? = null, mediaUrl: String? = null, thumbUrl: String? = null): Boolean {
+private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, body: String): Boolean {
     val obj = org.json.JSONObject().put("body", body)
     if (!title.isNullOrBlank()) obj.put("title", title)
-    if (!mediaType.isNullOrBlank()) obj.put("media_type", mediaType)
-    if (!mediaUrl.isNullOrBlank()) obj.put("media_url", mediaUrl)
-    if (!thumbUrl.isNullOrBlank()) obj.put("thumb_url", thumbUrl)
     val (code, _) = httpPost(AdminEndpoints.announcementCreate, obj, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
 
-private suspend fun apiAdminUpdateAnnouncement(token: String, id: Int, title: String?, body: String, mediaType: String? = null, mediaUrl: String? = null, thumbUrl: String? = null): Boolean {
+private suspend fun apiAdminUpdateAnnouncement(token: String, id: Int, title: String?, body: String): Boolean {
     val obj = org.json.JSONObject().put("body", body)
     if (!title.isNullOrBlank()) obj.put("title", title)
-    if (!mediaType.isNullOrBlank()) obj.put("media_type", mediaType)
-    if (!mediaUrl.isNullOrBlank()) obj.put("media_url", mediaUrl)
-    if (!thumbUrl.isNullOrBlank()) obj.put("thumb_url", thumbUrl)
     val (code, _) = httpPost(AdminEndpoints.announcementUpdate(id), obj, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
-
 private suspend fun apiAdminDeleteAnnouncement(token: String, id: Int): Boolean {
     val (code, _) = httpPost(AdminEndpoints.announcementDelete(id), org.json.JSONObject(), headers = mapOf("x-admin-password" to token))
     return code in 200..299
@@ -1415,92 +1413,6 @@ private fun HomeAnnouncementsList() {
 }
 
 
-
-// === Firebase init + anonymous auth (via reflection to avoid extra deps) ===
-private fun ensureFirebaseInitialized(context: android.content.Context) {
-    try {
-        com.google.firebase.FirebaseApp.getInstance()
-    } catch (_: IllegalStateException) {
-        try { com.google.firebase.FirebaseApp.initializeApp(context) } catch (_: Throwable) {}
-    } catch (_: Throwable) {}
-}
-private suspend fun ensureFirebaseAuthIfAvailable() {
-    try {
-        val cls = Class.forName("com.google.firebase.auth.FirebaseAuth")
-        val getInstance = cls.getMethod("getInstance")
-        val auth = getInstance.invoke(null)
-        val getCurrentUser = auth.javaClass.getMethod("getCurrentUser")
-        val cur = getCurrentUser.invoke(auth)
-        if (cur == null) {
-            val signIn = auth.javaClass.getMethod("signInAnonymously")
-            @Suppress("UNCHECKED_CAST")
-            val task = signIn.invoke(auth) as com.google.android.gms.tasks.Task<*>
-            val d = kotlinx.coroutines.CompletableDeferred<Unit>()
-            task.addOnSuccessListener { d.complete(Unit) }.addOnFailureListener { e -> d.completeExceptionally(e) }
-            d.await()
-        }
-    } catch (_: Throwable) {
-        // لا يوجد FirebaseAuth في المشروع، نتجاهل ونحاول الرفع بدون مصادقة
-    }
-}
-// === Media upload helpers for AdminAnnouncement ===
-private suspend fun uploadUriToFirebase(context: android.content.Context, uri: android.net.Uri, pathPrefix: String): String {
-    ensureFirebaseInitialized(context)
-    ensureFirebaseAuthIfAvailable()
-    val app = com.google.firebase.FirebaseApp.getInstance()
-    val bucketName = app.options.storageBucket
-    val storage = if (!bucketName.isNullOrEmpty())
-        com.google.firebase.storage.FirebaseStorage.getInstance("gs://$bucketName")
-    else com.google.firebase.storage.FirebaseStorage.getInstance()
-
-    val cr = context.contentResolver
-    val mime = try { cr.getType(uri) ?: "application/octet-stream" } catch (_: Throwable) { "application/octet-stream" }
-    val ext = when {
-        mime.contains("jpeg") || mime.contains("jpg") -> "jpg"
-        mime.contains("png") -> "png"
-        mime.contains("gif") -> "gif"
-        mime.contains("webp") -> "webp"
-        mime.contains("mp4") -> "mp4"
-        mime.contains("3gp") -> "3gp"
-        mime.contains("avi") -> "avi"
-        else -> "bin"
-    }
-    val path = "$pathPrefix/${System.currentTimeMillis()}_${(0..9999).random()}.$ext"
-    val ref = storage.reference.child(path)
-
-    // ارفع ثم خذ رابط التحميل من نفس المرجع (بدون توليد توكن يدوي)
-    ref.putFile(uri).await()
-    return ref.downloadUrl.await().toString()
-}
-
-private suspend fun uploadBytesToFirebase(context: android.content.Context, bytes: ByteArray, path: String): String {
-    ensureFirebaseInitialized(context)
-    ensureFirebaseAuthIfAvailable()
-    val app = com.google.firebase.FirebaseApp.getInstance()
-    val bucketName = app.options.storageBucket
-    val storage = if (!bucketName.isNullOrEmpty())
-        com.google.firebase.storage.FirebaseStorage.getInstance("gs://$bucketName")
-    else com.google.firebase.storage.FirebaseStorage.getInstance()
-
-    val ref = storage.reference.child(path)
-    ref.putBytes(bytes).await()
-    return ref.downloadUrl.await().toString()
-}
-
-private fun extractVideoThumbnail(context: android.content.Context, uri: android.net.Uri): ByteArray? {
-    return try {
-        val retriever = android.media.MediaMetadataRetriever()
-        retriever.setDataSource(context, uri)
-        val bmp = retriever.getFrameAtTime(500_000)
-        retriever.release()
-        if (bmp != null) {
-            val baos = java.io.ByteArrayOutputStream()
-            bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, baos)
-            baos.toByteArray()
-        } else null
-    } catch (_: Throwable) { null }
-}
-
 @Composable
 private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
@@ -1508,20 +1420,6 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
     var body by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-// وسائط الإعلان
-var mediaType by remember { mutableStateOf<String?>(null) }
-var imageUri by remember { mutableStateOf<android.net.Uri?>(null) }
-var videoUri by remember { mutableStateOf<android.net.Uri?>(null) }
-var mediaUrl by remember { mutableStateOf<String?>(null) }
-var thumbUrl by remember { mutableStateOf<String?>(null) }
-var uploading by remember { mutableStateOf(false) }
-val ctx = androidx.compose.ui.platform.LocalContext.current
-val imagePicker = androidx.activity.compose.rememberLauncherForActivityResult(
-    contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
-) { uri -> if (uri != null) { imageUri = uri; videoUri = null; mediaType = "image"; mediaUrl = null; thumbUrl = null } }
-val videoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
-    contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
-) { uri -> if (uri != null) { videoUri = uri; imageUri = null; mediaType = "video"; mediaUrl = null; thumbUrl = null } }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text("إعلان التطبيق", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = OnBg, modifier = Modifier.weight(1f))
@@ -1537,39 +1435,14 @@ val videoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
             value = body, onValueChange = { body = it },
             label = { Text("نص الإعلان") }, minLines = 5, modifier = Modifier.fillMaxWidth()
         )
-        Spacer(Modifier.height(8.dp))
-        Row {
-            Button(onClick = { imagePicker.launch("image/*") }, enabled = !sending && !uploading) { Text("إرفاق صورة") }
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = { videoPicker.launch("video/*") }, enabled = !sending && !uploading) { Text("إرفاق فيديو") }
-        }
-        if (mediaType != null) {
-            Spacer(Modifier.height(6.dp))
-            Text(if (mediaType == "image") "صورة مُرفقة" else "فيديو مُرفق", color = Dim, fontSize = 13.sp)
-        }
         if (error != null) { Spacer(Modifier.height(6.dp)); Text(error!!, color = Bad, fontSize = 12.sp) }
         Spacer(Modifier.height(12.dp))
-        
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End){ androidx.compose.material3.TextButton(onClick = { val v = getUploadDiag(LocalContext.current) ?: "لا توجد تفاصيل بعد."; toastAny(MainActivity.appCtx, v, true) }){ androidx.compose.material3.Text("تفاصيل الرفع") } }
-Button(
+        Button(
             onClick = {
                 if (body.isBlank()) { error = "النص مطلوب"; return@Button }
                 scope.launch {
                     sending = true; error = null
-                    if (mediaType != null && mediaUrl == null) {
-                        try {
-                            uploading = true
-                            if (mediaType == "image" && imageUri != null) {
-                                mediaUrl = uploadUriToFirebase(ctx, imageUri!!, "announcements/images")
-                            } else if (mediaType == "video" && videoUri != null) {
-                                mediaUrl = uploadUriToFirebase(ctx, videoUri!!, "announcements/videos")
-                                extractVideoThumbnail(ctx, videoUri!!)?.let { bytes ->
-                                    thumbUrl = uploadBytesToFirebase(ctx, bytes, "announcements/thumbs/${System.currentTimeMillis()}.jpg")
-                                }
-                            }
-                        } catch (e: Throwable) { error = "فشل رفع الوسائط: " + (e.message ?: "") ; return@launch } finally { uploading = false }
-                    }
-                    val ok = apiAdminCreateAnnouncement(token, title.ifBlank { null }, body, mediaType, mediaUrl, thumbUrl)
+                    val ok = apiAdminCreateAnnouncement(token, title.ifBlank { null }, body)
                     sending = false
                     if (ok) { onSent(); onBack() } else { error = "فشل إرسال الإعلان" }
                 }
@@ -1709,7 +1582,7 @@ Button(
             uid = uid, service = svc,
             onDismiss = { selectedService = null },
             onOrdered = { ok, msg ->
-                toastAny(MainActivity.appCtx, msg, true)
+                onToast(msg)
                 if (ok) {
                     onAddNotice(AppNotice("طلب جديد (${svc.uiKey})", "تم استلام طلبك وسيتم تنفيذه قريبًا.", forOwner = false))
                     onAddNotice(AppNotice("طلب خدمات معلّق", "طلب ${svc.uiKey} من UID=$uid بانتظار المعالجة/التنفيذ", forOwner = true))
@@ -1735,7 +1608,11 @@ Button(
 
     LaunchedEffect(Unit) { userBalance = apiGetBalance(uid) }
 
-    ) { onOrdered(false, "الرجاء إدخال الرابط"); return@TextButton }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(enabled = !loading, onClick = {
+                if (link.isBlank()) { onOrdered(false, "الرجاء إدخال الرابط"); return@TextButton }
                 if (qty < service.min || qty > service.max) { onOrdered(false, "الكمية يجب أن تكون بين ${service.min} و ${service.max}"); return@TextButton }
                 val bal = userBalance ?: 0.0
                 if (bal < price) { onOrdered(false, "رصيدك غير كافٍ. السعر: $price\$ | رصيدك: ${"%.2f".format(bal)}\$"); return@TextButton }
@@ -1933,7 +1810,9 @@ private fun ConfirmAmountDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    { Text("تأكيد الشراء") } },
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onConfirm) { Text("تأكيد الشراء") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
         title = { Text(sectionTitle, color = OnBg) },
         text = {
@@ -2137,7 +2016,9 @@ fun ConfirmPackageDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    { Text("تأكيد الشراء") } },
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onConfirm) { Text("تأكيد الشراء") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
         title = { Text(sectionTitle, color = OnBg) },
         text = {
@@ -2161,7 +2042,11 @@ fun ConfirmPackageIdDialog(
     onDismiss: () -> Unit
 ) {
     var accountId by remember { mutableStateOf("") }
-    .isNotEmpty(),
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                enabled = accountId.trim().isNotEmpty(),
                 onClick = { onConfirm(accountId.trim()) }
             ) { Text("تأكيد الشراء") }
         },
@@ -2421,7 +2306,7 @@ fun ConfirmPackageIdDialog(
                 if (flow != null && priceInt != null) {
                     val bal = apiGetBalance(uid) ?: 0.0
                     if (bal < priceInt) {
-                        toastAny(MainActivity.appCtx, "رصيدك غير كافٍ. السعر: ${'$'}$priceInt | رصيدك: ${"%.2f".format(bal, true)}${'$'}")
+                        onToast("رصيدك غير كافٍ. السعر: ${'$'}$priceInt | رصيدك: ${"%.2f".format(bal)}${'$'}")
                     } else {
                         val product = when (flow) {
                             "شحن شدات ببجي" -> "pubg_uc"
@@ -2431,15 +2316,15 @@ fun ConfirmPackageIdDialog(
                         }
                         val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt.toDouble(), accountId)
                         if (ok) {
-                            toastAny(MainActivity.appCtx, "تم استلام طلبك (${pendingPkgLabel}, true).")
+                            onToast("تم استلام طلبك (${pendingPkgLabel}).")
                             onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
                             onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} (Player: ${accountId}) يحتاج مراجعة.", forOwner = true))
                         } else {
                             val msg = (txt ?: "").lowercase()
                             if (msg.contains("insufficient")) {
-                                toastAny(MainActivity.appCtx, "رصيدك غير كافٍ لإتمام العملية.", true)
+                                onToast("رصيدك غير كافٍ لإتمام العملية.")
                             } else {
-                                toastAny(MainActivity.appCtx, "تعذر إرسال الطلب. حاول لاحقًا.", true)
+                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
                             }
                         }
                     }
@@ -2475,15 +2360,15 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                         val (ok, txt) = apiCreateManualPaidOrder(uid, product, amount)
                         if (ok) {
                             val label = "$flow ${amount}$"
-                            toastAny(MainActivity.appCtx, "تم استلام طلبك ($label, true).")
+                            onToast("تم استلام طلبك ($label).")
                             onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $label للمراجعة.", forOwner = false))
                             onAddNotice(AppNotice("طلب جديد", "طلب $label من UID=$uid يحتاج مراجعة.", forOwner = true))
                         } else {
                             val msg = (txt ?: "").lowercase()
                             if (msg.contains("insufficient")) {
-                                toastAny(MainActivity.appCtx, "رصيدك غير كافٍ لإتمام العملية.", true)
+                                onToast("رصيدك غير كافٍ لإتمام العملية.")
                             } else {
-                                toastAny(MainActivity.appCtx, "تعذر إرسال الطلب. حاول لاحقًا.", true)
+                                onToast("تعذر إرسال الطلب. حاول لاحقًا.")
                             }
                         }
                     }
@@ -2559,7 +2444,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         ).forEach {
             Card(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable {
-                    toastAny(MainActivity.appCtx, "لإتمام الشحن تواصل مع الدعم (واتساب/تيليجرام, true).")
+                    onToast("لإتمام الشحن تواصل مع الدعم (واتساب/تيليجرام).")
                     onAddNotice(AppNotice("شحن رصيد", "يرجى التواصل مع الدعم لإكمال شحن: $it", forOwner = false))
                 },
                 colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
@@ -2574,7 +2459,8 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     }
 
     if (askAsiacell) {
-        askAsiacell = false },
+        AlertDialog(
+            onDismissRequest = { if (!sending) askAsiacell = false },
             confirmButton = {
                 val scope2 = rememberCoroutineScope()
                 TextButton(enabled = !sending, onClick = {
@@ -2587,7 +2473,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                         sending = false
                         val mins = asiacellBanRemainingMinutes(ctx)
                         banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\\nسينتهي الحظر بعد ${mins} دقيقة."
-                        toastAny(MainActivity.appCtx, "تم حضرك موقتا بسبب انتهاك سياسة التطبيق", true)
+                        onToast("تم حضرك موقتا بسبب انتهاك سياسة التطبيق")
                         return@TextButton
                     }
 
@@ -2599,12 +2485,12 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                         if (ok) {
                             onAddNotice(AppNotice("تم استلام كارتك", "تم إرسال كارت أسيا سيل إلى المالك للمراجعة.", forOwner = false))
                             onAddNotice(AppNotice("كارت أسيا سيل جديد", "UID=$uid | كارت: $digits", forOwner = true))
-                            toastAny(MainActivity.appCtx, "تم إرسال الكارت بنجاح", true)
+                            onToast("تم إرسال الكارت بنجاح")
                             cardNumber = ""
                             askAsiacell = false
                         } else {
                             onAddNotice(AppNotice("فشل إرسال الكارت", "تحقق من الاتصال وحاول مجددًا.", forOwner = false))
-                            toastAny(MainActivity.appCtx, "فشل إرسال الكارت", true)
+                            onToast("فشل إرسال الكارت")
                         }
                     }
                 }) { Text(if (sending) "يرسل" else "إرسال") }
@@ -2632,7 +2518,9 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     }
 
     banPopup?.let { msg ->
-        { Text("حسنًا") } },
+        AlertDialog(
+            onDismissRequest = { banPopup = null },
+            confirmButton = { TextButton(onClick = { banPopup = null }) { Text("حسنًا") } },
             title = { Text("تنبيه", color = OnBg) },
             text = { Text(msg, color = OnBg) }
         )
@@ -2740,7 +2628,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
 
         fun needToken(): Boolean {
             if (token.isNullOrBlank()) {
-                toastAny(MainActivity.appCtx, "سجل دخول المالك أولًا من الإعدادات.", true)
+                onToast("سجل دخول المالك أولًا من الإعدادات.")
                 onNeedLogin()
                 return true
             }
@@ -3036,7 +2924,11 @@ Row {
     }
 
     if (approveFor != null && approveWithCode) {
-        TextButton(onClick = {
+        AlertDialog(
+            onDismissRequest = { approveFor = null; codeText = "" },
+            confirmButton = {
+                val scope2 = rememberCoroutineScope()
+                TextButton(onClick = {
                     val code = codeText.trim()
                     if (code.isEmpty()) return@TextButton
                     scope2.launch {
@@ -3198,7 +3090,11 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 
                     if (showEdit) {
                         var newIdText by remember { mutableStateOf(curId.toString()) }
-                        .toLongOrNull()
+                        AlertDialog(
+                            onDismissRequest = { showEdit = false },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    val num = newIdText.trim().toLongOrNull()
                                     if (num != null && num > 0) {
                                         scope.launch {
                                             val ok = apiAdminSetSvcOverride(token, svc.uiKey, num)
@@ -3324,7 +3220,11 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
     }
 
     if (execFor != null) {
-        TextButton(onClick = {
+        AlertDialog(
+            onDismissRequest = { execFor = null },
+            confirmButton = {
+                val scope2 = rememberCoroutineScope()
+                TextButton(onClick = {
                     val amt = amountText.toDoubleOrNull()
                     if (amt == null || amt <= 0.0) return@TextButton
                     scope2.launch {
@@ -4071,7 +3971,9 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
     val clip = LocalClipboardManager.current
     var showAdminLogin by remember { mutableStateOf(false) }
 
-    { Text("إغلاق") } },
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
         title = { Text("الإعدادات", color = OnBg) },
         text = {
             Column {
@@ -4104,7 +4006,14 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
         var err by remember { mutableStateOf<String?>(null) }
         val scope = rememberCoroutineScope()
 
-        if (token != null) { onOwnerLogin(token); showAdminLogin = false }
+        AlertDialog(
+            onDismissRequest = { showAdminLogin = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        err = null
+                        val token = apiAdminLogin(pass)
+                        if (token != null) { onOwnerLogin(token); showAdminLogin = false }
                         else { err = "بيانات غير صحيحة" }
                     }
                 }) { Text("تأكيد") }
@@ -4293,7 +4202,9 @@ private fun NoticeCenterDialog(
     onClear: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    { Text("إغلاق") } },
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
         dismissButton = { TextButton(onClick = onClear) { Text("مسح الإشعارات") } },
         title = { Text("الإشعارات") },
         text = {
@@ -4475,7 +4386,12 @@ private fun AdminAnnouncementsList(
                         if (showEdit) {
                             var title by remember { mutableStateOf(ann.title ?: "") }
                             var body by remember { mutableStateOf(ann.body) }
-                            {
+                            AlertDialog(
+                                onDismissRequest = { showEdit = false },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        val id = ann.id
+                                        if (id != null && id > 0) {
                                             scope.launch {
                                                 val ok = apiAdminUpdateAnnouncement(token, id, title.ifBlank { null }, body)
                                                 showEdit = false
@@ -4501,7 +4417,12 @@ private fun AdminAnnouncementsList(
                         }
 
                         if (showDelete) {
-                            {
+                            AlertDialog(
+                                onDismissRequest = { showDelete = false },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        val id = ann.id
+                                        if (id != null && id > 0) {
                                             scope.launch {
                                                 val ok = apiAdminDeleteAnnouncement(token, id)
                                                 showDelete = false
@@ -4530,54 +4451,4 @@ private fun AdminAnnouncementsList(
             androidx.compose.runtime.LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack = null }
         }
     }
-}
-private fun friendlyStorageError(e: com.google.firebase.storage.StorageException): String = when (e.errorCode) {
-    com.google.firebase.storage.StorageException.ERROR_NOT_AUTHENTICATED -> "يجب تسجيل الدخول قبل الرفع."
-    com.google.firebase.storage.StorageException.ERROR_NOT_AUTHORIZED -> "ما عندك صلاحية لرفع الوسائط."
-    com.google.firebase.storage.StorageException.ERROR_OBJECT_NOT_FOUND -> "المسار غير موجود—تأكد من المرجع بعد الرفع."
-    com.google.firebase.storage.StorageException.ERROR_RETRY_LIMIT_EXCEEDED -> "الاتصال ضعيف—أعد المحاولة."
-    com.google.firebase.storage.StorageException.ERROR_QUOTA_EXCEEDED -> "تجاوزت الحصة التخزينية."
-    else -> "فشل غير معروف: ${e.message}"
-}
-
-private suspend fun storageSelfTest(ctx: android.content.Context): Boolean {
-    return try {
-        val app = com.google.firebase.FirebaseApp.getInstance()
-        val bucket = app.options.storageBucket
-        val storage = if (!bucket.isNullOrEmpty())
-            com.google.firebase.storage.FirebaseStorage.getInstance("gs://$bucket")
-        else com.google.firebase.storage.FirebaseStorage.getInstance()
-        val path = "announcements_media/tests/test_${System.currentTimeMillis()}.txt"
-        val ref = storage.reference.child(path)
-        val testBytes = "ping-${System.currentTimeMillis()}".toByteArray()
-        Log.d("ANN_UPLOAD", "selfTest bucket=$bucket path=$path user=${/*authRemoved*/null?.uid ?: "null"}")
-        ref.putBytes(testBytes).await()
-        val url = ref.downloadUrl.await().toString()
-        Log.d("ANN_UPLOAD", "selfTest OK url=$url")
-        true
-    } catch (e: com.google.firebase.storage.StorageException) {
-        Log.e("ANN_UPLOAD", "selfTest FAIL code=${e.errorCode} http=${e.httpResultCode} msg=${e.message}")
-        false
-    } catch (e: Exception) {
-        Log.e("ANN_UPLOAD", "selfTest FAIL ${e.message}", e)
-        false
-    }
-}
-
-private fun setUploadDiag(ctx: android.content.Context, value: String) {
-    try {
-        val sp = ctx.getSharedPreferences("ann_debug", android.content.Context.MODE_PRIVATE)
-        sp.edit().putString("last", value.take(4000)).apply()
-    } catch (_: Throwable) { }
-}
-
-private fun getUploadDiag(ctx: android.content.Context): String? {
-    return try {
-        ctx.getSharedPreferences("ann_debug", android.content.Context.MODE_PRIVATE).getString("last", null)
-    } catch (_: Throwable) { null }
-}
-
-
-private fun toastAny(context: android.content.Context, any: Any?, long: Boolean = true) {
-    android.widget.Toast.makeText(context, (any ?: "").toString(), if (long) android.widget.Toast.LENGTH_LONG else android.widget.Toast.LENGTH_SHORT).show()
 }

@@ -2888,8 +2888,7 @@ if (itemFilter == null || itemFilter.invoke(item)) {
                         autoEnabled = on
                         if (!autoBusy) {
                             autoBusy = true
-                            val scope2 = rememberCoroutineScope()
-                            scope2.launch {
+                            scope.launch {
                                 runCatching { adminAutoExecToggle(token, on) }
                                 autoBusy = false
                             }
@@ -3676,7 +3675,6 @@ private fun saveLastSeen(ctx: Context, forOwner: Boolean, ts: Long = System.curr
     prefs(ctx).edit().putLong(lastSeenKey(forOwner), ts).apply()
 }
 /* شبكة - GET (suspend) */
-private 
 /* ======= Auto-Exec (Admin) helpers ======= */
 private suspend fun adminAutoExecStatus(token: String): Boolean {
     val (code, txt) = httpGet(AdminEndpoints.autoExecStatus, headers = mapOf("x-admin-password" to token))

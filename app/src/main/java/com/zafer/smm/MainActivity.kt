@@ -54,16 +54,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import com.google.firebase.storage.FirebaseStorage
-
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-
-import androidx.compose.ui.viewinterop.AndroidView
-import android.webkit.WebView
-import android.webkit.WebSettings
-import android.webkit.WebChromeClient
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URLEncoder
@@ -237,7 +227,7 @@ object AppNotifier {
                 val it = obj.keys()
                 while (it.hasNext()) {
                     val k = it.next()
-                    val v = obj.optJSONObject(k) ?: continue
+                    val v = obj.optorg.json.JSONObject(k) ?: continue
                     out[k] = PublicPricingEntry(
                         pricePerK = v.optDouble("price_per_k", 0.0),
                         minQty    = v.optInt("min_qty", 0),
@@ -354,11 +344,11 @@ private suspend fun apiAdminListSvcOverrides(token: String): Map<String, Long> {
         val result = mutableMapOf<String, Long>()
         val trimmed = txt.trim()
         if (trimmed.startsWith("{")) {
-            val o = JSONObject(trimmed)
+            val o = org.json.JSONObject(trimmed)
             if (o.has("list")) {
-                val arr = o.optJSONArray("list") ?: JSONArray()
+                val arr = o.optorg.json.JSONArray("list") ?: org.json.JSONArray()
                 for (i in 0 until arr.length()) {
-                    val it = arr.optJSONObject(i) ?: continue
+                    val it = arr.optorg.json.JSONObject(i) ?: continue
                     val k = it.optString("ui_key", "")
                     val v = it.optLong("service_id", 0L)
                     if (k.isNotBlank() && v > 0) result[k] = v
@@ -380,14 +370,14 @@ private suspend fun apiAdminListSvcOverrides(token: String): Map<String, Long> {
 }
 
 private suspend fun apiAdminSetSvcOverride(token: String, uiKey: String, id: Long): Boolean {
-    val body = JSONObject().put("ui_key", uiKey).put("service_id", id)
-    val (code, _) = httpPost(AdminEndpoints.svcIdSet, body, headers = mapOf("x-admin-password" to token))
+    val body = org.json.JSONObject().put("ui_key", uiKey).put("service_id", id)
+    val (code, txt) = httpPost(AdminEndpoints.svcIdSet, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
 
 private suspend fun apiAdminClearSvcOverride(token: String, uiKey: String): Boolean {
-    val body = JSONObject().put("ui_key", uiKey)
-    val (code, _) = httpPost(AdminEndpoints.svcIdClear, body, headers = mapOf("x-admin-password" to token))
+    val body = org.json.JSONObject().put("ui_key", uiKey)
+    val (code, txt) = httpPost(AdminEndpoints.svcIdClear, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
 
@@ -403,10 +393,10 @@ private suspend fun apiAdminFetchPendingServices(token: String): List<PendingSvc
     if (code !in 200..299 || txt == null) return emptyList()
     return try {
         val out = mutableListOf<PendingSvcItem>()
-        val o = JSONObject(txt)
-        val arr = o.optJSONArray("list") ?: JSONArray()
+        val o = org.json.JSONObject(txt?.trim() ?: "{}")
+        val arr = o.optorg.json.JSONArray("list") ?: org.json.JSONArray()
         for (i in 0 until arr.length()) {
-            val it = arr.optJSONObject(i) ?: continue
+            val it = arr.optorg.json.JSONObject(i) ?: continue
             val id = it.optLong("id", -1)
             val title = it.optString("title", "")
             val qty = it.optInt("quantity", 0)
@@ -418,19 +408,19 @@ private suspend fun apiAdminFetchPendingServices(token: String): List<PendingSvc
 }
 
 private suspend fun apiAdminSetOrderPrice(token: String, orderId: Long, price: Double): Boolean {
-    val body = JSONObject().put("order_id", orderId).put("price", price)
+    val body = org.json.JSONObject().put("order_id", orderId).put("price", price)
     val (code, _) = httpPost(AdminEndpoints.orderSetPrice, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
 
 private suspend fun apiAdminSetOrderQty(token: String, orderId: Long, quantity: Int, reprice: Boolean = false): Boolean {
-    val body = JSONObject().put("order_id", orderId).put("quantity", quantity).put("reprice", reprice)
-    val (code, _) = httpPost(AdminEndpoints.orderSetQty, body, headers = mapOf("x-admin-password" to token))
+    val body = org.json.JSONObject().put("order_id", orderId).put("quantity", quantity).put("reprice", reprice)
+    val (code, txt) = httpPost(AdminEndpoints.orderSetQty, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
 private suspend fun apiAdminClearOrderPrice(token: String, orderId: Long): Boolean {
-    val body = JSONObject().put("order_id", orderId)
-    val (code, _) = httpPost(AdminEndpoints.orderClearPrice, body, headers = mapOf("x-admin-password" to token))
+    val body = org.json.JSONObject().put("order_id", orderId)
+    val (code, txt) = httpPost(AdminEndpoints.orderClearPrice, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
 /* =========================
@@ -445,11 +435,11 @@ private suspend fun apiAdminListPricing(token: String): Map<String, PricingOverr
         val result = mutableMapOf<String, PricingOverride>()
         val trimmed = txt.trim()
         if (trimmed.startsWith("{")) {
-            val o = JSONObject(trimmed)
+            val o = org.json.JSONObject(trimmed)
             if (o.has("list")) {
-                val arr = o.optJSONArray("list") ?: JSONArray()
+                val arr = o.optorg.json.JSONArray("list") ?: org.json.JSONArray()
                 for (i in 0 until arr.length()) {
-                    val it = arr.optJSONObject(i) ?: continue
+                    val it = arr.optorg.json.JSONObject(i) ?: continue
                     val k = it.optString("ui_key", "")
                     val p = it.optDouble("price_per_k", Double.NaN)
                         val min = it.optInt("min_qty", 0)
@@ -466,13 +456,13 @@ private suspend fun apiAdminListPricing(token: String): Map<String, PricingOverr
 }
 
 private suspend fun apiAdminSetPricing(token: String, uiKey: String, pricePerK: Double, minQty: Int, maxQty: Int, mode: String? = null): Boolean {
-    val body = JSONObject().put("ui_key", uiKey).put("price_per_k", pricePerK).put("min_qty", minQty).put("max_qty", maxQty).apply { if (mode != null) put("mode", mode) }
+    val body = org.json.JSONObject().put("ui_key", uiKey).put("price_per_k", pricePerK).put("min_qty", minQty).put("max_qty", maxQty).apply { if (mode != null) put("mode", mode) }
     val (code, _) = httpPost(AdminEndpoints.pricingSet, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
 
 private suspend fun apiAdminClearPricing(token: String, uiKey: String): Boolean {
-    val body = JSONObject().put("ui_key", uiKey)
+    val body = org.json.JSONObject().put("ui_key", uiKey)
     val (code, _) = httpPost(AdminEndpoints.pricingClear, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
@@ -498,12 +488,12 @@ private suspend fun /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys: List<Strin
     if (code !in 200..299 || txt == null) return emptyMap()
     return try {
         val out = mutableMapOf<String, PublicPricingEntry>()
-        val root = org.json.JSONObject(txt)
-        val map = root.optJSONObject("map") ?: org.json.JSONObject()
+        val root = org.json.JSONObject(txt?.trim() ?: "{}")
+        val map = root.optorg.json.JSONObject("map") ?: org.json.JSONObject()
         val iter = map.keys()
         while (iter.hasNext()) {
             val k = iter.next()
-            val obj = map.optJSONObject(k) ?: continue
+            val obj = map.optorg.json.JSONObject(k) ?: continue
             out[k] = PublicPricingEntry(
                 pricePerK = obj.optDouble("price_per_k", 0.0),
                 minQty    = obj.optInt("min_qty", 0),
@@ -518,7 +508,7 @@ private suspend fun /*DISABLED_LIVE_CALL*/ apiPublicPricingBulk(keys: List<Strin
 private suspend fun apiPublicPricingVersion(): Long {
     val (code, txt) = httpGet("/api/public/pricing/version")
     if (code !in 200..299 || txt == null) return 0L
-    return try { org.json.JSONObject(txt).optLong("version", 0L) } catch (_: Exception) { 0L }
+    return try { org.json.JSONObject(txt?.trim() ?: "{}").optLong("version", 0L) } catch (_: Exception) { 0L }
 }
 
 @Composable
@@ -1301,126 +1291,78 @@ Column(
 // =========================
 // Announcements (App-wide)
 // =========================
-data class Announcement(val id: Int? = null, val title: String?, val body: String, val createdAt: Long, val imageUrl: String? = null, val videoUrl: String? = null)
+data class Announcement(val id: Int? = null, val title: String?, val body: String, val createdAt: Long)
 
 
-private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, body: String, imageUrl: String? = null, videoUrl: String? = null): Boolean {
+private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, body: String): Boolean {
     val obj = org.json.JSONObject().put("body", body)
     if (!title.isNullOrBlank()) obj.put("title", title)
-    if (!imageUrl.isNullOrBlank()) obj.put("image_url", imageUrl)
-    if (!videoUrl.isNullOrBlank()) obj.put("video_url", videoUrl)
-    if (!imageUrl.isNullOrBlank()) obj.put("image_url", imageUrl)
-    if (!videoUrl.isNullOrBlank()) obj.put("video_url", videoUrl)
-    val (code, _) = httpPost(AdminEndpoints.announcementCreate, obj, headers = mapOf("x-admin-password" to token))
+    val (code, txt) = httpPost(AdminEndpoints.announcementCreate, obj, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
 
-private suspend fun apiAdminUpdateAnnouncement(token: String, id: Int, title: String?, body: String, imageUrl: String? = null, videoUrl: String? = null): Boolean {
+private suspend fun apiAdminUpdateAnnouncement(token: String, id: Int, title: String?, body: String): Boolean {
     val obj = org.json.JSONObject().put("body", body)
     if (!title.isNullOrBlank()) obj.put("title", title)
-    if (!imageUrl.isNullOrBlank()) obj.put("image_url", imageUrl)
-    if (!videoUrl.isNullOrBlank()) obj.put("video_url", videoUrl)
-    if (!imageUrl.isNullOrBlank()) obj.put("image_url", imageUrl)
-    if (!videoUrl.isNullOrBlank()) obj.put("video_url", videoUrl)
-    val (code, _) = httpPost(AdminEndpoints.announcementUpdate(id), obj, headers = mapOf("x-admin-password" to token))
+    val (code, txt) = httpPost(AdminEndpoints.announcementUpdate(id), obj, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
 private suspend fun apiAdminDeleteAnnouncement(token: String, id: Int): Boolean {
-    val (code, _) = httpPost(AdminEndpoints.announcementDelete(id), org.json.JSONObject(), headers = mapOf("x-admin-password" to token))
+    val (code, txt) = httpPost(AdminEndpoints.announcementDelete(id), org.json.JSONObject(), headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
 
 
 
 private suspend fun apiFetchAnnouncements(limit: Int = 50): List<Announcement> {
-    val trimmed = txt.trim()
-    // Accept array or object with {items:[...]}
-    val arr = if (trimmed.startsWith("{")) {
-        val root = org.json.JSONObject(trimmed)
-        root.optJSONArray("items") ?: org.json.JSONArray()
-    } else org.json.JSONArray(trimmed)
+    val (code, txt) = httpGet(AdminEndpoints.announcementsList + "?limit=" + limit)
+    if (code !in 200..299 || txt == null) return emptyList()
+    return try {
+        val arr = org.json.JSONArray(txt.trim())
+        val out = mutableListOf<Announcement>()
 
-    val out = mutableListOf<Announcement>()
-    for (i in 0 until arr.length()) {
-        val o = arr.optJSONObject(i) ?: continue
-        out.add(
-            Announcement(
-                id = if (o.has("id")) o.optInt("id") else null,
-                title = if (o.has("title")) o.optString("title", null) else null,
-                body = o.optString("body",""),
-                createdAt = o.optLong("created_at", 0L),
-                imageUrl = if (o.has("image_url")) o.optString("image_url", null) else null,
-                videoUrl = if (o.has("video_url")) o.optString("video_url", null) else null
+        for (i in 0 until arr.length()) {
+            val o = arr.getorg.json.JSONObject(i)
+            out.add(
+                Announcement(
+                    title = if (o.has("title")) o.optString("title", null) else null,
+                    body = o.optString("body",""),
+                    createdAt = o.optLong("created_at", 0L)
+                )
             )
-        )
-    }
-    return out
-
+        }
+        out
+    } catch (_: Exception) { emptyList() }
 }
 
 private suspend fun apiFetchAdminAnnouncements(token: String, limit: Int = 200): List<Announcement> {
-    val trimmed = txt.trim()
-    val arr = if (trimmed.startsWith("{")) {
-        val root = org.json.JSONObject(trimmed)
-        root.optJSONArray("items") ?: org.json.JSONArray()
-    } else org.json.JSONArray(trimmed)
-    val out = mutableListOf<Announcement>()
-    for (i in 0 until arr.length()) {
-        val o = arr.optJSONObject(i) ?: continue
-        val idValue = if (o.has("id")) {
-            val tmp = o.optInt("id", -1)
-            if (tmp > 0) tmp else null
-        } else null
-        out.add(
-            Announcement(
-                id = idValue,
-                title = if (o.has("title")) o.optString("title", null) else null,
-                body = o.optString("body",""),
-                createdAt = o.optLong("created_at", 0L),
-                imageUrl = if (o.has("image_url")) o.optString("image_url", null) else null,
-                videoUrl = if (o.has("video_url")) o.optString("video_url", null) else null
+    val (code, txt) = httpGet(AdminEndpoints.announcementsAdminList + "?limit=" + limit, headers = mapOf("x-admin-password" to token))
+    if (code !in 200..299 || txt == null) return emptyList()
+    return try {
+        val arr = org.json.JSONArray(txt.trim())
+        val out = mutableListOf<Announcement>()
+        for (i in 0 until arr.length()) {
+            val o = arr.getorg.json.JSONObject(i)
+            val idValue = if (o.has("id")) {
+                val tmp = o.optInt("id", -1)
+                if (tmp > 0) tmp else null
+            } else null
+            out.add(
+                Announcement(
+                    id = idValue,
+                    title = if (o.has("title")) o.optString("title", null) else null,
+                    body = o.optString("body",""),
+                    createdAt = o.optLong("created_at", 0L)
+                )
             )
-        )
-    }
-    return out
-
+        }
+        out
+    } catch (_: Exception) { emptyList() }
 }
 
 
 
 
-
-@Composable
-private fun AnnouncementMedia(url: String, isVideo: Boolean) {
-    val ctx = LocalContext.current
-    val h = if (isVideo) 220.dp else 180.dp
-    Card(
-        modifier = Modifier.fillMaxWidth().height(h),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        AndroidView(factory = { context ->
-            WebView(context).apply {
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                webChromeClient = WebChromeClient()
-                val html = if (isVideo) {
-                    """
-                    <html><body style='margin:0;padding:0;background:#000'>
-                      <video src='$url' style='width:100%;height:100%' controls playsinline></video>
-                    </body></html>
-                    """.trimIndent()
-                } else {
-                    "<html><body style='margin:0;padding:0;'><img src='$url' style='width:100%;height:100%;object-fit:cover'/></body></html>"
-                }
-                loadDataWithBaseURL(null, html, "text/html", "utf-8", null)
-            }
-        }, update = { wv ->
-            // no-op
-        })
-    }
-    Spacer(Modifier.height(8.dp))
-}
 @Composable
 private fun HomeAnnouncementsList() {
     var list by remember { mutableStateOf<List<Announcement>>(emptyList()) }
@@ -1456,12 +1398,7 @@ private fun HomeAnnouncementsList() {
                         Column(Modifier.padding(16.dp)) {
                             Text(ann.title ?: "إعلان مهم 📢", fontSize = 18.sp, color = OnBg, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(8.dp))
-                            if (ann.videoUrl != null && ann.videoUrl.isNotBlank()) {
-    AnnouncementMedia(url = ann.videoUrl!!, isVideo = true)
-} else if (ann.imageUrl != null && ann.imageUrl.isNotBlank()) {
-    AnnouncementMedia(url = ann.imageUrl!!, isVideo = false)
-}
-Text(ann.body, fontSize = 16.sp, color = OnBg)
+                            Text(ann.body, fontSize = 16.sp, color = OnBg)
                             Spacer(Modifier.height(8.dp))
                             val ts = if (ann.createdAt > 0) ann.createdAt else System.currentTimeMillis()
                             val formatted = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
@@ -1482,13 +1419,6 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
     var title by remember { mutableStateOf("") }
     var body by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
-    var imageUrl by remember { mutableStateOf("") }
-    var videoUrl by remember { mutableStateOf("") }
-    var selectedImage by remember { mutableStateOf<Uri?>(null) }
-    var selectedVideo by remember { mutableStateOf<Uri?>(null) }
-    var uploadingImage by remember { mutableStateOf(false) }
-    var uploadingVideo by remember { mutableStateOf(false) }
-
     var error by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -1504,59 +1434,6 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
         OutlinedTextField(
             value = body, onValueChange = { body = it },
             label = { Text("نص الإعلان") }, minLines = 5, modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(8.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-                if (uri != null) {
-                    selectedImage = uri
-                    // Auto-upload image
-                    uploadingImage = true
-                    val ref = FirebaseStorage.getInstance().reference
-                        .child("announcements/images/${System.currentTimeMillis()}.jpg")
-                    ref.putFile(uri)
-                        .addOnSuccessListener { ref.downloadUrl.addOnSuccessListener { url ->
-                            imageUrl = url.toString()
-                            uploadingImage = false
-                        }}
-                        .addOnFailureListener {
-                            uploadingImage = false
-                        }
-                }
-            }
-            val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-                if (uri != null) {
-                    selectedVideo = uri
-                    // Auto-upload video
-                    uploadingVideo = true
-                    val ref = FirebaseStorage.getInstance().reference
-                        .child("announcements/videos/${System.currentTimeMillis()}.mp4")
-                    ref.putFile(uri)
-                        .addOnSuccessListener { ref.downloadUrl.addOnSuccessListener { url ->
-                            videoUrl = url.toString()
-                            uploadingVideo = false
-                        }}
-                        .addOnFailureListener {
-                            uploadingVideo = false
-                        }
-                }
-            }
-            Button(onClick = { pickImage.launch("image/*") }, enabled = !uploadingImage && !uploadingVideo) {
-                Text(if (uploadingImage) "جاري رفع الصورة..." else "اختيار صورة")
-            }
-            Button(onClick = { pickVideo.launch("video/*") }, enabled = !uploadingImage && !uploadingVideo) {
-                Text(if (uploadingVideo) "جاري رفع الفيديو..." else "اختيار فيديو")
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-OutlinedTextField(
-            value = imageUrl, onValueChange = { imageUrl = it }, singleLine = true,
-            label = { Text("رابط صورة (اختياري)") }, modifier = Modifier.fillMaxWidth()
-        )
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = videoUrl, onValueChange = { videoUrl = it }, singleLine = true,
-            label = { Text("رابط فيديو (اختياري)") }, modifier = Modifier.fillMaxWidth()
         )
         if (error != null) { Spacer(Modifier.height(6.dp)); Text(error!!, color = Bad, fontSize = 12.sp) }
         Spacer(Modifier.height(12.dp))
@@ -2515,13 +2392,6 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     var askAsiacell by remember { mutableStateOf(false) }
     var cardNumber by remember { mutableStateOf("") }
     var sending by remember { mutableStateOf(false) }
-    var imageUrl by remember { mutableStateOf("") }
-    var videoUrl by remember { mutableStateOf("") }
-    var selectedImage by remember { mutableStateOf<Uri?>(null) }
-    var selectedVideo by remember { mutableStateOf<Uri?>(null) }
-    var uploadingImage by remember { mutableStateOf(false) }
-    var uploadingVideo by remember { mutableStateOf(false) }
-
     val ctx = LocalContext.current
     var banPopup by remember { mutableStateOf<String?>(null) }
 
@@ -2913,17 +2783,17 @@ private fun isApiOrder(o: OrderItem): Boolean {
                 val parsed = mutableListOf<OrderItem>()
                 val trimmed = txt.trim()
                 val arr: JSONArray = if (trimmed.startsWith("[")) {
-                    JSONArray(trimmed)
+                    org.json.JSONArray(trimmed)
                 } else {
-                    val obj = JSONObject(trimmed)
+                    val obj = org.json.JSONObject(trimmed)
                     when {
-                        obj.has("list") -> obj.optJSONArray("list") ?: JSONArray()
-                        obj.has("data") -> obj.optJSONArray("data") ?: JSONArray()
-                        else -> JSONArray()
+                        obj.has("list") -> obj.optorg.json.JSONArray("list") ?: org.json.JSONArray()
+                        obj.has("data") -> obj.optorg.json.JSONArray("data") ?: org.json.JSONArray()
+                        else -> org.json.JSONArray()
                     }
                 }
                 for (i in 0 until arr.length()) {
-                    val o = arr.getJSONObject(i)
+                    val o = arr.getorg.json.JSONObject(i)
                     val item = OrderItem(
                         id = o.optString("id", o.optInt("id", 0).toString()),
                         title = o.optString("title",""),
@@ -2958,13 +2828,13 @@ if (itemFilter == null || itemFilter.invoke(item)) {
         apiAdminPOST(String.format(AdminEndpoints.orderDeliver, id.toInt()), token)
 
     suspend fun doReject(id: String): Boolean =
-        apiAdminPOST(String.format(AdminEndpoints.orderReject, id.toInt()), token, JSONObject().put("reason","Rejected by owner"))
+        apiAdminPOST(String.format(AdminEndpoints.orderReject, id.toInt()), token, org.json.JSONObject().put("reason","Rejected by owner"))
 
     suspend fun doDeliverWithCode(id: String, code: String): Boolean =
         apiAdminPOST(
             String.format(AdminEndpoints.orderDeliver, id.toInt()),
             token,
-            JSONObject().put("code", code)            // ✅ يمرّر الكود للباكند
+            org.json.JSONObject().put("code", code)            // ✅ يمرّر الكود للباكند
         )
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -3629,10 +3499,10 @@ private fun asiacellBanRemainingMinutes(ctx: Context): Long {
 }
 
 private fun loadJsonObjectOrEmpty(s: String?): JSONObject =
-    try { if (!s.isNullOrBlank()) JSONObject(s) else JSONObject() } catch (_: Throwable) { JSONObject() }
+    try { if (!s.isNullOrBlank()) org.json.JSONObject(s) else org.json.JSONObject() } catch (_: Throwable) { org.json.JSONObject() }
 
 private fun loadJsonArrayOrEmpty(s: String?): JSONArray =
-    try { if (!s.isNullOrBlank()) JSONArray(s) else JSONArray() } catch (_: Throwable) { JSONArray() }
+    try { if (!s.isNullOrBlank()) org.json.JSONArray(s) else org.json.JSONArray() } catch (_: Throwable) { org.json.JSONArray() }
 
 /**
  * يفحص الحظر + السرعة + تكرار نفس الكارت، ويحدث العدادات إن لم يُحظر.
@@ -3648,7 +3518,7 @@ private fun asiacellPreCheckAndRecord(ctx: Context, digitsRaw: String): Pair<Boo
     // 1) فحص السرعة: 3 محاولات خلال دقيقة -> حظر ساعة
     val recStr = prefs(ctx).getString(PREF_ASIA_RECENT, "[]")
     val recent = loadJsonArrayOrEmpty(recStr)
-    val keep = JSONArray()
+    val keep = org.json.JSONArray()
     var recentCount = 0
     for (i in 0 until recent.length()) {
         val t = recent.optLong(i, 0L)
@@ -3662,8 +3532,8 @@ private fun asiacellPreCheckAndRecord(ctx: Context, digitsRaw: String): Pair<Boo
     // 2) تكرار نفس الرقم: أكثر من مرتين خلال 24 ساعة -> حظر ساعة
     val mapStr = prefs(ctx).getString(PREF_ASIA_CARD_TIMES, "{}")
     val obj = loadJsonObjectOrEmpty(mapStr)
-    val arr = obj.optJSONArray(digits) ?: JSONArray()
-    val arrKeep = JSONArray()
+    val arr = obj.optorg.json.JSONArray(digits) ?: org.json.JSONArray()
+    val arrKeep = org.json.JSONArray()
     var sameCardCount = 0
     for (i in 0 until arr.length()) {
         val t = arr.optLong(i, 0L)
@@ -3707,9 +3577,9 @@ private fun saveOwnerToken(ctx: Context, token: String?) { prefs(ctx).edit().put
 private fun loadNotices(ctx: Context): List<AppNotice> {
     val raw = prefs(ctx).getString("notices_json", "[]") ?: "[]"
     return try {
-        val arr = JSONArray(raw)
+        val arr = org.json.JSONArray(raw)
         (0 until arr.length()).map { i ->
-            val o = arr.getJSONObject(i)
+            val o = arr.getorg.json.JSONObject(i)
             AppNotice(
                 title = o.optString("title"),
                 body = o.optString("body"),
@@ -3725,9 +3595,9 @@ private fun loadNotices(ctx: Context): List<AppNotice> {
     } catch (_: Exception) { emptyList() }
 }
 private fun saveNotices(ctx: Context, notices: List<AppNotice>) {
-    val arr = JSONArray()
+    val arr = org.json.JSONArray()
     notices.forEach {
-        val o = JSONObject()
+        val o = org.json.JSONObject()
         o.put("title", it.title)
         o.put("body", it.body)
         o.put("ts", it.ts)
@@ -3817,22 +3687,22 @@ private suspend fun httpPostFormAbs(fullUrl: String, fields: Map<String, String>
 
 /* ===== وظائف مشتركة مع الخادم ===== */
 private suspend fun pingHealth(): Boolean? {
-    val (code, _) = httpGet("/health")
+    val (code, txt) = httpGet("/health")
     return code in 200..299
 }
 private suspend fun tryUpsertUid(uid: String) {
-    httpPost("/api/users/upsert", JSONObject().put("uid", uid))
+    httpPost("/api/users/upsert", org.json.JSONObject().put("uid", uid))
 }
 private suspend fun apiGetBalance(uid: String): Double? {
     val (code, txt) = httpGet("/api/wallet/balance?uid=$uid")
     return if (code in 200..299 && txt != null) {
-        try { JSONObject(txt.trim()).optDouble("balance") } catch (_: Exception) { null }
+        try { org.json.JSONObject(txt.trim()).optDouble("balance") } catch (_: Exception) { null }
     } else null
 }
 private suspend fun apiCreateProviderOrder(
     uid: String, serviceId: Long, serviceName: String, link: String, quantity: Int, price: Double
 ): Boolean {
-    val body = JSONObject()
+    val body = org.json.JSONObject()
         .put("uid", uid)
         .put("service_id", serviceId)
         .put("service_name", serviceName)
@@ -3847,24 +3717,24 @@ private suspend fun apiCreateProviderOrder(
 private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
     val (code, txt) = httpPost(
         "/api/wallet/asiacell/submit",
-        JSONObject().put("uid", uid).put("card", card)
+        org.json.JSONObject().put("uid", uid).put("card", card)
     )
     if (code !in 200..299) return false
     return try {
         if (txt == null) return true
-        val obj = JSONObject(txt.trim())
+        val obj = org.json.JSONObject(txt.trim())
         obj.optBoolean("ok", true) || obj.optString("status").equals("received", true)
     } catch (_: Exception) { true }
 }
 
 private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
-    val body = JSONObject().put("uid", uid).put("title", name)
+    val body = org.json.JSONObject().put("uid", uid).put("title", name)
     val (code, txt) = httpPost("/api/orders/create/manual", body)
     return code in 200..299 && (txt?.contains("ok", true) == true)
 }
 
 suspend fun apiCreateManualPaidOrder(uid: String, product: String, usd: Int, accountId: String? = null): Pair<Boolean, String?> {
-    val body = JSONObject()
+    val body = org.json.JSONObject()
         .put("uid", uid)
         .put("product", product)
         .put("usd", usd)
@@ -3880,17 +3750,17 @@ private suspend fun apiGetMyOrders(uid: String): List<OrderItem>? {
     return try {
         val trimmed = txt.trim()
         val arr: JSONArray = if (trimmed.startsWith("[")) {
-            JSONArray(trimmed)
+            org.json.JSONArray(trimmed)
         } else {
-            val obj = JSONObject(trimmed)
+            val obj = org.json.JSONObject(trimmed)
             when {
-                obj.has("orders") -> obj.optJSONArray("orders") ?: JSONArray()
-                obj.has("list")   -> obj.optJSONArray("list") ?: JSONArray()
-                else -> JSONArray()
+                obj.has("orders") -> obj.optorg.json.JSONArray("orders") ?: org.json.JSONArray()
+                obj.has("list")   -> obj.optorg.json.JSONArray("list") ?: org.json.JSONArray()
+                else -> org.json.JSONArray()
             }
         }
         (0 until arr.length()).map { i ->
-            val o = arr.getJSONObject(i)
+            val o = arr.getorg.json.JSONObject(i)
             OrderItem(
                 id = o.optString("id"),
                 title = o.optString("title"),
@@ -3928,7 +3798,7 @@ private suspend fun apiFetchNotificationsByUid(uid: String, limit: Int = 50): Li
             val arr = org.json.JSONArray(txt1!!.trim())
             val out = mutableListOf<AppNotice>()
             for (i in 0 until arr.length()) {
-                val o = arr.getJSONObject(i)
+                val o = arr.getorg.json.JSONObject(i)
                 val title = o.optString("title","إشعار")
                 val body  = o.optString("body","")
                 val tsMs  = o.optLong("created_at", System.currentTimeMillis())
@@ -3946,7 +3816,7 @@ private suspend fun apiFetchNotificationsByUid(uid: String, limit: Int = 50): Li
                 val arr = org.json.JSONArray(txt2!!.trim())
                 val out = mutableListOf<AppNotice>()
                 for (i in 0 until arr.length()) {
-                    val o = arr.getJSONObject(i)
+                    val o = arr.getorg.json.JSONObject(i)
                     val title = o.optString("title","إشعار")
                     val body  = o.optString("body","")
                     val tsMs  = o.optLong("created_at", System.currentTimeMillis())
@@ -3969,20 +3839,20 @@ private suspend fun apiAdminLogin(password: String): String? {
 } 
 private suspend fun apiAdminPOST(path: String, token: String, body: JSONObject? = null): Boolean {
     val (code, _) = if (body == null) {
-        httpPost(path, JSONObject(), headers = mapOf("x-admin-password" to token))
+        httpPost(path, org.json.JSONObject(), headers = mapOf("x-admin-password" to token))
     } else {
         httpPost(path, body, headers = mapOf("x-admin-password" to token))
     }
     return code in 200..299
 }
 private suspend fun apiAdminWalletChange(endpoint: String, token: String, uid: String, amount: Double): Boolean {
-    val body = JSONObject().put("uid", uid).put("amount", amount)
+    val body = org.json.JSONObject().put("uid", uid).put("amount", amount)
     val (code, _) = httpPost(endpoint, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
 private suspend fun apiAdminUsersCount(token: String): Int? {
     val (c, t) = httpGet(AdminEndpoints.usersCount, mapOf("x-admin-password" to token))
-    return if (c in 200..299 && t != null) try { JSONObject(t.trim()).optInt("count") } catch (_: Exception) { null } else null
+    return if (c in 200..299 && t != null) try { org.json.JSONObject(t.trim()).optInt("count") } catch (_: Exception) { null } else null
 }
 private suspend fun apiAdminUsersBalances(token: String): List<Triple<String,String,Double>>? {
     val (c, t) = httpGet(AdminEndpoints.usersBalances, mapOf("x-admin-password" to token))
@@ -3990,18 +3860,18 @@ private suspend fun apiAdminUsersBalances(token: String): List<Triple<String,Str
     return try {
         val trimmed = t.trim()
         val arr: JSONArray = if (trimmed.startsWith("[")) {
-            JSONArray(trimmed)
+            org.json.JSONArray(trimmed)
         } else {
-            val root = JSONObject(trimmed)
+            val root = org.json.JSONObject(trimmed)
             when {
-                root.has("list") -> root.optJSONArray("list") ?: JSONArray()
-                root.has("data") -> root.optJSONArray("data") ?: JSONArray()
-                else -> JSONArray()
+                root.has("list") -> root.optorg.json.JSONArray("list") ?: org.json.JSONArray()
+                root.has("data") -> root.optorg.json.JSONArray("data") ?: org.json.JSONArray()
+                else -> org.json.JSONArray()
             }
         }
         val out = mutableListOf<Triple<String,String,Double>>()
         for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
+            val o = arr.getorg.json.JSONObject(i)
             val uid = o.optString("uid")
             val bal = o.optDouble("balance", 0.0)
             val banned = if (o.optBoolean("is_banned", false)) "محظور" else "نشط"
@@ -4029,10 +3899,10 @@ private fun parseBalancePayload(t: String?): Double? {
         when {
             s.matches(Regex("""\d+(\.\d+)?""")) -> s.toDouble()
             s.startsWith("{") -> {
-                val o = JSONObject(s)
+                val o = org.json.JSONObject(s)
                 when {
                     o.has("balance") -> o.optString("balance").toDoubleOrNull() ?: o.optDouble("balance", Double.NaN)
-                    o.has("data") && o.get("data") is JSONObject -> o.getJSONObject("data").optDouble("balance", Double.NaN)
+                    o.has("data") && o.get("data") is JSONObject -> o.getorg.json.JSONObject("data").optDouble("balance", Double.NaN)
                     else -> Double.NaN
                 }.let { if (it.isNaN()) null else it }
             }
@@ -4046,10 +3916,10 @@ private suspend fun apiAdminFetchPendingCards(token: String): List<PendingCard>?
     val (c, t) = httpGet(AdminEndpoints.pendingCards, mapOf("x-admin-password" to token))
     if (c !in 200..299 || t == null) return null
     return try {
-        val arr = JSONArray(t.trim())
+        val arr = org.json.JSONArray(t.trim())
         val out = mutableListOf<PendingCard>()
         for (i in 0 until arr.length()) {
-            val o = arr.getJSONObject(i)
+            val o = arr.getorg.json.JSONObject(i)
             out += PendingCard(
                 id = o.optInt("id"),
                 uid = o.optString("uid"),
@@ -4061,13 +3931,13 @@ private suspend fun apiAdminFetchPendingCards(token: String): List<PendingCard>?
     } catch (_: Exception) { null }
 }
 private suspend fun apiAdminRejectTopupCard(id: Int, token: String): Boolean {
-    val (c, _) = httpPost(AdminEndpoints.topupCardReject(id), JSONObject(), mapOf("x-admin-password" to token))
+    val (c, _) = httpPost(AdminEndpoints.topupCardReject(id), org.json.JSONObject(), mapOf("x-admin-password" to token))
     return c in 200..299
 }
 private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: String): Boolean {
     val (c, _) = httpPost(
         AdminEndpoints.topupCardExecute(id),
-        JSONObject().put("amount", amount),
+        org.json.JSONObject().put("amount", amount),
         mapOf("x-admin-password" to token)
     )
     return c in 200..299
@@ -4165,7 +4035,7 @@ private fun loadOrderStatusMap(ctx: Context): Map<String, String> {
     val raw = prefs(ctx).getString("order_status_map", "{}") ?: "{}"
     return try {
         val out = mutableMapOf<String, String>()
-        val o = JSONObject(raw)
+        val o = org.json.JSONObject(raw)
         val it = o.keys()
         while (it.hasNext()) {
             val k = it.next()
@@ -4175,7 +4045,7 @@ private fun loadOrderStatusMap(ctx: Context): Map<String, String> {
     } catch (_: Exception) { emptyMap() }
 }
 private fun saveOrderStatusMap(ctx: Context, map: Map<String, String>) {
-    val o = JSONObject()
+    val o = org.json.JSONObject()
     map.forEach { (k, v) -> o.put(k, v) }
     prefs(ctx).edit().putString("order_status_map", o.toString()).apply()
 }
@@ -4184,7 +4054,7 @@ private fun saveOrderStatusMap(ctx: Context, map: Map<String, String>) {
    ربط FCM مع UID على السيرفر
    ========================= */
 private suspend fun apiUpdateFcmToken(uid: String, token: String): Boolean {
-    val (code, _) = httpPost("/api/users/fcm_token", JSONObject().put("uid", uid).put("fcm", token))
+    val (code, _) = httpPost("/api/users/fcm_token", org.json.JSONObject().put("uid", uid).put("fcm", token))
     return code in 200..299
 }
 

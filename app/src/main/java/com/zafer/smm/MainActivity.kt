@@ -1452,7 +1452,11 @@ private suspend fun ensureFirebaseAuthIfAvailable() {
 private suspend fun uploadUriToFirebase(context: android.content.Context, uri: android.net.Uri, pathPrefix: String): String {
     ensureFirebaseInitialized(context)
     ensureFirebaseAuthIfAvailable()
-    val storage = com.google.firebase.storage.FirebaseStorage.getInstance()
+    val app = com.google.firebase.FirebaseApp.getInstance()
+    val bucketName = app.options.storageBucket
+    val storage = if (bucketName != null && bucketName.isNotEmpty())
+        com.google.firebase.storage.FirebaseStorage.getInstance("gs://"+bucketName)
+    else com.google.firebase.storage.FirebaseStorage.getInstance()
     val cr = context.contentResolver
     val mime = try { cr.getType(uri) ?: "application/octet-stream" } catch (_: Throwable) { "application/octet-stream" }
     val ext = when {
@@ -1486,7 +1490,11 @@ private suspend fun uploadUriToFirebase(context: android.content.Context, uri: a
 private suspend fun uploadBytesToFirebase(context: android.content.Context, bytes: ByteArray, path: String): String {
     ensureFirebaseInitialized(context)
     ensureFirebaseAuthIfAvailable()
-    val storage = com.google.firebase.storage.FirebaseStorage.getInstance()
+    val app = com.google.firebase.FirebaseApp.getInstance()
+    val bucketName = app.options.storageBucket
+    val storage = if (bucketName != null && bucketName.isNotEmpty())
+        com.google.firebase.storage.FirebaseStorage.getInstance("gs://"+bucketName)
+    else com.google.firebase.storage.FirebaseStorage.getInstance()
     val ref = storage.reference.child(path)
     val token = java.util.UUID.randomUUID().toString()
     val metadata = com.google.firebase.storage.StorageMetadata.Builder()

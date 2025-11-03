@@ -1483,7 +1483,6 @@ private suspend fun uploadUriToFirebase(context: android.content.Context, uri: a
         .addOnFailureListener { e -> d.completeExceptionally(e) }
     return d.await()
 }
-}
 private suspend fun uploadBytesToFirebase(context: android.content.Context, bytes: ByteArray, path: String): String {
     ensureFirebaseInitialized(context)
     ensureFirebaseAuthIfAvailable()
@@ -1504,7 +1503,6 @@ private suspend fun uploadBytesToFirebase(context: android.content.Context, byte
         }
         .addOnFailureListener { e -> d.completeExceptionally(e) }
     return d.await()
-}
 }
 private fun extractVideoThumbnail(context: android.content.Context, uri: android.net.Uri): ByteArray? {
     return try {

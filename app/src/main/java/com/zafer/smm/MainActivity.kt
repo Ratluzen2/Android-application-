@@ -1420,8 +1420,39 @@ private fun HomeAnnouncementsList() {
 }
 
 
+
+// === Firebase init + anonymous auth (via reflection to avoid extra deps) ===
+private fun ensureFirebaseInitialized(context: android.content.Context) {
+    try {
+        com.google.firebase.FirebaseApp.getInstance()
+    } catch (_: IllegalStateException) {
+        try { com.google.firebase.FirebaseApp.initializeApp(context) } catch (_: Throwable) {}
+    } catch (_: Throwable) {}
+}
+private suspend fun ensureFirebaseAuthIfAvailable() {
+    try {
+        val cls = Class.forName("com.google.firebase.auth.FirebaseAuth")
+        val getInstance = cls.getMethod("getInstance")
+        val auth = getInstance.invoke(null)
+        val getCurrentUser = auth.javaClass.getMethod("getCurrentUser")
+        val cur = getCurrentUser.invoke(auth)
+        if (cur == null) {
+            val signIn = auth.javaClass.getMethod("signInAnonymously")
+            @Suppress("UNCHECKED_CAST")
+            val task = signIn.invoke(auth) as com.google.android.gms.tasks.Task<*>
+            val d = kotlinx.coroutines.CompletableDeferred<Unit>()
+            task.addOnSuccessListener { d.complete(Unit) }.addOnFailureListener { e -> d.completeExceptionally(e) }
+            d.await()
+        }
+    } catch (_: Throwable) {
+        // لا يوجد FirebaseAuth في المشروع، نتجاهل ونحاول الرفع بدون مصادقة
+    }
+}
 // === Media upload helpers for AdminAnnouncement ===
 private suspend fun uploadUriToFirebase(context: android.content.Context, uri: android.net.Uri, pathPrefix: String): String {
+    ensureFirebaseInitialized(context)
+    ensureFirebaseAuthIfAvailable()
+
     val storage = com.google.firebase.storage.FirebaseStorage.getInstance()
     val ref = storage.reference.child("$pathPrefix/${System.currentTimeMillis()}_${(0..9999).random()}")
     val deferred = kotlinx.coroutines.CompletableDeferred<String>()
@@ -1432,6 +1463,9 @@ private suspend fun uploadUriToFirebase(context: android.content.Context, uri: a
     return deferred.await()
 }
 private suspend fun uploadBytesToFirebase(bytes: ByteArray, path: String): String {
+    ensureFirebaseInitialized(com.google.firebase.FirebaseApp.getInstance().applicationContext)
+    ensureFirebaseAuthIfAvailable()
+
     val storage = com.google.firebase.storage.FirebaseStorage.getInstance()
     val ref = storage.reference.child(path)
     val deferred = kotlinx.coroutines.CompletableDeferred<String>()
@@ -1519,7 +1553,7 @@ val videoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
                                     thumbUrl = uploadBytesToFirebase(bytes, "announcements/thumbs/${System.currentTimeMillis()}.jpg")
                                 }
                             }
-                        } catch (_: Throwable) { error = "فشل رفع الوسائط" } finally { uploading = false }
+                        } catch (e: Throwable) { error = "فشل رفع الوسائط: " + (e.message ?: "") ; return@launch } finally { uploading = false }
                     }
                     val ok = apiAdminCreateAnnouncement(token, title.ifBlank { null }, body, mediaType, mediaUrl, thumbUrl)
                     sending = false

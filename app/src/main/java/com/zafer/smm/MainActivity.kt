@@ -1,4 +1,5 @@
 package com.zafer.smm
+import kotlinx.coroutines.tasks.await
 import com.google.gson.annotations.SerializedName
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
@@ -1478,7 +1479,7 @@ private suspend fun uploadUriToFirebase(context: android.content.Context, uri: a
     return ref.downloadUrl.await().toString()
 }
 
-private private suspend fun uploadBytesToFirebase(context: android.content.Context, bytes: ByteArray, path: String): String {
+private suspend fun uploadBytesToFirebase(context: android.content.Context, bytes: ByteArray, path: String): String {
     ensureFirebaseInitialized(context)
     ensureFirebaseAuthIfAvailable()
     val app = com.google.firebase.FirebaseApp.getInstance()

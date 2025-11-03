@@ -1,4 +1,9 @@
 package com.zafer.smm
+import androidx.compose.foundation.Image
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.material.icons.filled.PlayArrow
 import com.google.gson.annotations.SerializedName
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
@@ -1291,7 +1296,7 @@ Column(
 // =========================
 // Announcements (App-wide)
 // =========================
-data class Announcement(val id: Int? = null, val title: String?, val body: String, val createdAt: Long)
+data class Announcement(val id: Int? = null, val title: String?, val body: String, val createdAt: Long, val mediaType: String? = null,val mediaUrl: String? = null,val thumbUrl: String? = null, )
 
 
 private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, body: String, mediaType: String? = null, mediaUrl: String? = null, thumbUrl: String? = null): Boolean {
@@ -1332,7 +1337,11 @@ private suspend fun apiFetchAnnouncements(limit: Int = 50): List<Announcement> {
             val o = arr.getJSONObject(i)
             out.add(
                 Announcement(
-                    title = if (o.has("title")) o.optString("title", null) else null,
+            title = if (o.has("title",
+            mediaType = if (o.has("media_type")) o.optString("media_type", null) else null,
+            mediaUrl  = if (o.has("media_url")) o.optString("media_url", null) else null,
+            thumbUrl  = if (o.has("thumb_url")) o.optString("thumb_url", null) else null
+        )) o.optString("title", null) else null,
                     body = o.optString("body",""),
                     createdAt = o.optLong("created_at", 0L)
                 )
@@ -1387,7 +1396,36 @@ private fun HomeAnnouncementsList() {
     }
     when {
         loading -> Box(Modifier.fillMaxWidth().padding(16.dp)) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
-        err != null -> Text(err!!, color = Bad, modifier = Modifier.padding(16.dp))
+        err != null -> Text(err!!, color = Bad, modifier = Modifier.padding(16.dp)
+
+// عرض الوسائط إن وجدت (صورة/فيديو) في بطاقة الإعلان
+val _mediaType = ann.mediaType
+val _mediaUrl = ann.mediaUrl
+val _thumb = ann.thumbUrl
+if (_mediaType == "image" && !_mediaUrl.isNullOrBlank()) {
+    Spacer(Modifier.height(8.dp))
+    NetworkImage(url = _mediaUrl, modifier = Modifier.fillMaxWidth().height(180.dp))
+} else if (_mediaType == "video") {
+    val preview = _thumb ?: _mediaUrl
+    if (!preview.isNullOrBlank()) {
+        Spacer(Modifier.height(8.dp))
+        Box {
+            NetworkImage(url = preview, modifier = Modifier.fillMaxWidth().height(180.dp))
+            // شارة تشغيل بسيطة
+            androidx.compose.material3.Icon(
+                imageVector = androidx.compose.material.icons.Icons.Filled.PlayArrow,
+                contentDescription = null,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(48.dp)
+                    .background(Color.Black.copy(alpha = 0.4f), shape = CircleShape)
+                    .padding(6.dp),
+                tint = Color.White
+            )
+        }
+    }
+}
+)
         list.isEmpty() -> Text("لا توجد إعلانات حالياً", color = Dim, modifier = Modifier.padding(16.dp))
         else -> {
             LazyColumn(
@@ -4599,6 +4637,64 @@ private fun AdminAnnouncementsList(
             Spacer(Modifier.height(10.dp))
             Text(it, color = OnBg)
             androidx.compose.runtime.LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack = null }
+        }
+    }
+}
+
+
+
+@Composable
+fun NetworkImage(url: String, modifier: Modifier = Modifier, contentScale: androidx.compose.ui.layout.ContentScale = androidx.compose.ui.layout.ContentScale.Crop) {
+    var bmp by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var err by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(url) {
+        err = null
+        bmp = null
+        withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                connection.connectTimeout = 10000
+                connection.readTimeout = 15000
+                connection.requestMethod = "GET"
+                connection.instanceFollowRedirects = true
+                connection.connect()
+                val code = connection.responseCode
+                if (code in 200..299) {
+                    connection.inputStream.use { ins ->
+                        val decoded = android.graphics.BitmapFactory.decodeStream(ins)
+                        bmp = decoded
+                    }
+                } else {
+                    err = "HTTP $code"
+                }
+                connection.disconnect()
+            } catch (e: Throwable) {
+                err = e.message
+            }
+        }
+    }
+    Box(modifier = modifier.background(Color(0x11000000))) {
+        when {
+            bmp != null -> {
+                Image(
+                    bitmap = bmp!!.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = contentScale
+                )
+            }
+            err != null -> {
+                // مستطيل خطأ بسيط
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("تعذّر تحميل الصورة", color = Color.Red, fontSize = 12.sp)
+                }
+            }
+            else -> {
+                // مؤشّر تحميل بسيط
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+                }
+            }
         }
     }
 }

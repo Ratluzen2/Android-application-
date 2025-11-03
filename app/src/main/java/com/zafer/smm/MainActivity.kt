@@ -1,6 +1,5 @@
 package com.zafer.smm
 import com.google.firebase.FirebaseApp
-import com.google.firebase.auth.FirebaseAuth
 import android.util.Log
 import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.tasks.await
@@ -1435,23 +1434,7 @@ private fun ensureFirebaseInitialized(context: android.content.Context) {
     } catch (_: Throwable) {}
 }
 private suspend fun ensureFirebaseAuthIfAvailable() {
-    try {
-        val cls = Class.forName("com.google.firebase.auth.FirebaseAuth")
-        val getInstance = cls.getMethod("getInstance")
-        val auth = getInstance.invoke(null)
-        val getCurrentUser = auth.javaClass.getMethod("getCurrentUser")
-        val cur = getCurrentUser.invoke(auth)
-        if (cur == null) {
-            val signIn = auth.javaClass.getMethod("signInAnonymously")
-            @Suppress("UNCHECKED_CAST")
-            val task = signIn.invoke(auth) as com.google.android.gms.tasks.Task<*>
-            val d = kotlinx.coroutines.CompletableDeferred<Unit>()
-            task.addOnSuccessListener { d.complete(Unit) }.addOnFailureListener { e -> d.completeExceptionally(e) }
-            d.await()
-        }
-    } catch (_: Throwable) {
-        // لا يوجد FirebaseAuth في المشروع، نتجاهل ونحاول الرفع بدون مصادقة
-    }
+    // Auth removed: no-op to avoid FirebaseAuth dependency
 }
 // === Media upload helpers for AdminAnnouncement ===
 private suspend fun uploadUriToFirebase(context: android.content.Context, uri: android.net.Uri, pathPrefix: String): String {
@@ -4606,7 +4589,7 @@ private suspend fun storageSelfTest(ctx: android.content.Context): Boolean {
         val path = "announcements_media/tests/test_${System.currentTimeMillis()}.txt"
         val ref = storage.reference.child(path)
         val testBytes = "ping-${System.currentTimeMillis()}".toByteArray()
-        Log.d("ANN_UPLOAD", "selfTest bucket=$bucket path=$path user=${FirebaseAuth.getInstance().currentUser?.uid ?: "null"}")
+        Log.d("ANN_UPLOAD", "selfTest bucket=$bucket path=$path user=${"null"}")
         ref.putBytes(testBytes).await()
         val url = ref.downloadUrl.await().toString()
         Log.d("ANN_UPLOAD", "selfTest OK url=$url")

@@ -1,0 +1,28 @@
+name: Inspect & Download google-services.json
+on:
+  workflow_dispatch: {}
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Decode secret to file
+        run: |
+          mkdir -p app
+          if [ -z "${GOOGLE_SERVICES_JSON}" ]; then
+            echo "Secret GOOGLE_SERVICES_JSON is empty"; exit 1; fi
+          echo "$GOOGLE_SERVICES_JSON" | base64 -d > app/google-services.json
+          # معلومات بسيطة غير حساسة للتأكد
+          echo "== storage_bucket =="
+          jq -r '.project_info.storage_bucket' app/google-services.json
+          echo "== package names =="
+          jq -r '.client[].client_info.android_client_info.package_name' app/google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+
+      - name: Upload google-services.json (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: google-services.json
+          path: app/google-services.json
+          retention-days: 1

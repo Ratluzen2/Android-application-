@@ -110,6 +110,11 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import androidx.annotation.Keep
 
+// --- Global application context holder (to avoid LocalContext outside @Composable) ---
+object GAppCtx { @JvmStatic lateinit var ctx: android.content.Context }
+val appCtx: android.content.Context get() = GAppCtx.ctx
+
+
 
 
 
@@ -677,12 +682,7 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
             if (open) {
                 var priceInput by remember { mutableStateOf(curPrice.toString()) }
                 var qtyInput by remember { mutableStateOf(curQty.toString()) }
-                AlertDialog(
-                    onDismissRequest = { open = false },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            val newPrice = priceInput.toDoubleOrNull()
-                            val newQty   = qtyInput.toIntOrNull()
+                val newQty   = qtyInput.toIntOrNull()
                             if (newPrice != null && newQty != null) {
                                 scope.launch {
                                     val ok = apiAdminSetPricing(token, p.key, newPrice, newQty, newQty, "package")
@@ -744,12 +744,7 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
                         var price by remember { mutableStateOf(TextFieldValue((ov?.pricePerK ?: svc.pricePerK).toString())) }
                         var min by remember { mutableStateOf(TextFieldValue((ov?.minQty ?: svc.min).toString())) }
                         var max by remember { mutableStateOf(TextFieldValue((ov?.maxQty ?: svc.max).toString())) }
-                        AlertDialog(
-                            onDismissRequest = { showEdit = false },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    scope.launch {
-                                        val p = price.text.toDoubleOrNull() ?: 0.0
+                        ?: 0.0
                                         val mn = min.text.toIntOrNull() ?: 0
                                         val mx = max.text.toIntOrNull() ?: mn
                                         val ok = apiAdminSetPricing(token, key, p, mn, mx, mode = "flat")
@@ -801,12 +796,7 @@ private fun GlobalPricingCard(
 
     if (open) {
         var price by remember { mutableStateOf(TextFieldValue((ov?.pricePerK ?: 0.0).toString())) }
-        AlertDialog(
-            onDismissRequest = { open = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        val p = price.text.toDoubleOrNull() ?: 0.0
+        ?: 0.0
                         val ok = apiAdminSetPricing(token, key, p, 0, 0, mode = "flat")
                         if (ok) { onSnack("تم الحفظ"); open = false; onSaved() } else onSnack("فشل الحفظ")
                     }
@@ -940,6 +930,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
 
 super.onCreate(savedInstanceState)
+        GAppCtx.ctx = applicationContext
         appCtx = applicationContext
         
         AppNotifier.ensureChannel(this)
@@ -1744,11 +1735,7 @@ Button(
 
     LaunchedEffect(Unit) { userBalance = apiGetBalance(uid) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(enabled = !loading, onClick = {
-                if (link.isBlank()) { onOrdered(false, "الرجاء إدخال الرابط"); return@TextButton }
+    ) { onOrdered(false, "الرجاء إدخال الرابط"); return@TextButton }
                 if (qty < service.min || qty > service.max) { onOrdered(false, "الكمية يجب أن تكون بين ${service.min} و ${service.max}"); return@TextButton }
                 val bal = userBalance ?: 0.0
                 if (bal < price) { onOrdered(false, "رصيدك غير كافٍ. السعر: $price\$ | رصيدك: ${"%.2f".format(bal)}\$"); return@TextButton }
@@ -1946,9 +1933,7 @@ private fun ConfirmAmountDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onConfirm) { Text("تأكيد الشراء") } },
+    { Text("تأكيد الشراء") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
         title = { Text(sectionTitle, color = OnBg) },
         text = {
@@ -2152,9 +2137,7 @@ fun ConfirmPackageDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onConfirm) { Text("تأكيد الشراء") } },
+    { Text("تأكيد الشراء") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
         title = { Text(sectionTitle, color = OnBg) },
         text = {
@@ -2178,11 +2161,7 @@ fun ConfirmPackageIdDialog(
     onDismiss: () -> Unit
 ) {
     var accountId by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(
-                enabled = accountId.trim().isNotEmpty(),
+    .isNotEmpty(),
                 onClick = { onConfirm(accountId.trim()) }
             ) { Text("تأكيد الشراء") }
         },
@@ -2595,8 +2574,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     }
 
     if (askAsiacell) {
-        AlertDialog(
-            onDismissRequest = { if (!sending) askAsiacell = false },
+        askAsiacell = false },
             confirmButton = {
                 val scope2 = rememberCoroutineScope()
                 TextButton(enabled = !sending, onClick = {
@@ -2654,9 +2632,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     }
 
     banPopup?.let { msg ->
-        AlertDialog(
-            onDismissRequest = { banPopup = null },
-            confirmButton = { TextButton(onClick = { banPopup = null }) { Text("حسنًا") } },
+        { Text("حسنًا") } },
             title = { Text("تنبيه", color = OnBg) },
             text = { Text(msg, color = OnBg) }
         )
@@ -3060,11 +3036,7 @@ Row {
     }
 
     if (approveFor != null && approveWithCode) {
-        AlertDialog(
-            onDismissRequest = { approveFor = null; codeText = "" },
-            confirmButton = {
-                val scope2 = rememberCoroutineScope()
-                TextButton(onClick = {
+        TextButton(onClick = {
                     val code = codeText.trim()
                     if (code.isEmpty()) return@TextButton
                     scope2.launch {
@@ -3226,11 +3198,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 
                     if (showEdit) {
                         var newIdText by remember { mutableStateOf(curId.toString()) }
-                        AlertDialog(
-                            onDismissRequest = { showEdit = false },
-                            confirmButton = {
-                                TextButton(onClick = {
-                                    val num = newIdText.trim().toLongOrNull()
+                        .toLongOrNull()
                                     if (num != null && num > 0) {
                                         scope.launch {
                                             val ok = apiAdminSetSvcOverride(token, svc.uiKey, num)
@@ -3356,11 +3324,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
     }
 
     if (execFor != null) {
-        AlertDialog(
-            onDismissRequest = { execFor = null },
-            confirmButton = {
-                val scope2 = rememberCoroutineScope()
-                TextButton(onClick = {
+        TextButton(onClick = {
                     val amt = amountText.toDoubleOrNull()
                     if (amt == null || amt <= 0.0) return@TextButton
                     scope2.launch {
@@ -4107,9 +4071,7 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
     val clip = LocalClipboardManager.current
     var showAdminLogin by remember { mutableStateOf(false) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
+    { Text("إغلاق") } },
         title = { Text("الإعدادات", color = OnBg) },
         text = {
             Column {
@@ -4142,14 +4104,7 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
         var err by remember { mutableStateOf<String?>(null) }
         val scope = rememberCoroutineScope()
 
-        AlertDialog(
-            onDismissRequest = { showAdminLogin = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    scope.launch {
-                        err = null
-                        val token = apiAdminLogin(pass)
-                        if (token != null) { onOwnerLogin(token); showAdminLogin = false }
+        if (token != null) { onOwnerLogin(token); showAdminLogin = false }
                         else { err = "بيانات غير صحيحة" }
                     }
                 }) { Text("تأكيد") }
@@ -4338,9 +4293,7 @@ private fun NoticeCenterDialog(
     onClear: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
+    { Text("إغلاق") } },
         dismissButton = { TextButton(onClick = onClear) { Text("مسح الإشعارات") } },
         title = { Text("الإشعارات") },
         text = {
@@ -4522,12 +4475,7 @@ private fun AdminAnnouncementsList(
                         if (showEdit) {
                             var title by remember { mutableStateOf(ann.title ?: "") }
                             var body by remember { mutableStateOf(ann.body) }
-                            AlertDialog(
-                                onDismissRequest = { showEdit = false },
-                                confirmButton = {
-                                    TextButton(onClick = {
-                                        val id = ann.id
-                                        if (id != null && id > 0) {
+                            {
                                             scope.launch {
                                                 val ok = apiAdminUpdateAnnouncement(token, id, title.ifBlank { null }, body)
                                                 showEdit = false
@@ -4553,12 +4501,7 @@ private fun AdminAnnouncementsList(
                         }
 
                         if (showDelete) {
-                            AlertDialog(
-                                onDismissRequest = { showDelete = false },
-                                confirmButton = {
-                                    TextButton(onClick = {
-                                        val id = ann.id
-                                        if (id != null && id > 0) {
+                            {
                                             scope.launch {
                                                 val ok = apiAdminDeleteAnnouncement(token, id)
                                                 showDelete = false
@@ -4607,7 +4550,7 @@ private suspend fun storageSelfTest(ctx: android.content.Context): Boolean {
         val path = "announcements_media/tests/test_${System.currentTimeMillis()}.txt"
         val ref = storage.reference.child(path)
         val testBytes = "ping-${System.currentTimeMillis()}".toByteArray()
-        Log.d("ANN_UPLOAD", "selfTest bucket=$bucket path=$path user=${/*authRemoved*/nullnull?.uid ?: "null"}")
+        Log.d("ANN_UPLOAD", "selfTest bucket=$bucket path=$path user=${/*authRemoved*/null?.uid ?: "null"}")
         ref.putBytes(testBytes).await()
         val url = ref.downloadUrl.await().toString()
         Log.d("ANN_UPLOAD", "selfTest OK url=$url")

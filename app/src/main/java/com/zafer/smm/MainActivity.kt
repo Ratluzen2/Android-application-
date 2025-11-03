@@ -2,10 +2,10 @@ package com.zafer.smm
 import com.google.gson.annotations.SerializedName
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Switch
 import android.content.ClipData
 import android.content.ClipboardManager
 import androidx.compose.material3.Card
+import androidx.compose.material3.Switch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.width
@@ -299,6 +299,11 @@ private object AdminEndpoints {
     const val pendingLudo     = "/api/admin/pending/ludo"
     const val pendingBalances = "/api/admin/pending/balances"
 
+// Auto-execute switch for API pending services
+const val autoExecStatus = "/api/admin/auto_exec/status"
+const val autoExecToggle = "/api/admin/auto_exec/toggle"
+const val autoExecRun    = "/api/admin/auto_exec/run"
+
     // ✅ الكروت المعلّقة لأسيا سيل
     const val pendingCards    = "/api/admin/pending/cards"
     fun topupCardReject(id: Int) = "/api/admin/topup_cards/$id/reject"
@@ -332,11 +337,6 @@ private object AdminEndpoints {
     const val announcementsAdminList = "/api/admin/announcements"
     fun announcementDelete(id: Int) = "/api/admin/announcement/$id/delete"
     fun announcementUpdate(id: Int) = "/api/admin/announcement/$id/update"
-    // Auto execution endpoints
-    const val autoExecStatus = "/api/admin/auto_exec/status"
-    const val autoExecToggle = "/api/admin/auto_exec/toggle"
-    const val autoExecRun    = "/api/admin/auto_exec/run"
-
 }
 
 
@@ -2691,7 +2691,6 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     title = "طلبات خدمات API المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingServices,
-                    showAutoExecSwitch = true,
                     itemFilter = { true },                  // ✅ فقط طلبات API
                     approveWithCode = false,
                     onBack = { current = null }
@@ -2766,7 +2765,8 @@ private fun isApiOrder(o: OrderItem): Boolean {
     }
 }
 
-/** قائمة عامة للمعلّقات مع @Composable private fun AdminPendingGenericList(
+/** قائمة عامة للمعلّقات مع مُرشِّح OrderItem + خيار “تنفيذ بكود” */
+@Composable private fun AdminPendingGenericList(
     title: String,
     token: String,
     fetchUrl: String,
@@ -2774,26 +2774,13 @@ private fun isApiOrder(o: OrderItem): Boolean {
     approveWithCode: Boolean,
     codeFieldLabel: String = "الرمز/الكود",
     onBack: () -> Unit
-),
-    showAutoExecSwitch: Boolean = false {
+) {
     val scope = rememberCoroutineScope()
     var list by remember { mutableStateOf<List<OrderItem>?>(null) }
     var loading by remember { mutableStateOf(true) }
     var err by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
     var snack by remember { mutableStateOf<String?>(null) }
-    var autoEnabled by remember { mutableStateOf(false) }
-    var autoBusy by remember { mutableStateOf(false) }
-
-    if (showAutoExecSwitch) {
-        LaunchedEffect(Unit) {
-            val (sc, stxt) = httpGet(AdminEndpoints.autoExecStatus, headers = mapOf("x-admin-password" to token))
-            if (sc in 200..299 && stxt != null) {
-                try { autoEnabled = JSONObject(stxt).optBoolean("enabled", false) } catch (_: Exception) { }
-            }
-        }
-    }
-
 
     var approveFor by remember { mutableStateOf<OrderItem?>(null) }
     var codeText by remember { mutableStateOf("") }
@@ -2809,9 +2796,6 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     JSONArray(trimmed)
                 } else {
                     val obj = JSONObject(trimmed)
-                    if (showAutoExecSwitch) {
-                        autoEnabled = obj.optBoolean("auto_exec_enabled", autoEnabled)
-                    }
                     when {
                         obj.has("list") -> obj.optJSONArray("list") ?: JSONArray()
                         obj.has("data") -> obj.optJSONArray("data") ?: JSONArray()
@@ -2846,21 +2830,6 @@ if (itemFilter == null || itemFilter.invoke(item)) {
         }
         loading = false
     }
-    if (showAutoExecSwitch) {
-        LaunchedEffect(autoEnabled) {
-            if (autoEnabled) {
-                while (autoEnabled) {
-                    try {
-                        val body = JSONObject().put("limit", 3).put("only_when_enabled", true)
-                        httpPost(AdminEndpoints.autoExecRun, body, headers = mapOf("x-admin-password" to token))
-                        reloadKey++
-                    } catch (_: Exception) { }
-                    delay(8000)
-                }
-            }
-        }
-    }
-
 
     suspend fun doApprovePlain(id: String): Boolean =
         apiAdminPOST(String.format(AdminEndpoints.orderApprove, id.toInt()), token)
@@ -2885,33 +2854,6 @@ if (itemFilter == null || itemFilter.invoke(item)) {
             Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
         }
         Spacer(Modifier.height(10.dp))
-        if (showAutoExecSwitch) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("تنفيذ تلقائي", color = OnBg, fontWeight = FontWeight.SemiBold)
-                Switch(
-                    checked = autoEnabled,
-                    onCheckedChange = { on ->
-                        autoEnabled = on
-                        if (!autoBusy) {
-                            scope.launch {
-                                autoBusy = true
-                                try {
-                                    val body = JSONObject().put("enabled", on)
-                                    httpPost(AdminEndpoints.autoExecToggle, body, headers = mapOf("x-admin-password" to token))
-                                } catch (_: Exception) { }
-                                autoBusy = false
-                            }
-                        }
-                    }
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-
 
         when {
             loading -> Text("يتم التحميل", color = Dim)
@@ -2982,33 +2924,6 @@ Row {
 
         snack?.let {
             Spacer(Modifier.height(10.dp))
-        if (showAutoExecSwitch) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("تنفيذ تلقائي", color = OnBg, fontWeight = FontWeight.SemiBold)
-                Switch(
-                    checked = autoEnabled,
-                    onCheckedChange = { on ->
-                        autoEnabled = on
-                        if (!autoBusy) {
-                            scope.launch {
-                                autoBusy = true
-                                try {
-                                    val body = JSONObject().put("enabled", on)
-                                    httpPost(AdminEndpoints.autoExecToggle, body, headers = mapOf("x-admin-password" to token))
-                                } catch (_: Exception) { }
-                                autoBusy = false
-                            }
-                        }
-                    }
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-
             Text(it, color = OnBg)
             LaunchedEffect(it) { delay(2000); snack = null }
         }
@@ -3050,6 +2965,75 @@ Row {
     }
 }
 
+@Composable private fun AutoExecHeader(token: String, onAnyRun: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var autoEnabled by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    var lastInfo by remember { mutableStateOf<String?>(null) }
+
+    // Load current status
+    LaunchedEffect(Unit) {
+        runCatching { adminAutoExecStatus(token) }.onSuccess { autoEnabled = it }
+    }
+
+    // Poll/run when enabled
+    LaunchedEffect(autoEnabled) {
+        if (autoEnabled) {
+            while (autoEnabled) {
+                busy = true
+                runCatching { adminAutoExecRun(token, limit = 3, onlyWhenEnabled = true) }
+                busy = false
+                onAnyRun()
+                delay(8000)
+            }
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    Text("التنفيذ التلقائي لطلبات API", fontWeight = FontWeight.SemiBold, color = OnBg)
+                    Text(if (autoEnabled) "مُفعل: معالجة دفعات كل 8 ثوانٍ" else "متوقف: التنفيذ يدوي فقط", color = Dim, fontSize = 12.sp)
+                }
+                Switch(
+                    checked = autoEnabled,
+                    onCheckedChange = { on ->
+                        autoEnabled = on
+                        scope.launch {
+                            busy = true
+                            val ok = runCatching { adminAutoExecToggle(token, on) }.getOrNull() == true
+                            busy = false
+                            if (!ok) autoEnabled = !on
+                        }
+                    },
+                    enabled = !busy
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = {
+                    scope.launch {
+                        busy = true
+                        runCatching { adminAutoExecRun(token, limit = 3, onlyWhenEnabled = false) }
+                        busy = false
+                        onAnyRun()
+                    }
+                }, enabled = !busy) { Text("تنفيذ دفعة الآن") }
+                if (busy) {
+                    Spacer(Modifier.width(8.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                }
+            }
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+}
+
+
 @Composable
 private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -3059,18 +3043,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
     var err by remember { mutableStateOf<String?>(null) }
     var refreshKey by remember { mutableStateOf(0) }
     var snack by remember { mutableStateOf<String?>(null) }
-    var autoEnabled by remember { mutableStateOf(false) }
-    var autoBusy by remember { mutableStateOf(false) }
-
-    if (showAutoExecSwitch) {
-        LaunchedEffect(Unit) {
-            val (sc, stxt) = httpGet(AdminEndpoints.autoExecStatus, headers = mapOf("x-admin-password" to token))
-            if (sc in 200..299 && stxt != null) {
-                try { autoEnabled = JSONObject(stxt).optBoolean("enabled", false) } catch (_: Exception) { }
-            }
-        }
-    }
-
 
     val cats = listOf(
         "مشاهدات تيكتوك", "لايكات تيكتوك", "متابعين تيكتوك", "مشاهدات بث تيكتوك", "رفع سكور تيكتوك",
@@ -3124,33 +3096,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
             Text("تغيير رقم خدمات API", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
         }
         Spacer(Modifier.height(10.dp))
-        if (showAutoExecSwitch) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("تنفيذ تلقائي", color = OnBg, fontWeight = FontWeight.SemiBold)
-                Switch(
-                    checked = autoEnabled,
-                    onCheckedChange = { on ->
-                        autoEnabled = on
-                        if (!autoBusy) {
-                            scope.launch {
-                                autoBusy = true
-                                try {
-                                    val body = JSONObject().put("enabled", on)
-                                    httpPost(AdminEndpoints.autoExecToggle, body, headers = mapOf("x-admin-password" to token))
-                                } catch (_: Exception) { }
-                                autoBusy = false
-                            }
-                        }
-                    }
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-
 
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -3183,33 +3128,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                 Text(selectedCat!!, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = OnBg)
             }
             Spacer(Modifier.height(10.dp))
-        if (showAutoExecSwitch) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("تنفيذ تلقائي", color = OnBg, fontWeight = FontWeight.SemiBold)
-                Switch(
-                    checked = autoEnabled,
-                    onCheckedChange = { on ->
-                        autoEnabled = on
-                        if (!autoBusy) {
-                            scope.launch {
-                                autoBusy = true
-                                try {
-                                    val body = JSONObject().put("enabled", on)
-                                    httpPost(AdminEndpoints.autoExecToggle, body, headers = mapOf("x-admin-password" to token))
-                                } catch (_: Exception) { }
-                                autoBusy = false
-                            }
-                        }
-                    }
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-
 
             LazyColumn {
                 items(list) { svc ->
@@ -3299,18 +3217,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
     var err by remember { mutableStateOf<String?>(null) }
     var reloadKey by remember { mutableStateOf(0) }
     var snack by remember { mutableStateOf<String?>(null) }
-    var autoEnabled by remember { mutableStateOf(false) }
-    var autoBusy by remember { mutableStateOf(false) }
-
-    if (showAutoExecSwitch) {
-        LaunchedEffect(Unit) {
-            val (sc, stxt) = httpGet(AdminEndpoints.autoExecStatus, headers = mapOf("x-admin-password" to token))
-            if (sc in 200..299 && stxt != null) {
-                try { autoEnabled = JSONObject(stxt).optBoolean("enabled", false) } catch (_: Exception) { }
-            }
-        }
-    }
-
     var execFor by remember { mutableStateOf<PendingCard?>(null) }
     var amountText by remember { mutableStateOf("") }
     LaunchedEffect(reloadKey) {
@@ -3327,33 +3233,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
             Text("طلبات شحن أسيا سيل", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
         }
         Spacer(Modifier.height(10.dp))
-        if (showAutoExecSwitch) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("تنفيذ تلقائي", color = OnBg, fontWeight = FontWeight.SemiBold)
-                Switch(
-                    checked = autoEnabled,
-                    onCheckedChange = { on ->
-                        autoEnabled = on
-                        if (!autoBusy) {
-                            scope.launch {
-                                autoBusy = true
-                                try {
-                                    val body = JSONObject().put("enabled", on)
-                                    httpPost(AdminEndpoints.autoExecToggle, body, headers = mapOf("x-admin-password" to token))
-                                } catch (_: Exception) { }
-                                autoBusy = false
-                            }
-                        }
-                    }
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-
 
         when {
             loading -> Text("يتم التحميل", color = Dim)
@@ -3410,33 +3289,6 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
 
         snack?.let {
             Spacer(Modifier.height(10.dp))
-        if (showAutoExecSwitch) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("تنفيذ تلقائي", color = OnBg, fontWeight = FontWeight.SemiBold)
-                Switch(
-                    checked = autoEnabled,
-                    onCheckedChange = { on ->
-                        autoEnabled = on
-                        if (!autoBusy) {
-                            scope.launch {
-                                autoBusy = true
-                                try {
-                                    val body = JSONObject().put("enabled", on)
-                                    httpPost(AdminEndpoints.autoExecToggle, body, headers = mapOf("x-admin-password" to token))
-                                } catch (_: Exception) { }
-                                autoBusy = false
-                            }
-                        }
-                    }
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-
             Text(it, color = OnBg)
             LaunchedEffect(it) { delay(2000); snack = null }
         }
@@ -3529,35 +3381,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
         ) { Text(if (busy) "جارٍ التنفيذ" else "تنفيذ") }
 
         Spacer(Modifier.height(10.dp))
-        if (showAutoExecSwitch) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("تنفيذ تلقائي", color = OnBg, fontWeight = FontWeight.SemiBold)
-                Switch(
-                    checked = autoEnabled,
-                    onCheckedChange = { on ->
-                        autoEnabled = on
-                        if (!autoBusy) {
-                            scope.launch {
-                                autoBusy = true
-                                try {
-                                    val body = JSONObject().put("enabled", on)
-                                    httpPost(AdminEndpoints.autoExecToggle, body, headers = mapOf("x-admin-password" to token))
-                                } catch (_: Exception) { }
-                                autoBusy = false
-                            }
-                        }
-                    }
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-
         msg?.let { Text(it, color = OnBg) }
-    }msg?.let { Text(it, color = OnBg) }
     }
 }
 
@@ -4104,6 +3928,26 @@ private suspend fun apiAdminLogin(password: String): String? {
     return if (code in 200..299) password else null
 } 
 private suspend fun apiAdminPOST(path: String, token: String, body: JSONObject? = null): Boolean {
+
+// -------- Auto Execute (Admin) helpers --------
+suspend fun adminAutoExecStatus(token: String): Boolean {
+    val (code, body) = httpGet(AdminEndpoints.autoExecStatus, headers = mapOf("x-admin-password" to token))
+    if (code in 200..299 && body != null) {
+        return try { JSONObject(body).optBoolean("enabled", false) } catch (_: Exception) { false }
+    }
+    return false
+}
+suspend fun adminAutoExecToggle(token: String, enabled: Boolean): Boolean {
+    val obj = JSONObject().put("enabled", enabled)
+    val (code, _) = httpPost(AdminEndpoints.autoExecToggle, obj, headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
+suspend fun adminAutoExecRun(token: String, limit: Int = 3, onlyWhenEnabled: Boolean = true): Boolean {
+    val obj = JSONObject().put("limit", limit).put("only_when_enabled", onlyWhenEnabled)
+    val (code, _) = httpPost(AdminEndpoints.autoExecRun, obj, headers = mapOf("x-admin-password" to token))
+    return code in 200..299
+}
+// ----------------------------------------------
     val (code, _) = if (body == null) {
         httpPost(path, JSONObject(), headers = mapOf("x-admin-password" to token))
     } else {

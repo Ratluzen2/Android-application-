@@ -1291,7 +1291,7 @@ Column(
 // =========================
 // Announcements (App-wide)
 // =========================
-data class Announcement(val id: Int? = null, val title: String?, val body: String, val createdAt: Long, val mediaType: String? = null, val mediaUrl: String? = null, val thumbUrl: String? = null)
+data class Announcement(val id: Int? = null, val title: String?, val body: String, val createdAt: Long)
 
 
 private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, body: String, mediaType: String? = null, mediaUrl: String? = null, thumbUrl: String? = null): Boolean {
@@ -1454,9 +1454,10 @@ private suspend fun uploadUriToFirebase(context: android.content.Context, uri: a
     ensureFirebaseAuthIfAvailable()
     val app = com.google.firebase.FirebaseApp.getInstance()
     val bucketName = app.options.storageBucket
-    val storage = if (bucketName != null && bucketName.isNotEmpty())
-        com.google.firebase.storage.FirebaseStorage.getInstance("gs://"+bucketName)
+    val storage = if (!bucketName.isNullOrEmpty())
+        com.google.firebase.storage.FirebaseStorage.getInstance("gs://$bucketName")
     else com.google.firebase.storage.FirebaseStorage.getInstance()
+
     val cr = context.contentResolver
     val mime = try { cr.getType(uri) ?: "application/octet-stream" } catch (_: Throwable) { "application/octet-stream" }
     val ext = when {
@@ -1471,47 +1472,26 @@ private suspend fun uploadUriToFirebase(context: android.content.Context, uri: a
     }
     val path = "$pathPrefix/${System.currentTimeMillis()}_${(0..9999).random()}.$ext"
     val ref = storage.reference.child(path)
-    val token = java.util.UUID.randomUUID().toString()
-    val metadata = com.google.firebase.storage.StorageMetadata.Builder()
-        .setContentType(mime)
-        .setCustomMetadata("firebaseStorageDownloadTokens", token)
-        .build()
-    val d = kotlinx.coroutines.CompletableDeferred<String>()
-    ref.putFile(uri, metadata)
-        .addOnSuccessListener {
-            val bucket = ref.bucket
-            val encoded = java.net.URLEncoder.encode(path, "UTF-8")
-            val url = "https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encoded}?alt=media&token=${token}"
-            d.complete(url)
-        }
-        .addOnFailureListener { e -> d.completeExceptionally(e) }
-    return d.await()
+
+    // ارفع ثم خذ رابط التحميل من نفس المرجع (بدون توليد توكن يدوي)
+    ref.putFile(uri).await()
+    return ref.downloadUrl.await().toString()
 }
-private suspend fun uploadBytesToFirebase(context: android.content.Context, bytes: ByteArray, path: String): String {
+
+private private suspend fun uploadBytesToFirebase(context: android.content.Context, bytes: ByteArray, path: String): String {
     ensureFirebaseInitialized(context)
     ensureFirebaseAuthIfAvailable()
     val app = com.google.firebase.FirebaseApp.getInstance()
     val bucketName = app.options.storageBucket
-    val storage = if (bucketName != null && bucketName.isNotEmpty())
-        com.google.firebase.storage.FirebaseStorage.getInstance("gs://"+bucketName)
+    val storage = if (!bucketName.isNullOrEmpty())
+        com.google.firebase.storage.FirebaseStorage.getInstance("gs://$bucketName")
     else com.google.firebase.storage.FirebaseStorage.getInstance()
+
     val ref = storage.reference.child(path)
-    val token = java.util.UUID.randomUUID().toString()
-    val metadata = com.google.firebase.storage.StorageMetadata.Builder()
-        .setContentType(if (path.endsWith(".jpg")) "image/jpeg" else "application/octet-stream")
-        .setCustomMetadata("firebaseStorageDownloadTokens", token)
-        .build()
-    val d = kotlinx.coroutines.CompletableDeferred<String>()
-    ref.putBytes(bytes, metadata)
-        .addOnSuccessListener {
-            val bucket = ref.bucket
-            val encoded = java.net.URLEncoder.encode(path, "UTF-8")
-            val url = "https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encoded}?alt=media&token=${token}"
-            d.complete(url)
-        }
-        .addOnFailureListener { e -> d.completeExceptionally(e) }
-    return d.await()
+    ref.putBytes(bytes).await()
+    return ref.downloadUrl.await().toString()
 }
+
 private fun extractVideoThumbnail(context: android.content.Context, uri: android.net.Uri): ByteArray? {
     return try {
         val retriever = android.media.MediaMetadataRetriever()

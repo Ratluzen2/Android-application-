@@ -87,7 +87,28 @@ jobs:
           echo "VERSION_NAME=$TAG" >> $GITHUB_ENV
           echo "VERSION_CODE=${VC:-1}" >> $GITHUB_ENV
 
-      - name: Build with Gradle Wrapper
+      - name: Write google-services.json (auto-detect)
+  shell: bash
+  env:
+    GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+  run: |
+    set -e
+    # Determine project dir if env is set, else use current
+    PROJ="${{ env.PROJECT_DIR }}"
+    if [ -z "$PROJ" ]; then PROJ="."; fi
+    mkdir -p "$PROJ/app"
+    CONTENT="$GOOGLE_SERVICES_JSON"
+    # If secret is raw JSON, write it directly
+    if echo "$CONTENT" | jq . >/dev/null 2>&1; then
+      printf '%s' "$CONTENT" > "$PROJ/app/google-services.json"
+    else
+      # Otherwise assume Base64; trim and decode
+      CLEAN=$(echo "$CONTENT" | tr -d '\r\n ')
+      echo "$CLEAN" | base64 -d > "$PROJ/app/google-services.json"
+    fi
+    echo "== storage_bucket ==" && jq -r '.project_info.storage_bucket' "$PROJ/app/google-services.json" || true
+    echo "== package names ==" && jq -r '.client[].client_info.android_client_info.package_name' "$PROJ/app/google-services.json" || true
+- name: Build with Gradle Wrapper
         if: env.USE_WRAPPER == 'true'
         working-directory: ${{ env.PROJECT_DIR }}
         run: |

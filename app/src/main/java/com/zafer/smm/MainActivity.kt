@@ -940,6 +940,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
 
 super.onCreate(savedInstanceState)
+        appCtx = applicationContext
         
         AppNotifier.ensureChannel(this)
         AppNotifier.requestPermissionIfNeeded(this)
@@ -1558,7 +1559,7 @@ val videoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
         if (error != null) { Spacer(Modifier.height(6.dp)); Text(error!!, color = Bad, fontSize = 12.sp) }
         Spacer(Modifier.height(12.dp))
         
-Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End){ androidx.compose.material3.TextButton(onClick = { val v = getUploadDiag(LocalContext.current) ?: "لا توجد تفاصيل بعد."; toastAny(LocalContext.current, v, true) }){ androidx.compose.material3.Text("تفاصيل الرفع") } }
+Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End){ androidx.compose.material3.TextButton(onClick = { val v = getUploadDiag(LocalContext.current) ?: "لا توجد تفاصيل بعد."; toastAny(MainActivity.appCtx, v, true) }){ androidx.compose.material3.Text("تفاصيل الرفع") } }
 Button(
             onClick = {
                 if (body.isBlank()) { error = "النص مطلوب"; return@Button }
@@ -1717,7 +1718,7 @@ Button(
             uid = uid, service = svc,
             onDismiss = { selectedService = null },
             onOrdered = { ok, msg ->
-                toastAny(LocalContext.current, msg, true)
+                toastAny(MainActivity.appCtx, msg, true)
                 if (ok) {
                     onAddNotice(AppNotice("طلب جديد (${svc.uiKey})", "تم استلام طلبك وسيتم تنفيذه قريبًا.", forOwner = false))
                     onAddNotice(AppNotice("طلب خدمات معلّق", "طلب ${svc.uiKey} من UID=$uid بانتظار المعالجة/التنفيذ", forOwner = true))
@@ -2441,7 +2442,7 @@ fun ConfirmPackageIdDialog(
                 if (flow != null && priceInt != null) {
                     val bal = apiGetBalance(uid) ?: 0.0
                     if (bal < priceInt) {
-                        toastAny(LocalContext.current, "رصيدك غير كافٍ. السعر: ${'$'}$priceInt | رصيدك: ${"%.2f".format(bal, true)}${'$'}")
+                        toastAny(MainActivity.appCtx, "رصيدك غير كافٍ. السعر: ${'$'}$priceInt | رصيدك: ${"%.2f".format(bal, true)}${'$'}")
                     } else {
                         val product = when (flow) {
                             "شحن شدات ببجي" -> "pubg_uc"
@@ -2451,15 +2452,15 @@ fun ConfirmPackageIdDialog(
                         }
                         val (ok, txt) = apiCreateManualPaidOrder(uid, product, priceInt.toDouble(), accountId)
                         if (ok) {
-                            toastAny(LocalContext.current, "تم استلام طلبك (${pendingPkgLabel}, true).")
+                            toastAny(MainActivity.appCtx, "تم استلام طلبك (${pendingPkgLabel}, true).")
                             onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب ${pendingPkgLabel} للمراجعة.", forOwner = false))
                             onAddNotice(AppNotice("طلب جديد", "طلب ${pendingPkgLabel} من UID=${uid} (Player: ${accountId}) يحتاج مراجعة.", forOwner = true))
                         } else {
                             val msg = (txt ?: "").lowercase()
                             if (msg.contains("insufficient")) {
-                                toastAny(LocalContext.current, "رصيدك غير كافٍ لإتمام العملية.", true)
+                                toastAny(MainActivity.appCtx, "رصيدك غير كافٍ لإتمام العملية.", true)
                             } else {
-                                toastAny(LocalContext.current, "تعذر إرسال الطلب. حاول لاحقًا.", true)
+                                toastAny(MainActivity.appCtx, "تعذر إرسال الطلب. حاول لاحقًا.", true)
                             }
                         }
                     }
@@ -2495,15 +2496,15 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                         val (ok, txt) = apiCreateManualPaidOrder(uid, product, amount)
                         if (ok) {
                             val label = "$flow ${amount}$"
-                            toastAny(LocalContext.current, "تم استلام طلبك ($label, true).")
+                            toastAny(MainActivity.appCtx, "تم استلام طلبك ($label, true).")
                             onAddNotice(AppNotice("طلب معلّق", "تم إرسال طلب $label للمراجعة.", forOwner = false))
                             onAddNotice(AppNotice("طلب جديد", "طلب $label من UID=$uid يحتاج مراجعة.", forOwner = true))
                         } else {
                             val msg = (txt ?: "").lowercase()
                             if (msg.contains("insufficient")) {
-                                toastAny(LocalContext.current, "رصيدك غير كافٍ لإتمام العملية.", true)
+                                toastAny(MainActivity.appCtx, "رصيدك غير كافٍ لإتمام العملية.", true)
                             } else {
-                                toastAny(LocalContext.current, "تعذر إرسال الطلب. حاول لاحقًا.", true)
+                                toastAny(MainActivity.appCtx, "تعذر إرسال الطلب. حاول لاحقًا.", true)
                             }
                         }
                     }
@@ -2579,7 +2580,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         ).forEach {
             Card(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable {
-                    toastAny(LocalContext.current, "لإتمام الشحن تواصل مع الدعم (واتساب/تيليجرام, true).")
+                    toastAny(MainActivity.appCtx, "لإتمام الشحن تواصل مع الدعم (واتساب/تيليجرام, true).")
                     onAddNotice(AppNotice("شحن رصيد", "يرجى التواصل مع الدعم لإكمال شحن: $it", forOwner = false))
                 },
                 colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
@@ -2608,7 +2609,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                         sending = false
                         val mins = asiacellBanRemainingMinutes(ctx)
                         banPopup = "تم حضرك موقتا بسبب انتهاك سياسة التطبيق.\\nسينتهي الحظر بعد ${mins} دقيقة."
-                        toastAny(LocalContext.current, "تم حضرك موقتا بسبب انتهاك سياسة التطبيق", true)
+                        toastAny(MainActivity.appCtx, "تم حضرك موقتا بسبب انتهاك سياسة التطبيق", true)
                         return@TextButton
                     }
 
@@ -2620,12 +2621,12 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                         if (ok) {
                             onAddNotice(AppNotice("تم استلام كارتك", "تم إرسال كارت أسيا سيل إلى المالك للمراجعة.", forOwner = false))
                             onAddNotice(AppNotice("كارت أسيا سيل جديد", "UID=$uid | كارت: $digits", forOwner = true))
-                            toastAny(LocalContext.current, "تم إرسال الكارت بنجاح", true)
+                            toastAny(MainActivity.appCtx, "تم إرسال الكارت بنجاح", true)
                             cardNumber = ""
                             askAsiacell = false
                         } else {
                             onAddNotice(AppNotice("فشل إرسال الكارت", "تحقق من الاتصال وحاول مجددًا.", forOwner = false))
-                            toastAny(LocalContext.current, "فشل إرسال الكارت", true)
+                            toastAny(MainActivity.appCtx, "فشل إرسال الكارت", true)
                         }
                     }
                 }) { Text(if (sending) "يرسل" else "إرسال") }
@@ -2763,7 +2764,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
 
         fun needToken(): Boolean {
             if (token.isNullOrBlank()) {
-                toastAny(LocalContext.current, "سجل دخول المالك أولًا من الإعدادات.", true)
+                toastAny(MainActivity.appCtx, "سجل دخول المالك أولًا من الإعدادات.", true)
                 onNeedLogin()
                 return true
             }
@@ -4606,7 +4607,7 @@ private suspend fun storageSelfTest(ctx: android.content.Context): Boolean {
         val path = "announcements_media/tests/test_${System.currentTimeMillis()}.txt"
         val ref = storage.reference.child(path)
         val testBytes = "ping-${System.currentTimeMillis()}".toByteArray()
-        Log.d("ANN_UPLOAD", "selfTest bucket=$bucket path=$path user=${/*authRemoved*/null/*currentUserRemoved*/null?.uid ?: "null"}")
+        Log.d("ANN_UPLOAD", "selfTest bucket=$bucket path=$path user=${/*authRemoved*/nullnull?.uid ?: "null"}")
         ref.putBytes(testBytes).await()
         val url = ref.downloadUrl.await().toString()
         Log.d("ANN_UPLOAD", "selfTest OK url=$url")

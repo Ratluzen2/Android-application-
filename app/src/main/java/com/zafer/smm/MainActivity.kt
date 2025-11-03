@@ -1,9 +1,4 @@
 package com.zafer.smm
-import androidx.compose.foundation.Image
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import androidx.compose.ui.graphics.asImageBitmap
 import com.google.gson.annotations.SerializedName
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
@@ -1337,11 +1332,7 @@ private suspend fun apiFetchAnnouncements(limit: Int = 50): List<Announcement> {
             val o = arr.getJSONObject(i)
             out.add(
                 Announcement(
-                    title = if (o.has("title",
-                    mediaType = if (o.has("media_type")) o.optString("media_type", null) else null,
-                    mediaUrl = if (o.has("media_url")) o.optString("media_url", null) else null,
-                    thumbUrl = if (o.has("thumb_url")) o.optString("thumb_url", null) else null
-                )) o.optString("title", null) else null,
+                    title = if (o.has("title")) o.optString("title", null) else null,
                     body = o.optString("body",""),
                     createdAt = o.optLong("created_at", 0L)
                 )
@@ -1414,38 +1405,7 @@ private fun HomeAnnouncementsList() {
                         Column(Modifier.padding(16.dp)) {
                             Text(ann.title ?: "إعلان مهم 📢", fontSize = 18.sp, color = OnBg, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(8.dp))
-                            
-// عرض الوسائط إن وجدت
-run {
-    val mt = ann.mediaType
-    val mu = ann.mediaUrl
-    val th = ann.thumbUrl
-    if (mt == "image" && !mu.isNullOrBlank()) {
-        Spacer(Modifier.height(8.dp))
-        NetworkImage(url = mu, modifier = Modifier.fillMaxWidth().height(180.dp))
-        Spacer(Modifier.height(8.dp))
-    } else if (mt == "video") {
-        val preview = th ?: mu
-        if (!preview.isNullOrBlank()) {
-            Spacer(Modifier.height(8.dp))
-            Box {
-                NetworkImage(url = preview, modifier = Modifier.fillMaxWidth().height(180.dp))
-                androidx.compose.material3.Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Filled.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(48.dp)
-                        .background(Color.Black.copy(alpha = 0.4f), shape = CircleShape)
-                        .padding(6.dp),
-                    tint = Color.White
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-        }
-    }
-}
-Text(ann.body, fontSize = 16.sp, color = OnBg)
+                            Text(ann.body, fontSize = 16.sp, color = OnBg)
                             Spacer(Modifier.height(8.dp))
                             val ts = if (ann.createdAt > 0) ann.createdAt else System.currentTimeMillis()
                             val formatted = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
@@ -4639,62 +4599,6 @@ private fun AdminAnnouncementsList(
             Spacer(Modifier.height(10.dp))
             Text(it, color = OnBg)
             androidx.compose.runtime.LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack = null }
-        }
-    }
-}
-
-
-
-@Composable
-fun NetworkImage(url: String, modifier: Modifier = Modifier, contentScale: androidx.compose.ui.layout.ContentScale = androidx.compose.ui.layout.ContentScale.Crop) {
-    var bmp by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var err by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(url) {
-        err = null
-        bmp = null
-        withContext(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                val connection = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-                connection.connectTimeout = 10000
-                connection.readTimeout = 15000
-                connection.requestMethod = "GET"
-                connection.instanceFollowRedirects = true
-                connection.connect()
-                val code = connection.responseCode
-                if (code in 200..299) {
-                    connection.inputStream.use { ins ->
-                        val decoded = android.graphics.BitmapFactory.decodeStream(ins)
-                        bmp = decoded
-                    }
-                } else {
-                    err = "HTTP $code"
-                }
-                connection.disconnect()
-            } catch (e: Throwable) {
-                err = e.message
-            }
-        }
-    }
-    Box(modifier = modifier.background(Color(0x11000000))) {
-        when {
-            bmp != null -> {
-                Image(
-                    bitmap = bmp!!.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = contentScale
-                )
-            }
-            err != null -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("تعذّر تحميل الصورة", color = Color.Red, fontSize = 12.sp)
-                }
-            }
-            else -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
-                }
-            }
         }
     }
 }

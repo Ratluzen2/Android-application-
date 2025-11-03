@@ -1,4 +1,8 @@
 package com.zafer.smm
+import android.util.Log
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.tasks.await
 import com.google.gson.annotations.SerializedName
 import androidx.compose.material3.MaterialTheme
@@ -4581,5 +4585,37 @@ private fun AdminAnnouncementsList(
             Text(it, color = OnBg)
             androidx.compose.runtime.LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack = null }
         }
+    }
+}
+private fun friendlyStorageError(e: com.google.firebase.storage.StorageException): String = when (e.errorCode) {
+    com.google.firebase.storage.StorageException.ERROR_NOT_AUTHENTICATED -> "يجب تسجيل الدخول قبل الرفع."
+    com.google.firebase.storage.StorageException.ERROR_NOT_AUTHORIZED -> "ما عندك صلاحية لرفع الوسائط."
+    com.google.firebase.storage.StorageException.ERROR_OBJECT_NOT_FOUND -> "المسار غير موجود—تأكد من المرجع بعد الرفع."
+    com.google.firebase.storage.StorageException.ERROR_RETRY_LIMIT_EXCEEDED -> "الاتصال ضعيف—أعد المحاولة."
+    com.google.firebase.storage.StorageException.ERROR_QUOTA_EXCEEDED -> "تجاوزت الحصة التخزينية."
+    else -> "فشل غير معروف: ${e.message}"
+}
+
+private suspend fun storageSelfTest(ctx: android.content.Context): Boolean {
+    return try {
+        val app = com.google.firebase.FirebaseApp.getInstance()
+        val bucket = app.options.storageBucket
+        val storage = if (!bucket.isNullOrEmpty())
+            com.google.firebase.storage.FirebaseStorage.getInstance("gs://$bucket")
+        else com.google.firebase.storage.FirebaseStorage.getInstance()
+        val path = "announcements_media/tests/test_${System.currentTimeMillis()}.txt"
+        val ref = storage.reference.child(path)
+        val testBytes = "ping-${System.currentTimeMillis()}".toByteArray()
+        Log.d("ANN_UPLOAD", "selfTest bucket=$bucket path=$path user=${Firebase.auth.currentUser?.uid ?: "null"}")
+        ref.putBytes(testBytes).await()
+        val url = ref.downloadUrl.await().toString()
+        Log.d("ANN_UPLOAD", "selfTest OK url=$url")
+        true
+    } catch (e: com.google.firebase.storage.StorageException) {
+        Log.e("ANN_UPLOAD", "selfTest FAIL code=${e.errorCode} http=${e.httpResultCode} msg=${e.message}")
+        false
+    } catch (e: Exception) {
+        Log.e("ANN_UPLOAD", "selfTest FAIL ${e.message}", e)
+        false
     }
 }

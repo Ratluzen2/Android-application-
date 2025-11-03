@@ -1,6 +1,8 @@
 package com.zafer.smm
 import com.google.gson.annotations.SerializedName
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.IconButton
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -106,7 +108,6 @@ import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import androidx.annotation.Keep
-import kotlinx.coroutines.runBlocking
 
 
 
@@ -314,11 +315,6 @@ private object AdminEndpoints {
     const val usersCount      = "/api/admin/users/count"
     const val usersBalances   = "/api/admin/users/balances"
     const val providerBalance = "/api/admin/provider/balance"
-    // Auto-exec switch
-    const val autoExecStatus = "/api/admin/auto_exec/status"
-    const val autoExecToggle = "/api/admin/auto_exec/toggle"
-    const val autoExecRun    = "/api/admin/auto_exec/run"
-
 
     // Overrides for service IDs (server-level)
     const val svcIdsList = "/api/admin/service_ids/list"
@@ -337,6 +333,11 @@ private object AdminEndpoints {
     const val announcementsAdminList = "/api/admin/announcements"
     fun announcementDelete(id: Int) = "/api/admin/announcement/$id/delete"
     fun announcementUpdate(id: Int) = "/api/admin/announcement/$id/update"
+    // Auto-exec (admin) endpoints
+    const val autoExecStatus = "/api/admin/auto_exec/status"
+    const val autoExecToggle = "/api/admin/auto_exec/toggle"
+    const val autoExecRun    = "/api/admin/auto_exec/run"
+    
 }
 
 
@@ -2782,9 +2783,28 @@ private fun isApiOrder(o: OrderItem): Boolean {
     var reloadKey by remember { mutableStateOf(0) }
     var snack by remember { mutableStateOf<String?>(null) }
 
+    // Auto-exec toggle state (only used for pendingServices list)
+    var autoEnabled by remember { mutableStateOf(false) }
+    var autoBusy by remember { mutableStateOf(false) }
+    
     var approveFor by remember { mutableStateOf<OrderItem?>(null) }
     var codeText by remember { mutableStateOf("") }
 
+    
+    LaunchedEffect(Unit) {
+        if (fetchUrl == AdminEndpoints.pendingServices) {
+            runCatching { autoEnabled = adminAutoExecStatus(token) }
+        }
+    }
+    
+    LaunchedEffect(autoEnabled) {
+        if (fetchUrl == AdminEndpoints.pendingServices && autoEnabled) {
+            while (autoEnabled) {
+                runCatching { adminAutoExecRun(token, limit = 3, onlyWhenEnabled = true) }
+                kotlinx.coroutines.delay(8000)
+            }
+        }
+    }
     LaunchedEffect(reloadKey) {
         loading = true; err = null
         val (code, txt) = httpGet(fetchUrl, headers = mapOf("x-admin-password" to token))
@@ -2854,6 +2874,32 @@ if (itemFilter == null || itemFilter.invoke(item)) {
             Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
         }
         Spacer(Modifier.height(10.dp))
+        if (fetchUrl == AdminEndpoints.pendingServices) {
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("تنفيذ تلقائي", fontSize = 16.sp, color = OnBg)
+                Switch(
+                    checked = autoEnabled,
+                    onCheckedChange = { on ->
+                        autoEnabled = on
+                        if (!autoBusy) {
+                            autoBusy = true
+                            val scope2 = rememberCoroutineScope()
+                            scope2.launch {
+                                runCatching { adminAutoExecToggle(token, on) }
+                                autoBusy = false
+                            }
+                        }
+                    },
+                    enabled = !autoBusy
+                )
+            }
+        }
+
 
         when {
             loading -> Text("يتم التحميل", color = Dim)
@@ -3630,26 +3676,25 @@ private fun saveLastSeen(ctx: Context, forOwner: Boolean, ts: Long = System.curr
     prefs(ctx).edit().putLong(lastSeenKey(forOwner), ts).apply()
 }
 /* شبكة - GET (suspend) */
-// ======= Auto-Exec (Admin) helpers =======
-private fun adminAutoExecStatus(token: String): Boolean = runBlocking {
+private 
+/* ======= Auto-Exec (Admin) helpers ======= */
+private suspend fun adminAutoExecStatus(token: String): Boolean {
     val (code, txt) = httpGet(AdminEndpoints.autoExecStatus, headers = mapOf("x-admin-password" to token))
-    if (code in 200..299 && !txt.isNullOrBlank()) {
+    return if (code in 200..299 && !txt.isNullOrBlank()) {
         try { JSONObject(txt).optBoolean("enabled", false) } catch (_: Exception) { false }
     } else false
 }
-
-private fun adminAutoExecToggle(token: String, enabled: Boolean): Boolean = runBlocking {
+private suspend fun adminAutoExecToggle(token: String, enabled: Boolean): Boolean {
     val body = JSONObject().put("enabled", enabled)
     val (code, _) = httpPost(AdminEndpoints.autoExecToggle, body, headers = mapOf("x-admin-password" to token))
-    code in 200..299
+    return code in 200..299
 }
-
-private fun adminAutoExecRun(token: String, limit: Int = 3, onlyWhenEnabled: Boolean = true): Boolean = runBlocking {
+private suspend fun adminAutoExecRun(token: String, limit: Int = 3, onlyWhenEnabled: Boolean = true): Boolean {
     val body = JSONObject().put("limit", limit).put("only_when_enabled", onlyWhenEnabled)
     val (code, _) = httpPost(AdminEndpoints.autoExecRun, body, headers = mapOf("x-admin-password" to token))
-    code in 200..299
+    return code in 200..299
 }
-// ======= /Auto-Exec helpers =======
+/* ======= /Auto-Exec helpers ======= */
 suspend fun httpGet(path: String, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
     withContext(Dispatchers.IO) {
         try {

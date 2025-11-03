@@ -1,9 +1,9 @@
 package com.zafer.smm
 import androidx.compose.foundation.Image
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.material.icons.filled.PlayArrow
 import com.google.gson.annotations.SerializedName
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
@@ -1296,7 +1296,7 @@ Column(
 // =========================
 // Announcements (App-wide)
 // =========================
-data class Announcement(val id: Int? = null, val title: String?, val body: String, val createdAt: Long, val mediaType: String? = null,val mediaUrl: String? = null,val thumbUrl: String? = null, )
+data class Announcement(val id: Int? = null, val title: String?, val body: String, val createdAt: Long, val mediaType: String? = null, val mediaUrl: String? = null, val thumbUrl: String? = null)
 
 
 private suspend fun apiAdminCreateAnnouncement(token: String, title: String?, body: String, mediaType: String? = null, mediaUrl: String? = null, thumbUrl: String? = null): Boolean {
@@ -1337,11 +1337,11 @@ private suspend fun apiFetchAnnouncements(limit: Int = 50): List<Announcement> {
             val o = arr.getJSONObject(i)
             out.add(
                 Announcement(
-            title = if (o.has("title",
-            mediaType = if (o.has("media_type")) o.optString("media_type", null) else null,
-            mediaUrl  = if (o.has("media_url")) o.optString("media_url", null) else null,
-            thumbUrl  = if (o.has("thumb_url")) o.optString("thumb_url", null) else null
-        )) o.optString("title", null) else null,
+                    title = if (o.has("title",
+                    mediaType = if (o.has("media_type")) o.optString("media_type", null) else null,
+                    mediaUrl = if (o.has("media_url")) o.optString("media_url", null) else null,
+                    thumbUrl = if (o.has("thumb_url")) o.optString("thumb_url", null) else null
+                )) o.optString("title", null) else null,
                     body = o.optString("body",""),
                     createdAt = o.optLong("created_at", 0L)
                 )
@@ -1396,36 +1396,7 @@ private fun HomeAnnouncementsList() {
     }
     when {
         loading -> Box(Modifier.fillMaxWidth().padding(16.dp)) { CircularProgressIndicator(Modifier.align(Alignment.Center)) }
-        err != null -> Text(err!!, color = Bad, modifier = Modifier.padding(16.dp)
-
-// عرض الوسائط إن وجدت (صورة/فيديو) في بطاقة الإعلان
-val _mediaType = ann.mediaType
-val _mediaUrl = ann.mediaUrl
-val _thumb = ann.thumbUrl
-if (_mediaType == "image" && !_mediaUrl.isNullOrBlank()) {
-    Spacer(Modifier.height(8.dp))
-    NetworkImage(url = _mediaUrl, modifier = Modifier.fillMaxWidth().height(180.dp))
-} else if (_mediaType == "video") {
-    val preview = _thumb ?: _mediaUrl
-    if (!preview.isNullOrBlank()) {
-        Spacer(Modifier.height(8.dp))
-        Box {
-            NetworkImage(url = preview, modifier = Modifier.fillMaxWidth().height(180.dp))
-            // شارة تشغيل بسيطة
-            androidx.compose.material3.Icon(
-                imageVector = androidx.compose.material.icons.Icons.Filled.PlayArrow,
-                contentDescription = null,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .size(48.dp)
-                    .background(Color.Black.copy(alpha = 0.4f), shape = CircleShape)
-                    .padding(6.dp),
-                tint = Color.White
-            )
-        }
-    }
-}
-)
+        err != null -> Text(err!!, color = Bad, modifier = Modifier.padding(16.dp))
         list.isEmpty() -> Text("لا توجد إعلانات حالياً", color = Dim, modifier = Modifier.padding(16.dp))
         else -> {
             LazyColumn(
@@ -1443,7 +1414,38 @@ if (_mediaType == "image" && !_mediaUrl.isNullOrBlank()) {
                         Column(Modifier.padding(16.dp)) {
                             Text(ann.title ?: "إعلان مهم 📢", fontSize = 18.sp, color = OnBg, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(8.dp))
-                            Text(ann.body, fontSize = 16.sp, color = OnBg)
+                            
+// عرض الوسائط إن وجدت
+run {
+    val mt = ann.mediaType
+    val mu = ann.mediaUrl
+    val th = ann.thumbUrl
+    if (mt == "image" && !mu.isNullOrBlank()) {
+        Spacer(Modifier.height(8.dp))
+        NetworkImage(url = mu, modifier = Modifier.fillMaxWidth().height(180.dp))
+        Spacer(Modifier.height(8.dp))
+    } else if (mt == "video") {
+        val preview = th ?: mu
+        if (!preview.isNullOrBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Box {
+                NetworkImage(url = preview, modifier = Modifier.fillMaxWidth().height(180.dp))
+                androidx.compose.material3.Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(48.dp)
+                        .background(Color.Black.copy(alpha = 0.4f), shape = CircleShape)
+                        .padding(6.dp),
+                    tint = Color.White
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
+Text(ann.body, fontSize = 16.sp, color = OnBg)
                             Spacer(Modifier.height(8.dp))
                             val ts = if (ann.createdAt > 0) ann.createdAt else System.currentTimeMillis()
                             val formatted = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
@@ -4684,13 +4686,11 @@ fun NetworkImage(url: String, modifier: Modifier = Modifier, contentScale: andro
                 )
             }
             err != null -> {
-                // مستطيل خطأ بسيط
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("تعذّر تحميل الصورة", color = Color.Red, fontSize = 12.sp)
                 }
             }
             else -> {
-                // مؤشّر تحميل بسيط
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
                 }

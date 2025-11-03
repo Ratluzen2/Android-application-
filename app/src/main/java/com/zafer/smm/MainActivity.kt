@@ -1452,25 +1452,62 @@ private suspend fun ensureFirebaseAuthIfAvailable() {
 private suspend fun uploadUriToFirebase(context: android.content.Context, uri: android.net.Uri, pathPrefix: String): String {
     ensureFirebaseInitialized(context)
     ensureFirebaseAuthIfAvailable()
-
     val storage = com.google.firebase.storage.FirebaseStorage.getInstance()
-    val ref = storage.reference.child("$pathPrefix/${System.currentTimeMillis()}_${(0..9999).random()}")
-    val deferred = kotlinx.coroutines.CompletableDeferred<String>()
-    ref.putFile(uri).addOnSuccessListener {
-        ref.downloadUrl.addOnSuccessListener { url -> deferred.complete(url.toString()) }
+    val cr = context.contentResolver
+    val mime = try { cr.getType(uri) ?: "application/octet-stream" } catch (_: Throwable) { "application/octet-stream" }
+    val ext = when {
+        mime.contains("jpeg") || mime.contains("jpg") -> "jpg"
+        mime.contains("png") -> "png"
+        mime.contains("gif") -> "gif"
+        mime.contains("webp") -> "webp"
+        mime.contains("mp4") -> "mp4"
+        mime.contains("3gp") -> "3gp"
+        mime.contains("avi") -> "avi"
+        else -> "bin"
+    }
+    val path = "$pathPrefix/${System.currentTimeMillis()}_${(0..9999).random()}.$ext"
+    val ref = storage.reference.child(path)
+    val token = java.util.UUID.randomUUID().toString()
+    val metadata = com.google.firebase.storage.StorageMetadata.Builder()
+        .setContentType(mime)
+        .setCustomMetadata("firebaseStorageDownloadTokens", token)
+        .build()
+    val d = kotlinx.coroutines.CompletableDeferred<String>()
+    ref.putFile(uri, metadata)
+        .addOnSuccessListener {
+            val bucket = ref.bucket
+            val encoded = java.net.URLEncoder.encode(path, "UTF-8")
+            val url = "https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encoded}?alt=media&token=${token}"
+            d.complete(url)
+        }
+        .addOnFailureListener { e -> d.completeExceptionally(e) }
+    return d.await()
+}
             .addOnFailureListener { e -> deferred.completeExceptionally(e) }
     }.addOnFailureListener { e -> deferred.completeExceptionally(e) }
     return deferred.await()
 }
 private suspend fun uploadBytesToFirebase(bytes: ByteArray, path: String): String {
-    ensureFirebaseInitialized(com.google.firebase.FirebaseApp.getInstance().applicationContext)
+    ensureFirebaseInitialized(androidx.compose.ui.platform.LocalContext.current)
     ensureFirebaseAuthIfAvailable()
-
     val storage = com.google.firebase.storage.FirebaseStorage.getInstance()
     val ref = storage.reference.child(path)
-    val deferred = kotlinx.coroutines.CompletableDeferred<String>()
-    ref.putBytes(bytes).addOnSuccessListener {
-        ref.downloadUrl.addOnSuccessListener { url -> deferred.complete(url.toString()) }
+    val token = java.util.UUID.randomUUID().toString()
+    val metadata = com.google.firebase.storage.StorageMetadata.Builder()
+        .setContentType(if (path.endsWith(".jpg")) "image/jpeg" else "application/octet-stream")
+        .setCustomMetadata("firebaseStorageDownloadTokens", token)
+        .build()
+    val d = kotlinx.coroutines.CompletableDeferred<String>()
+    ref.putBytes(bytes, metadata)
+        .addOnSuccessListener {
+            val bucket = ref.bucket
+            val encoded = java.net.URLEncoder.encode(path, "UTF-8")
+            val url = "https://firebasestorage.googleapis.com/v0/b/${bucket}/o/${encoded}?alt=media&token=${token}"
+            d.complete(url)
+        }
+        .addOnFailureListener { e -> d.completeExceptionally(e) }
+    return d.await()
+}
             .addOnFailureListener { e -> deferred.completeExceptionally(e) }
     }.addOnFailureListener { e -> deferred.completeExceptionally(e) }
     return deferred.await()

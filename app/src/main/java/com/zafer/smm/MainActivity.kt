@@ -4023,8 +4023,8 @@ def auto_exec_set(body: AutoScopeSetIn, x_admin_password: Optional[str] = Header
             _set_flag(cur, flag, bool(body.enabled))
         # Start daemons
         try:
-            asyncio.create_task(_itunes_autoexec_daemon())
-            asyncio.create_task(_cards_autoexec_daemon())
+            asyncio.get_running_loop().create_task(_itunes_autoexec_daemon())
+            asyncio.get_running_loop().create_task(_cards_autoexec_daemon())
         except Exception:
             pass
         return {"ok": True, "scope": scope or "api", "enabled": bool(body.enabled)}
@@ -4033,31 +4033,30 @@ def auto_exec_set(body: AutoScopeSetIn, x_admin_password: Optional[str] = Header
 
 # ----- Pickers & processors -----
 def _parse_category_from_title(title: str) -> Optional[str]:
-    # Safe local import & Arabic digits normalization
+    # Local import guard + Arabic digits normalization
     try:
         import re as _re
-    except Exception:  # extremely unlikely, but guards NameError
+    except Exception:
         _re = None
+
     t = (title or "").lower()
+    # convert Arabic-Indic digits to ASCII
+    ar = "٠١٢٣٤٥٦٧٨٩"
+    t = t.translate(str.maketrans(ar, "0123456789"))
 
-    # Convert Arabic-Indic digits to ASCII for robust matching
-    arabic_digits = "٠١٢٣٤٥٦٧٨٩"
-    trans_map = str.maketrans(arabic_digits, "0123456789")
-    t_norm = t.translate(trans_map)
-
-    # First try strict matches like "5$" or "$ 5"
     if _re:
-        m1 = _re.search(r"(5|10|15|20|25|30|40|50|100)\s*\\$|\\$\\s*(5|10|15|20|25|30|40|50|100)", t_norm)
+        # $5  OR  5$
+        m1 = _re.search(r"(5|10|15|20|25|30|40|50|100)\s*\$|\$\s*(5|10|15|20|25|30|40|50|100)", t)
         if m1:
             return m1.group(1) or m1.group(2)
-        m2 = _re.search(r"\\b(5|10|15|20|25|30|40|50|100)\\b", t_norm)
+        # plain 5|10|.. if $ missing
+        m2 = _re.search(r"\b(5|10|15|20|25|30|40|50|100)\b", t)
         if m2:
             return m2.group(1)
-
-    # Fallback: simple contains checks if regex import failed
-    for token in ("5","10","15","20","25","30","40","50","100"):
-        if token in t_norm:
-            return token
+    # Fallback if regex unavailable
+    for tok in ("100","50","40","30","25","20","15","10","5"):
+        if tok in t:
+            return tok
     return None
 
 def _parse_telco_from_title(title: str) -> Optional[str]:
@@ -4069,7 +4068,7 @@ def _parse_telco_from_title(title: str) -> Optional[str]:
 
 def _itunes_pick_one_locked(cur):
     cur.execute("""
-        SELECT o.id, o.user_id, o.title, COALESCE(o.payload, '{}'::jsonb)
+        SELECT o.id, o.user_id, o.title, COALESCE(NULLIF(o.payload::text,'')::jsonb, '{}'::jsonb)
         FROM public.orders o
         WHERE COALESCE(o.status,'Pending')='Pending'
           AND (LOWER(o.title) LIKE '%itunes%' OR o.title LIKE '%ايتونز%')
@@ -4097,7 +4096,7 @@ def _itunes_pick_code_locked(cur, category: str):
 
 def _cards_pick_one_locked(cur):
     cur.execute("""
-        SELECT o.id, o.user_id, o.title, COALESCE(o.payload, '{}'::jsonb)
+        SELECT o.id, o.user_id, o.title, COALESCE(NULLIF(o.payload::text,'')::jsonb, '{}'::jsonb)
         FROM public.orders o
         WHERE COALESCE(o.status,'Pending')='Pending' AND o.type='topup_card'
         ORDER BY o.id ASC
@@ -4132,6 +4131,11 @@ def _itunes_auto_process_one(conn):
         if not code:
             return {"order_id": rec["order_id"], "skipped": True, "reason": "no_code_available", "category": rec["category"]}
         payload = rec.get("payload") or {}
+        if not isinstance(payload, dict):
+            try:
+                payload = json.loads(payload or '{}')
+            except Exception:
+                payload = {}
         if isinstance(payload, dict):
             payload["code"] = code["code"]
             payload["card"] = code["code"]
@@ -4159,6 +4163,11 @@ def _cards_auto_process_one(conn):
         if not code:
             return {"order_id": rec["order_id"], "skipped": True, "reason": "no_code_available", "telco": rec["telco"], "category": rec["category"]}
         payload = rec.get("payload") or {}
+        if not isinstance(payload, dict):
+            try:
+                payload = json.loads(payload or '{}')
+            except Exception:
+                payload = {}
         if isinstance(payload, dict):
             payload["code"] = code["code"]
             payload["card"] = code["code"]

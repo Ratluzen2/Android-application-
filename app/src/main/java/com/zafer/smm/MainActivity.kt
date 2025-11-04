@@ -337,19 +337,6 @@ private object AdminEndpoints {
     const val autoExecStatus = "/api/admin/auto_exec/status"
     const val autoExecToggle = "/api/admin/auto_exec/toggle"
     const val autoExecRun    = "/api/admin/auto_exec/run"
-    // --- Code Pools (iTunes + Phone Cards)
-    const val itunesCodesList = "/api/admin/codes/itunes/list"
-    const val itunesCodesAdd  = "/api/admin/codes/itunes/add"
-    fun itunesCodeDelete(id: Int) = "/api/admin/codes/itunes/$id/delete"
-
-    fun cardCodesList(telco: String) = "/api/admin/codes/cards/$telco/list"   // telco: "atheir" | "asiacell" | "korek"
-    fun cardCodesAdd(telco: String)  = "/api/admin/codes/cards/$telco/add"
-    fun cardCodeDelete(telco: String, id: Int) = "/api/admin/codes/cards/$telco/$id/delete"
-
-    // --- Scoped Auto-Exec
-    fun autoExecStatusScoped(scope: String) = "/api/admin/auto_exec/status?scope=$scope"  // scope: "itunes" | "cards"
-    const val autoExecSet = "/api/admin/auto_exec/set"  // POST {scope, enabled}
-
     
 }
 
@@ -2600,12 +2587,12 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
 private fun isIraqTelcoCardPurchase(title: String): Boolean {
     val t = title.lowercase()
     // must be one of the 3 Iraqi telcos
-    val telco = t.contains("اثير") || t.contains("asiacell") || t.contains("أسيا") || t.contains("اسياسيل") || t.contains("korek") || t.contains("كورك")
+    val telco = t.contains("اثير") || t.contains("asiacell") || t.contains("اسياسيل") || t.contains("korek") || t.contains("كورك")
     // words that indicate physical/virtual CARD purchase (not direct top-up)
-    val hasCardWord = t.contains("شراء") || t.contains("كارت") || t.contains("بطاقة") || t.contains("voucher") || t.contains("كود") || t.contains("رمز")
+    val hasCardWord = t.contains("شراء") || t.contains("كارت") || t.contains("بطاقة") || t.contains("card") || t.contains("voucher") || t.contains("كود") || t.contains("رمز")
     // negative list: anything that implies DIRECT TOP-UP / via Asiacell
     val isTopup = t.contains("شحن") || t.contains("topup") || t.contains("top-up") || t.contains("recharge") || t.contains("شحن عبر") || t.contains("شحن اسيا") || t.contains("direct")
-    // explicitly exclude iTunes
+    val isTopup = t.contains("شحن") || t.contains("topup") || t.contains("recharge") || t.contains("شحن عبر") || t.contains("شحن اسيا") || t.contains("direct")
     val notItunes = !t.contains("itunes") && !t.contains("ايتونز")
     // accept only if telco + card purchase semantics, and strictly NOT a top-up wording
     return telco && hasCardWord && !isTopup && notItunes
@@ -2709,7 +2696,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     approveWithCode = false,
                     onBack = { current = null }
                 )
-                "pending_itunes" -> PendingItunesWithTools(
+                "pending_itunes" -> AdminPendingGenericList(title = "طلبات iTunes المعلقة",
                     token = token!!,
                     fetchUrl = AdminEndpoints.pendingItunes,
                     itemFilter = { true },
@@ -2733,11 +2720,13 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     approveWithCode = false,
                     onBack = { current = null }
                 )
-                "pending_phone" -> PendingPhoneCardsWithTools(
+                "pending_phone" -> AdminPendingGenericList(
+
+                    title = "طلبات شراء الكارتات",
                     token = token!!,
-                    onBack = { current = null }
-                )
-},
+                    // يمكن أن يعود من مسار مخصص للأرصدة؛ إن لم يوجد نستعمل services مع فلترة العنوان:
+                    fetchUrl = AdminEndpoints.pendingBalances,
+                    itemFilter = { item -> isIraqTelcoCardPurchase(item.title) },
                     approveWithCode = true,                                      // ✅ يطلب رقم الكارت
                     codeFieldLabel = "كود الكارت",
                     onBack = { current = null }
@@ -2778,330 +2767,6 @@ private fun isApiOrder(o: OrderItem): Boolean {
 }
 
 /** قائمة عامة للمعلّقات مع مُرشِّح OrderItem + خيار “تنفيذ بكود” */
-
-/* =========================
-   Pending Wrappers with Tools
-   ========================= */
-
-@Composable private fun PendingItunesWithTools(
-    token: String,
-    onBack: () -> Unit
-) {
-    var reloadKey by remember { mutableStateOf(0) }
-    var showAdd by remember { mutableStateOf(false) }
-    var showView by remember { mutableStateOf(false) }
-    var autoEnabled by remember { mutableStateOf(false) }
-    var loadingAuto by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(Unit, reloadKey) {
-        loadingAuto = true
-        autoEnabled = adminAutoExecGetScoped(token, "itunes")
-        loadingAuto = false
-    }
-
-    Column(Modifier.fillMaxSize()) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text("طلبات iTunes المعلقة", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-        }
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Text("التنفيذ التلقائي", color = OnBg)
-                Spacer(Modifier.width(6.dp))
-                Switch(
-                    checked = autoEnabled,
-                    enabled = !loadingAuto,
-                    onCheckedChange = { en ->
-                        scope.launch {
-                            loadingAuto = true
-                            val ok = adminAutoExecSetScoped(token, "itunes", en)
-                            if (ok) autoEnabled = en
-                            loadingAuto = false
-                        }
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedTrackColor = Accent.copy(alpha = 0.45f),
-                        checkedThumbColor = Accent
-                    )
-                )
-            }
-            OutlinedButton(onClick = { showAdd = true }) { Text("إضافة أكواد") }
-            OutlinedButton(onClick = { showView = true }) { Text("عرض الأكواد") }
-        }
-
-        Spacer(Modifier.height(8.dp))
-        Divider(color = Surface2)
-        // القائمة المعتادة تحت الأزرار
-        AdminPendingGenericList(
-            title = "",
-            token = token,
-            fetchUrl = AdminEndpoints.pendingItunes,
-            itemFilter = { true },
-            approveWithCode = true,
-            codeFieldLabel = "كود الايتونز",
-            onBack = onBack
-        )
-    }
-
-    if (showAdd) {
-        CodesAddDialog(
-            title = "إضافة أكواد iTunes",
-            telcoTabs = false,
-            onSubmit = { telco, codes ->
-                scope.launch {
-                    val ok = apiAdminAddItunesCodes(token, codes)
-                    showAdd = false
-                }
-            },
-            onDismiss = { showAdd = false }
-        )
-    }
-    if (showView) {
-        CodesListDialogItunes(
-            token = token,
-            onDismiss = { showView = false }
-        )
-    }
-}
-
-@Composable private fun PendingPhoneCardsWithTools(
-    token: String,
-    onBack: () -> Unit
-) {
-    var showAdd by remember { mutableStateOf(false) }
-    var showView by remember { mutableStateOf(false) }
-    var autoEnabled by remember { mutableStateOf(false) }
-    var loadingAuto by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(Unit) {
-        loadingAuto = true
-        autoEnabled = adminAutoExecGetScoped(token, "cards")
-        loadingAuto = false
-    }
-
-    Column(Modifier.fillMaxSize()) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, null, tint = OnBg) }
-            Spacer(Modifier.width(6.dp))
-            Text("طلبات شراء الكارتات", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-        }
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                Text("التنفيذ التلقائي", color = OnBg)
-                Spacer(Modifier.width(6.dp))
-                Switch(
-                    checked = autoEnabled,
-                    enabled = !loadingAuto,
-                    onCheckedChange = { en ->
-                        scope.launch {
-                            loadingAuto = true
-                            val ok = adminAutoExecSetScoped(token, "cards", en)
-                            if (ok) autoEnabled = en
-                            loadingAuto = false
-                        }
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedTrackColor = Accent.copy(alpha = 0.45f),
-                        checkedThumbColor = Accent
-                    )
-                )
-            }
-            OutlinedButton(onClick = { showAdd = true }) { Text("إضافة أكواد") }
-            OutlinedButton(onClick = { showView = true }) { Text("عرض الأكواد") }
-        }
-
-        Spacer(Modifier.height(8.dp))
-        Divider(color = Surface2)
-
-        AdminPendingGenericList(
-            title = "",
-            token = token,
-            fetchUrl = AdminEndpoints.pendingBalances,
-            itemFilter = { item -> isIraqTelcoCardPurchase(item.title) },
-            approveWithCode = true,
-            codeFieldLabel = "كود الكارت",
-            onBack = onBack
-        )
-    }
-
-    if (showAdd) {
-        CodesAddDialog(
-            title = "إضافة أكواد رصيد الهاتف",
-            telcoTabs = true,
-            onSubmit = { telco, codes ->
-                val tel = telco ?: "asiacell"
-                scope.launch {
-                    val ok = apiAdminAddCardCodes(token, tel, codes)
-                    showAdd = false
-                }
-            },
-            onDismiss = { showAdd = false }
-        )
-    }
-    if (showView) {
-        CodesListDialogCards(
-            token = token,
-            onDismiss = { showView = false }
-        )
-    }
-}
-
-/* ===== Dialogs ===== */
-
-@Composable private fun CodesAddDialog(
-    title: String,
-    telcoTabs: Boolean,
-    onSubmit: (telco: String?, codes: List<String>) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var selectedTab by remember { mutableStateOf(0) } // 0: asiacell, 1: atheir, 2: korek when telcoTabs
-    var text by remember { mutableStateOf(TextFieldValue("")) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = {
-                val clean = text.text.split('
-').map { it.trim() }.filter { it.isNotEmpty() }
-                val telco = if (telcoTabs) listOf("atheir","asiacell","korek")[selectedTab] else null
-                onSubmit(telco, clean)
-            }) { Text("حفظ") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
-        title = { Text(title, color = OnBg) },
-        text = {
-            Column {
-                if (telcoTabs) {
-                    TabRow(selectedTabIndex = selectedTab, containerColor = Surface1, contentColor = OnBg) {
-                        listOf("أثير","أسيا سيل","كورك").forEachIndexed { i, label ->
-                            Tab(selected = selectedTab==i, onClick = { selectedTab = i }, text = { Text(label) })
-                        }
-                    }
-                    Spacer(Modifier.height(8.dp))
-                }
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier.fillMaxWidth().height(160.dp),
-                    textStyle = LocalTextStyle.current.copy(color = OnBg),
-                    label = { Text("ألصق الأكواد (كل سطر كود)") }
-                )
-            }
-        }
-    )
-}
-
-@Composable private fun CodesListDialogItunes(
-    token: String,
-    onDismiss: () -> Unit
-) {
-    var list by remember { mutableStateOf<List<StoredCode>>(emptyList()) }
-    var loading by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) {
-        loading = true
-        list = apiAdminListItunesCodes(token).filter { !it.used }
-        loading = false
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
-        title = { Text("أكواد iTunes غير المستخدمة", color = OnBg) },
-        text = {
-            if (loading) {
-                CircularProgressIndicator()
-            } else {
-                LazyColumn(Modifier.height(300.dp)) {
-                    items(list) { c ->
-                        Row(Modifier.fillMaxWidth().padding(vertical=6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            SelectionContainer { Text(c.code, color = OnBg) }
-                            Spacer(Modifier.weight(1f))
-                            TextButton(onClick = {
-                                scope.launch {
-                                    if (apiAdminDeleteItunesCode(token, c.id)) {
-                                        list = list.filter { it.id != c.id }
-                                    }
-                                }
-                            }) { Text("حذف") }
-                        }
-                    }
-                }
-            }
-        }
-    )
-}
-
-@Composable private fun CodesListDialogCards(
-    token: String,
-    onDismiss: () -> Unit
-) {
-    var selectedTab by remember { mutableStateOf(0) }
-    var map by remember { mutableStateOf<Map<String,List<StoredCode>>>(emptyMap()) }
-    var loading by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
-
-    fun telByIdx(i:Int) = listOf("atheir","asiacell","korek")[i]
-    fun label(i:Int) = listOf("أثير","أسيا سيل","كورك")[i]
-
-    LaunchedEffect(Unit) {
-        loading = true
-        val a = apiAdminListCardCodes(token, "atheir").filter { !it.used }
-        val b = apiAdminListCardCodes(token, "asiacell").filter { !it.used }
-        val c = apiAdminListCardCodes(token, "korek").filter { !it.used }
-        map = mapOf("atheir" to a, "asiacell" to b, "korek" to c)
-        loading = false
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("إغلاق") } },
-        title = { Text("أكواد رصيد الهاتف غير المستخدمة", color = OnBg) },
-        text = {
-            Column {
-                TabRow(selectedTabIndex = selectedTab, containerColor = Surface1, contentColor = OnBg) {
-                    (0..2).forEach { i -> Tab(selected = selectedTab==i, onClick = { selectedTab = i }, text = { Text(label(i)) }) }
-                }
-                Spacer(Modifier.height(8.dp))
-                if (loading) {
-                    CircularProgressIndicator()
-                } else {
-                    val list = map[telByIdx(selectedTab)] ?: emptyList()
-                    LazyColumn(Modifier.height(280.dp)) {
-                        items(list) { c ->
-                            Row(Modifier.fillMaxWidth().padding(vertical=6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                SelectionContainer { Text(c.code, color = OnBg) }
-                                Spacer(Modifier.weight(1f))
-                                TextButton(onClick = {
-                                    scope.launch {
-                                        if (apiAdminDeleteCardCode(token, telByIdx(selectedTab), c.id)) {
-                                            map = map.toMutableMap().also { m ->
-                                                m[telByIdx(selectedTab)] = list.filter { it.id != c.id }
-                                            }
-                                        }
-                                    }
-                                }) { Text("حذف") }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    )
-}
-
-/* =========================
-   /Pending Wrappers with Tools
-   ========================= */
 @Composable private fun AdminPendingGenericList(
     title: String,
     token: String,
@@ -4027,84 +3692,6 @@ private suspend fun adminAutoExecRun(token: String, limit: Int = 3, onlyWhenEnab
     val (code, _) = httpPost(AdminEndpoints.autoExecRun, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
-
-/* ======= Code Pools helpers (iTunes + Phone Cards) ======= */
-
-data class StoredCode(
-    @SerializedName("id") val id: Int = 0,
-    @SerializedName("code") val code: String = "",
-    @SerializedName("telco") val telco: String? = null,
-    @SerializedName("used") val used: Boolean = false,
-    @SerializedName("created_at") val createdAt: Long? = null
-)
-
-// -- Generic JSON parse with safety
-private fun parseCodesJson(txt: String?): List<StoredCode> {
-    if (txt.isNullOrBlank()) return emptyList()
-    return try {
-        val arr = JSONArray(txt)
-        (0 until arr.length()).mapNotNull { i ->
-            val o = arr.optJSONObject(i) ?: return@mapNotNull null
-            StoredCode(
-                id = o.optInt("id", 0),
-                code = o.optString("code", ""),
-                telco = o.optString("telco", null),
-                used = o.optBoolean("used", false),
-                createdAt = if (o.has("created_at")) o.optLong("created_at") else null
-            )
-        }
-    } catch (_: Exception) { emptyList() }
-}
-
-private suspend fun apiAdminListItunesCodes(token: String): List<StoredCode> {
-    val (code, txt) = httpGet(AdminEndpoints.itunesCodesList, headers = mapOf("x-admin-password" to token))
-    return if (code in 200..299) parseCodesJson(txt) else emptyList()
-}
-
-private suspend fun apiAdminAddItunesCodes(token: String, codes: List<String>): Boolean {
-    val arr = JSONArray()
-    codes.filter { it.isNotBlank() }.forEach { arr.put(it.trim()) }
-    val body = JSONObject().put("codes", arr)
-    val (code, _) = httpPost(AdminEndpoints.itunesCodesAdd, body, headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
-
-private suspend fun apiAdminDeleteItunesCode(token: String, id: Int): Boolean {
-    val (code, _) = httpPost(AdminEndpoints.itunesCodeDelete(id), JSONObject(), headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
-
-private suspend fun apiAdminListCardCodes(token: String, telco: String): List<StoredCode> {
-    val (code, txt) = httpGet(AdminEndpoints.cardCodesList(telco), headers = mapOf("x-admin-password" to token))
-    return if (code in 200..299) parseCodesJson(txt) else emptyList()
-}
-
-private suspend fun apiAdminAddCardCodes(token: String, telco: String, codes: List<String>): Boolean {
-    val arr = JSONArray()
-    codes.filter { it.isNotBlank() }.forEach { arr.put(it.trim()) }
-    val body = JSONObject().put("codes", arr)
-    val (code, _) = httpPost(AdminEndpoints.cardCodesAdd(telco), body, headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
-
-private suspend fun apiAdminDeleteCardCode(token: String, telco: String, id: Int): Boolean {
-    val (code, _) = httpPost(AdminEndpoints.cardCodeDelete(telco, id), JSONObject(), headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
-
-// -- Scoped Auto-Exec helpers
-private suspend fun adminAutoExecGetScoped(token: String, scope: String): Boolean {
-    val (code, txt) = httpGet(AdminEndpoints.autoExecStatusScoped(scope), headers = mapOf("x-admin-password" to token))
-    return code in 200..299 && (try { JSONObject(txt ?: "{}").optBoolean("enabled", false) } catch (_: Exception) { false })
-}
-
-private suspend fun adminAutoExecSetScoped(token: String, scope: String, enabled: Boolean): Boolean {
-    val body = JSONObject().put("scope", scope).put("enabled", enabled)
-    val (code, _) = httpPost(AdminEndpoints.autoExecSet, body, headers = mapOf("x-admin-password" to token))
-    return code in 200..299
-}
-
-/* ======= /Code Pools helpers ======= */
 /* ======= /Auto-Exec helpers ======= */
 suspend fun httpGet(path: String, headers: Map<String, String> = emptyMap()): Pair<Int, String?> =
     withContext(Dispatchers.IO) {

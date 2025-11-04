@@ -2855,9 +2855,10 @@ private fun isApiOrder(o: OrderItem): Boolean {
         CodesAddDialog(
             title = "إضافة أكواد iTunes",
             telcoTabs = false,
-            onSubmit = { telco, codes ->
+            serviceName = "itunes",
+            onSubmit = { telco, category, codes ->
                 scope.launch {
-                    val ok = apiAdminAddItunesCodes(token, codes)
+                    val ok = apiAdminAddItunesCodes(token, category ?: "", codes)
                     showAdd = false
                 }
             },
@@ -2941,10 +2942,10 @@ private fun isApiOrder(o: OrderItem): Boolean {
         CodesAddDialog(
             title = "إضافة أكواد رصيد الهاتف",
             telcoTabs = true,
-            onSubmit = { telco, codes ->
+            onSubmit = { telco, category, codes ->
                 val tel = telco ?: "asiacell"
                 scope.launch {
-                    val ok = apiAdminAddCardCodes(token, tel, codes)
+                    val ok = apiAdminAddCardCodes(token, tel, category ?: "", codes)
                     showAdd = false
                 }
             },
@@ -2964,19 +2965,22 @@ private fun isApiOrder(o: OrderItem): Boolean {
 @Composable private fun CodesAddDialog(
     title: String,
     telcoTabs: Boolean,
-    onSubmit: (telco: String?, codes: List<String>) -> Unit,
+    categories: List<String> = listOf("5","10","15","20","25","30","40","50","100"),
+    serviceName: String? = null, // e.g. "itunes" for iTunes
+    onSubmit: (telco: String?, category: String?, codes: List<String>) -> Unit,
     onDismiss: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(0) } // 0: asiacell, 1: atheir, 2: korek when telcoTabs
+    var selectedCategoryIdx by remember { mutableStateOf(0) }
     var text by remember { mutableStateOf(TextFieldValue("")) }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = {
                 val clean = text.text.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
-                // (fixed)
                 val telco = if (telcoTabs) listOf("atheir","asiacell","korek")[selectedTab] else null
-                onSubmit(telco, clean)
+                val category = categories.getOrNull(selectedCategoryIdx)
+                onSubmit(telco, category, clean)
             }) { Text("حفظ") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } },
@@ -2991,6 +2995,23 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     }
                     Spacer(Modifier.height(8.dp))
                 }
+                // Category selector
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("الفئة", color = OnBg)
+                    Spacer(Modifier.width(12.dp))
+                    var expanded by remember { mutableStateOf(false) }
+                    Box {
+                        OutlinedButton(onClick = { expanded = true }) {
+                            Text(categories.getOrNull(selectedCategoryIdx) ?: categories.firstOrNull() ?: "")
+                        }
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            categories.forEachIndexed { i, c ->
+                                DropdownMenuItem(text = { Text(c) }, onClick = { selectedCategoryIdx = i; expanded = false })
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
@@ -3026,7 +3047,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                 LazyColumn(Modifier.height(300.dp)) {
                     items(list) { c ->
                         Row(Modifier.fillMaxWidth().padding(vertical=6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            SelectionContainer { Text(c.code, color = OnBg) }
+                            SelectionContainer { Text("[الخدمة: ${c.service ?: (c.telco ?: "—")}] [الفئة: ${c.category ?: "-"}]  ${c.code}", color = OnBg) }
                             Spacer(Modifier.weight(1f))
                             TextButton(onClick = {
                                 scope.launch {
@@ -3081,7 +3102,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                     LazyColumn(Modifier.height(280.dp)) {
                         items(list) { c ->
                             Row(Modifier.fillMaxWidth().padding(vertical=6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                SelectionContainer { Text(c.code, color = OnBg) }
+                                SelectionContainer { Text("[الخدمة: ${c.service ?: (c.telco ?: "—")}] [الفئة: ${c.category ?: "-"}]  ${c.code}", color = OnBg) }
                                 Spacer(Modifier.weight(1f))
                                 TextButton(onClick = {
                                     scope.launch {
@@ -4035,7 +4056,9 @@ private suspend fun adminAutoExecRun(token: String, limit: Int = 3, onlyWhenEnab
 data class StoredCode(
     @SerializedName("id") val id: Int = 0,
     @SerializedName("code") val code: String = "",
+    @SerializedName("service") val service: String? = null,
     @SerializedName("telco") val telco: String? = null,
+    @SerializedName("category") val category: String? = null,
     @SerializedName("used") val used: Boolean = false,
     @SerializedName("created_at") val createdAt: Long? = null
 )
@@ -4050,7 +4073,9 @@ private fun parseCodesJson(txt: String?): List<StoredCode> {
             StoredCode(
                 id = o.optInt("id", 0),
                 code = o.optString("code", ""),
+                service = o.optString("service", null),
                 telco = o.optString("telco", null),
+                category = (o.opt("category")?.toString() ?: o.optString("pack", null)),
                 used = o.optBoolean("used", false),
                 createdAt = if (o.has("created_at")) o.optLong("created_at") else null
             )
@@ -4063,10 +4088,10 @@ private suspend fun apiAdminListItunesCodes(token: String): List<StoredCode> {
     return if (code in 200..299) parseCodesJson(txt) else emptyList()
 }
 
-private suspend fun apiAdminAddItunesCodes(token: String, codes: List<String>): Boolean {
+private suspend fun apiAdminAddItunesCodes(token: String, category: String, codes: List<String>): Boolean {
     val arr = JSONArray()
     codes.filter { it.isNotBlank() }.forEach { arr.put(it.trim()) }
-    val body = JSONObject().put("codes", arr)
+    val body = JSONObject().put("codes", arr).put("category", category)
     val (code, _) = httpPost(AdminEndpoints.itunesCodesAdd, body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }
@@ -4081,10 +4106,10 @@ private suspend fun apiAdminListCardCodes(token: String, telco: String): List<St
     return if (code in 200..299) parseCodesJson(txt) else emptyList()
 }
 
-private suspend fun apiAdminAddCardCodes(token: String, telco: String, codes: List<String>): Boolean {
+private suspend fun apiAdminAddCardCodes(token: String, telco: String, category: String, codes: List<String>): Boolean {
     val arr = JSONArray()
     codes.filter { it.isNotBlank() }.forEach { arr.put(it.trim()) }
-    val body = JSONObject().put("codes", arr)
+    val body = JSONObject().put("codes", arr).put("category", category)
     val (code, _) = httpPost(AdminEndpoints.cardCodesAdd(telco), body, headers = mapOf("x-admin-password" to token))
     return code in 200..299
 }

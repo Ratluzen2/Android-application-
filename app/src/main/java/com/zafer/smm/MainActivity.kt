@@ -3203,8 +3203,12 @@ def _set_flag(cur, key: str, enabled: bool) -> None:
         ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()
     """, (key, Json({"enabled": bool(enabled)})))
 
+
 class AutoExecToggleIn(BaseModel):
     enabled: bool
+    scope: Optional[str] = None
+    class Config:
+        extra = "allow"
 
 class AutoExecRunIn(BaseModel):
     limit: int = 3
@@ -3319,28 +3323,58 @@ def _auto_exec_run(conn, limit: int = 3):
 
 # ---- endpoints ----
 @app.get("/api/admin/auto_exec/status")
-def admin_auto_exec_status(x_admin_password: Optional[str] = Header(None, alias="x-admin-password"), password: Optional[str] = None):
+def admin_auto_exec_status(x_admin_password: Optional[str] = Header(None, alias="x-admin-password"),
+                           password: Optional[str] = None,
+                           scope: Optional[str] = None):
     _require_admin(_pick_admin_password(x_admin_password, password) or "")
     conn = get_conn()
     try:
         with conn, conn.cursor() as cur:
             _ensure_settings_table(cur)
+            if scope:
+                flag = _scope_flag_name(scope)
+                enabled = _get_flag(cur, flag, False)
+                if scope == "itunes":
+                    try:
+                        _ensure_itunes_codes_table(cur)
+                        cur.execute("SELECT COUNT(*) FROM public.itunes_codes WHERE used=FALSE")
+                        free = int(cur.fetchone()[0])
+                    except Exception:
+                        free = 0
+                    return {"enabled": bool(enabled), "free_codes": free}
+                if scope == "cards":
+                    try:
+                        _ensure_card_codes_table(cur)
+                        cur.execute("SELECT COUNT(*) FROM public.card_codes WHERE used=FALSE")
+                        free = int(cur.fetchone()[0])
+                    except Exception:
+                        free = 0
+                    return {"enabled": bool(enabled), "free_codes": free}
+                return {"enabled": bool(enabled)}
+            # default API auto-exec flag
             enabled = _get_flag(cur, "auto_exec_api", False)
         return {"enabled": bool(enabled)}
     finally:
         put_conn(conn)
 
 @app.post("/api/admin/auto_exec/toggle")
-def admin_auto_exec_toggle(body: AutoExecToggleIn, x_admin_password: Optional[str] = Header(None, alias="x-admin-password"), password: Optional[str] = None):
+def admin_auto_exec_toggle(body: AutoExecToggleIn, x_admin_password: Optional[str] = Header(None, alias="x-admin-password"), password: Optional[str] = None, scope: Optional[str] = None):
     _require_admin(_pick_admin_password(x_admin_password, password) or "")
+    if scope is None:
+        try:
+            scope = getattr(body, "scope", None)
+        except Exception:
+            scope = None
     conn = get_conn()
     try:
         with conn, conn.cursor() as cur:
             _ensure_settings_table(cur)
-            _set_flag(cur, "auto_exec_api", bool(body.enabled))
+            _set_flag(cur, _scope_flag_name(scope), bool(body.enabled))
         # Wake up daemon (safe if already running)
         try:
             asyncio.create_task(_auto_exec_daemon())
+        asyncio.create_task(_itunes_autoexec_daemon())
+        asyncio.create_task(_cards_autoexec_daemon())
         except Exception:
             pass
         return {"ok": True, "enabled": bool(body.enabled)}
@@ -3403,6 +3437,8 @@ async def _startup_autoexec():
     try:
         if not _AUTOEXEC_DAEMON_STARTED:
             asyncio.create_task(_auto_exec_daemon())
+        asyncio.create_task(_itunes_autoexec_daemon())
+        asyncio.create_task(_cards_autoexec_daemon())
     except Exception as e:
         logging.exception("failed to start auto-exec daemon: %s", e)
 # ======== /Auto-Exec (Admin) ========
@@ -3787,11 +3823,24 @@ def _ensure_itunes_codes_table(cur):
     cur.execute("CREATE INDEX IF NOT EXISTS idx_itunes_codes_used ON public.itunes_codes(used)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_itunes_codes_cat ON public.itunes_codes(category)")
 
+
+def _migrate_card_codes_telco_constraint(cur):
+    try:
+        # Drop old check constraint if it enforces an obsolete value
+        cur.execute("ALTER TABLE public.card_codes DROP CONSTRAINT IF EXISTS card_codes_telco_check")
+    except Exception:
+        pass
+    try:
+        # Recreate with the correct set
+        cur.execute("ALTER TABLE public.card_codes ADD CONSTRAINT card_codes_telco_check CHECK (telco IN ('atheer','asiacell','korek'))")
+    except Exception:
+        pass
+
 def _ensure_card_codes_table(cur):
     cur.execute("""
         CREATE TABLE IF NOT EXISTS public.card_codes(
             id BIGSERIAL PRIMARY KEY,
-            telco TEXT NOT NULL CHECK (telco IN ('atheir','asiacell','korek')),
+            telco TEXT NOT NULL CHECK (telco IN ('atheer','asiacell','korek')),
             code TEXT NOT NULL,
             category TEXT NOT NULL DEFAULT 'generic',
             used BOOLEAN NOT NULL DEFAULT FALSE,
@@ -3801,6 +3850,7 @@ def _ensure_card_codes_table(cur):
             UNIQUE(telco, code)
         );
     """)
+    _migrate_card_codes_telco_constraint(cur)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_card_codes_used ON public.card_codes(used)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_card_codes_tcat ON public.card_codes(telco, category)")
 
@@ -3901,7 +3951,7 @@ def api_admin_codes_itunes_delete(cid: int, x_admin_password: Optional[str] = He
 def api_admin_codes_cards_add(telco: str, body: CodesIn, x_admin_password: Optional[str] = Header(None, alias="x-admin-password"), password: Optional[str] = None):
     _require_admin(_pick_admin_password(x_admin_password, password, (body.dict() if hasattr(body,'dict') else {})) or "")
     telco = (telco or "").strip().lower()
-    if telco not in ("atheir","asiacell","korek"):
+    if telco not in ("atheer","asiacell","korek"):
         raise HTTPException(422, "invalid telco")
     codes = _normalize_codes(body)
     if not codes:
@@ -3927,7 +3977,7 @@ def api_admin_codes_cards_add(telco: str, body: CodesIn, x_admin_password: Optio
 def api_admin_codes_cards_list(telco: str, x_admin_password: Optional[str] = Header(None, alias="x-admin-password"), password: Optional[str] = None, status: str = "unused", limit: int = 200, offset: int = 0, category: Optional[str] = None):
     _require_admin(_pick_admin_password(x_admin_password, password) or "")
     telco = (telco or "").strip().lower()
-    if telco not in ("atheir","asiacell","korek"):
+    if telco not in ("atheer","asiacell","korek"):
         raise HTTPException(422, "invalid telco")
     where = ["telco=%s"]; params: List[Any] = [telco]
     if (status or "unused").lower() in ("unused","free","available"):
@@ -3961,7 +4011,7 @@ def api_admin_codes_cards_list(telco: str, x_admin_password: Optional[str] = Hea
 def api_admin_codes_cards_delete(telco: str, cid: int, x_admin_password: Optional[str] = Header(None, alias="x-admin-password"), password: Optional[str] = None):
     _require_admin(_pick_admin_password(x_admin_password, password) or "")
     telco = (telco or "").strip().lower()
-    if telco not in ("atheir","asiacell","korek"):
+    if telco not in ("atheer","asiacell","korek"):
         raise HTTPException(422, "invalid telco")
     conn = get_conn()
     try:
@@ -3981,7 +4031,7 @@ def _scope_flag_name(scope: str) -> str:
     s = (scope or "").strip().lower()
     return "auto_exec_itunes" if s == "itunes" else ("auto_exec_cards" if s == "cards" else "auto_exec_api")
 
-@app.get("/api/admin/auto_exec/status", name="auto_exec_status_scoped")
+@app.get("/api/admin/auto_exec/status_scoped", name="auto_exec_status_scoped")
 def auto_exec_status_scoped(x_admin_password: Optional[str] = Header(None, alias="x-admin-password"), password: Optional[str] = None, scope: Optional[str] = None):
     # Backward compatible: if no scope -> return the generic flag
     _require_admin(_pick_admin_password(x_admin_password, password) or "")
@@ -4061,7 +4111,7 @@ def _parse_category_from_title(title: str) -> Optional[str]:
 
 def _parse_telco_from_title(title: str) -> Optional[str]:
     t = (title or "").lower()
-    if any(x in t for x in ["اثير","أثير","atheer","atheir","zain"]): return "atheir"
+    if any(x in t for x in ["اثير","أثير","atheer","atheer","zain"]): return "atheer"
     if any(x in t for x in ["asiacell","اسيا","اسياسيل","أسيا"]): return "asiacell"
     if any(x in t for x in ["korek","كورك"]): return "korek"
     return None
@@ -4098,7 +4148,14 @@ def _cards_pick_one_locked(cur):
     cur.execute("""
         SELECT o.id, o.user_id, o.title, COALESCE(NULLIF(o.payload::text,'')::jsonb, '{}'::jsonb)
         FROM public.orders o
-        WHERE COALESCE(o.status,'Pending')='Pending' AND o.type='topup_card'
+        WHERE COALESCE(o.status,'Pending')='Pending'
+          AND (o.type='manual')
+          AND (
+                LOWER(o.title) LIKE '%asiacell%' OR o.title LIKE '%اسياسيل%' OR o.title LIKE '%أسيا%' OR
+                LOWER(o.title) LIKE '%korek%' OR o.title LIKE '%كورك%' OR
+                LOWER(o.title) LIKE '%atheer%' OR o.title LIKE '%اثير%' OR o.title LIKE '%أثير%' OR
+                LOWER(o.title) LIKE '%zain%'
+              )
         ORDER BY o.id ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1

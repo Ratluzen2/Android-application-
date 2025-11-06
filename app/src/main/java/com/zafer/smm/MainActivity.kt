@@ -627,9 +627,9 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
             // Diamonds
             PkgSpec("pkg.ludo.diamonds.810",     "810 الماسة",       810,     5.0),
             PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
-            PkgSpec("pkg.ludo.diamonds.3180",    "3180 الماسة",      3180,    15.0),
-            PkgSpec("pkg.ludo.diamonds.8860",    "8860 الماسة",      8860,    35.0),
-            PkgSpec("pkg.ludo.diamonds.27730",   "27730 الماسة",     27730,   85.0),
+            PkgSpec("pkg.ludo.diamonds.5080",    "5080 الماسة",      5080,    15.0),
+            PkgSpec("pkg.ludo.diamonds.12750",    "12750 الماسة",      12750,    35.0),
+            PkgSpec("pkg.ludo.diamonds.27200",   "27200 الماسة",     27200,   85.0),
             PkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
             PkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
             PkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),

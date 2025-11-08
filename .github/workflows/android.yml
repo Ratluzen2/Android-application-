@@ -129,8 +129,7 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | tr -d '
-' | base64 -d > keystore.jks
+            echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\r' | base64 -d > keystore.jks
             echo "HAS_KEYSTORE=true" >> $GITHUB_ENV
           else
             echo "HAS_KEYSTORE=false" >> $GITHUB_ENV
@@ -167,7 +166,7 @@ jobs:
             fi
           fi
 
-      # NEW: Sign AAB (if keystore available), otherwise upload the produced AAB as-is
+      # NEW: Sign AAB (optional)
       - name: Sign AAB (optional)
         env:
           KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}

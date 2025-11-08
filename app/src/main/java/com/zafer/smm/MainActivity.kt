@@ -4555,12 +4555,29 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
                 // ====== أمان الحساب (ربط كلمة مرور + تسجيل دخول + عرض كلمة المرور) ======
                 Text("أمان الحساب", color = OnBg, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { showBindDialog = true; showBindUserPass = true }) { Text("ربط كلمة المرور") }
-                    OutlinedButton(onClick = { showLoginDialog = true; showUserLogin = true }) { Text("تسجيل دخول UID") }
-                    OutlinedButton(onClick = { showRevealDialog = true }) { Text("عرض كلمة المرور") }
+                
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                            onClick = { showBindDialog = true; showBindUserPass = true }
+                        ) { Text("ربط كلمة المرور") }
+
+                        OutlinedButton(
+                            modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                            onClick = { showLoginDialog = true; showUserLogin = true }
+                        ) { Text("تسجيل دخول UID") }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+                        onClick = { showRevealDialog = true }
+                    ) { Text("عرض كلمة المرور") }
                 }
-                Spacer(Modifier.height(12.dp))
+Spacer(Modifier.height(12.dp))
                 Divider(color = Surface1)
                 Spacer(Modifier.height(12.dp))
                     

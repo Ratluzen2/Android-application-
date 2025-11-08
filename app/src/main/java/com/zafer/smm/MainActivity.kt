@@ -1,5 +1,6 @@
 package com.zafer.smm
 import com.google.gson.annotations.SerializedName
+import androidx.compose.ui.draw.alpha
 import androidx.compose.runtime.rememberCoroutineScope
 import android.app.KeyguardManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -4581,10 +4582,25 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OutlinedButton(
-                            modifier = Modifier.weight(1f).heightIn(min = 44.dp),
-                            onClick = { showBindDialog = true; showBindUserPass = true }
-                        ) { Text("ربط كلمة المرور") }
+                        
+Box(modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
+    OutlinedButton(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).alpha(if (isPassBound == true) 0.6f else 1f),
+                            enabled = (isPassBound != true), onClick = { if (isPassBound != true) { showBindDialog = true; showBindUserPass = true } }
+                        )
+    if (isPassBound == true) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(4.dp)
+                .background(Good, RoundedCornerShape(999.dp))
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+        ) {
+            Text("مرتبط", color = Color.White, fontSize = 12.sp)
+        }
+    }
+}
+ { Text("ربط كلمة المرور") }
 
                         
 Box(modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
@@ -4595,7 +4611,7 @@ Box(modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
     if (loginLinked) {
         Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
+                .align(Alignment.TopStart)
                 .padding(4.dp)
                 .background(Good, RoundedCornerShape(999.dp))
                 .padding(horizontal = 8.dp, vertical = 2.dp)
@@ -4900,7 +4916,7 @@ private fun NotificationBellCentered(
             Box(
                 modifier = Modifier
                     .size(18.dp)
-                    .align(Alignment.TopEnd)
+                    .align(Alignment.TopStart)
                     .offset(x = (-2).dp, y = 2.dp)
                     .background(Color(0xFFE53935), CircleShape),
                 contentAlignment = Alignment.Center

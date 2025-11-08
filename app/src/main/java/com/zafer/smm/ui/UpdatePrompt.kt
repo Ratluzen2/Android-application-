@@ -23,7 +23,7 @@ private const val TAG = "UpdatePrompt"
 private const val OWNER = "Ratluzen2"
 private const val REPO  = "Android-application-"
 
-private const val PREFS = "update_prompt_prefs"
+private const val PREFS = "update_prompt_prefs")
 private const val KEY_SNOOZE_UNTIL = "snooze_until"
 
 @Composable
@@ -41,7 +41,7 @@ fun UpdatePromptHost() {
             Log.d(TAG, "current=$current, remote=${latest.numericTag}, tag=${latest.tag}")
 
             // ✅ إذا الإصدار الأحدث أكبر من الحالي → أظهر النافذة
-            show = latest.numericTag > current
+            show = latest.numericTag > current && !isSnoozed(ctx)
             tagText = latest.tag
             apkUrl = latest.apkUrl
         } catch (t: Throwable) {
@@ -89,6 +89,16 @@ private data class ReleaseInfo(
     val apkUrl: String?
 )
 
+// تحويل "v11.1" → 110100 (major*10000 + minor*100 + patch)
+private fun semverCode(tagOrName: String): Int {
+    val t = tagOrName.trim().removePrefix("v").removePrefix("V")
+    val parts = t.split('.')
+    val major = parts.getOrNull(0)?.toIntOrNull() ?: return 0
+    val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
+    val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
+    return major * 10000 + minor * 100 + patch
+}
+
 private suspend fun fetchLatestRelease(owner: String, repo: String): ReleaseInfo =
     withContext(Dispatchers.IO) {
         val api = "https://api.github.com/repos/$owner/$repo/releases/latest?_ts=${System.currentTimeMillis()}"
@@ -104,7 +114,7 @@ private suspend fun fetchLatestRelease(owner: String, repo: String): ReleaseInfo
             val json = JSONObject(body)
 
             val tag = json.optString("tag_name", "")
-            val num = Regex("""\d+""").find(tag)?.value?.toIntOrNull() ?: 0
+            val num = semverCode(tag.ifBlank { "0" })
 
             var apkUrl: String? = null
             val assets = json.optJSONArray("assets")
@@ -133,11 +143,12 @@ private fun currentNumericVersion(ctx: Context): Int {
     }
 
     val name = pInfo?.versionName.orEmpty()
-    // نفضّل قراءة vN من الـversionName أولاً (مثال: "v5" → 5)
-    val fromName = Regex("""\bv(\d+)\b""").find(name)?.groupValues?.get(1)?.toIntOrNull()
-    if (fromName != null) return fromName
 
-    // fallback: versionCode
+    // 1) جرّب قراءة السيمفير من versionName (يدعم v11.1 أو 11.1.2)
+    val semFromName = semverCode(name)
+    if (semFromName > 0) return semFromName
+
+    // 2) fallback: استخدم versionCode كرقم تصاعدي
     val code = if (android.os.Build.VERSION.SDK_INT >= 28) {
         pInfo?.longVersionCode?.toInt() ?: 0
     } else {
@@ -145,6 +156,12 @@ private fun currentNumericVersion(ctx: Context): Int {
         pInfo?.versionCode ?: 0
     }
     return code
+}
+
+private fun isSnoozed(ctx: Context): Boolean {
+    val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    val until = prefs.getLong(KEY_SNOOZE_UNTIL, 0L)
+    return System.currentTimeMillis() < until
 }
 
 private fun openUrl(ctx: Context, url: String) {

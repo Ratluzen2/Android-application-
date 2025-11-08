@@ -591,9 +591,9 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
         }
         
 if (loading) { CircularProgressIndicator(color = Accent); return@Column }
-        if (showBindDialog || showBindUserPass) { BindPasswordDialog(uid = uid, onDismiss = { showBindDialog = false; showBindUserPass = false }, onBound = { /*no-op*/ }, onToast = { snack = it }) }
-        if (showLoginDialog || showUserLogin) { LoginUidDialog(onDismiss = { showLoginDialog = false; showUserLogin = false }, onLogged = { newUid -> onUserLogin(newUid) }, onToast = { snack = it }) }
-        if (showRevealDialog) { RevealPasswordDialog(uid = uid, onDismiss = { showRevealDialog = false }, onToast = { snack = it }) }
+// removed misplaced dialog invocation
+// removed misplaced dialog invocation
+// removed misplaced dialog invocation
 
         snack?.let { s -> Snackbar(Modifier.fillMaxWidth()) { Text(s) }; LaunchedEffect(s) { kotlinx.coroutines.delay(2000); snack = null } }
         err?.let { e -> Text("تعذر جلب البيانات: $e", color = Bad); return@Column }
@@ -1222,6 +1222,7 @@ Column(
 }
 
 
+    val scope = rememberCoroutineScope()
     if (showSettings) {
         SettingsDialog(
             uid = uid,
@@ -1230,9 +1231,8 @@ Column(
                 saveUid(ctx, newUid)
                 uid = newUid
                 ownerMode = false
-                try { topBalance = apiGetBalance(newUid) } catch (_: Exception) {}
-                onUserLoginSuccess?.invoke(newUid)
-            },
+                scope.launch { try { topBalance = apiGetBalance(newUid) } catch (_: Exception) {} }
+                            },
             onOwnerLogin = { token ->
                 ownerToken = token
                 ownerMode = true
@@ -4525,6 +4525,14 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
 ) {
     val clip = LocalClipboardManager.current
     var showAdminLogin by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
+    var showBindDialog by remember { mutableStateOf(false) }
+    var showLoginDialog by remember { mutableStateOf(false) }
+    var showRevealDialog by remember { mutableStateOf(false) }
+    // Legacy aliases
+    var showBindUserPass by remember { mutableStateOf(false) }
+    var showUserLogin by remember { mutableStateOf(false) }
+    var snack by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -4568,6 +4576,24 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
             }
         }
     )
+
+    // Dialogs inside Settings
+    if (showBindDialog || showBindUserPass) {
+        BindPasswordDialog(uid = uid, onDismiss = { showBindDialog = false; showBindUserPass = false }, onBound = { /*no-op*/ }, onToast = { snack = it })
+    }
+    if (showLoginDialog || showUserLogin) {
+        LoginUidDialog(onDismiss = { showLoginDialog = false; showUserLogin = false }, onLogged = { newUid -> onUserLogin(newUid) }, onToast = { snack = it })
+    }
+    if (showRevealDialog) {
+        RevealPasswordDialog(uid = uid, onDismiss = { showRevealDialog = false }, onToast = { snack = it })
+    }
+
+    // snack text
+    snack?.let {
+        Spacer(Modifier.height(10.dp))
+        Text(it, color = OnBg)
+        androidx.compose.runtime.LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack = null }
+    }
 
     if (showAdminLogin) {
         var pass by remember { mutableStateOf("") }

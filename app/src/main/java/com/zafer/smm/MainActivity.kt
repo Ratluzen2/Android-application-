@@ -722,8 +722,11 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
                     dismissButton = { TextButton(onClick = { open = false }) { Text("إلغاء") } },
                     title = { Text("تعديل ${p.title}", color = OnBg) },
                     text = {
-                        Column {
-                            OutlinedTextField(value = priceInput, onValueChange = { priceInput = it }, label = { Text("السعر") })
+            Column {
+                // شرح مبسّط للمستخدم
+                Text("اربط كلمة مرور لحسابك الحالي المرتبط بالـ UID. ستستخدم هذه الكلمة لاحقًا لتسجيل الدخول على أي جهاز آخر. احتفظ بها سريًا.", color = OnBg)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = priceInput, onValueChange = { priceInput = it }, label = { Text("السعر") })
                             Spacer(Modifier.height(8.dp))
                             OutlinedTextField(value = qtyInput, onValueChange = { qtyInput = it }, label = { Text("الكمية") })
                         }
@@ -4530,6 +4533,23 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
     var showBindDialog by remember { mutableStateOf(false) }
     var showLoginDialog by remember { mutableStateOf(false) }
     var showRevealDialog by remember { mutableStateOf(false) }
+    // حالة ارتباط كلمة المرور بهذا الـ UID
+    var isPassBound by remember { mutableStateOf<Boolean?>(null) }
+    var loginLinked by remember { mutableStateOf(false) }
+
+    // تحميل حالة الربط من الخادم
+    LaunchedEffect(uid) {
+        try {
+            val (code, body) = httpGet("/api/users/bound?uid=" + uid)
+            if (code in 200..299) {
+                val j = org.json.JSONObject(body ?: "{}")
+                isPassBound = j.optBoolean("bound", false)
+            } else {
+                isPassBound = false
+            }
+        } catch (t: Throwable) { isPassBound = false }
+    }
+
     // Legacy aliases
     var showBindUserPass by remember { mutableStateOf(false) }
     var showUserLogin by remember { mutableStateOf(false) }
@@ -4566,16 +4586,41 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
                             onClick = { showBindDialog = true; showBindUserPass = true }
                         ) { Text("ربط كلمة المرور") }
 
-                        OutlinedButton(
-                            modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                        
+Box(modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
+    OutlinedButton(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
                             onClick = { showLoginDialog = true; showUserLogin = true }
-                        ) { Text("تسجيل دخول UID") }
+                        )
+    if (loginLinked) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(4.dp)
+                .background(Good, RoundedCornerShape(999.dp))
+                .padding(horizontal = 8.dp, vertical = 2.dp)
+        ) {
+            Text("تم ربط", color = Color.White, fontSize = 12.sp)
+        }
+    }
+}
+ { Text("تسجيل دخول UID") }
                     }
                     Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
+                    if (isPassBound == true) {
+                        Text("مرتبط", color = Good, fontWeight = FontWeight.SemiBold)
+                    }
+                    if (loginLinked) {
+                        Text("تم ربط", color = Good, fontWeight = FontWeight.SemiBold)
+                    }
+
+
+if (isPassBound == true) {
+OutlinedButton(
                         modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
                         onClick = { showRevealDialog = true }
                     ) { Text("عرض كلمة المرور") }
+}
                 }
 Spacer(Modifier.height(12.dp))
                 Divider(color = Surface1)
@@ -4597,10 +4642,10 @@ Spacer(Modifier.height(12.dp))
 
     // Dialogs inside Settings
     if (showBindDialog || showBindUserPass) {
-        BindPasswordDialog(uid = uid, onDismiss = { showBindDialog = false; showBindUserPass = false }, onBound = { /*no-op*/ }, onToast = { snack = it })
+        BindPasswordDialog(uid = uid, onDismiss = { showBindDialog = false; showBindUserPass = false }, onBound = { isPassBound = true }, onToast = { snack = it })
     }
     if (showLoginDialog || showUserLogin) {
-        LoginUidDialog(onDismiss = { showLoginDialog = false; showUserLogin = false }, onLogged = { newUid -> onUserLogin(newUid) }, onToast = { snack = it })
+        LoginUidDialog(onDismiss = { showLoginDialog = false; showUserLogin = false }, onLogged = { newUid -> onUserLogin(newUid); loginLinked = true }, onToast = { snack = it })
     }
     if (showRevealDialog) {
         RevealPasswordDialog(uid = uid, onDismiss = { showRevealDialog = false }, onToast = { snack = it })
@@ -5208,23 +5253,24 @@ private fun revealPassword(ctx: Context, uid: String) {
 
 /* ====== حوار عرض كلمة المرور (تحقّق خادم + تأكيد قفل الجهاز) ====== */
 @Composable
+
+@Composable
 private fun RevealPasswordDialog(uid: String, onDismiss: () -> Unit, onToast: (String) -> Unit) {
     val ctx = LocalContext.current
-    var pwd by remember { mutableStateOf("") }
-    var showPwd by remember { mutableStateOf(false) }
+    val activity = LocalContext.current as? android.app.Activity
     var sending by remember { mutableStateOf(false) }
     var revealed by remember { mutableStateOf<String?>(null) }
     var showResult by remember { mutableStateOf(false) }
 
-    val activity = LocalContext.current as? android.app.Activity
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { res ->
         if (res.resultCode == android.app.Activity.RESULT_OK) {
+            // After device credential success, fetch password from server (no current password needed)
             kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                 sending = true
                 try {
-                    val obj = org.json.JSONObject().put("uid", uid).put("password", pwd)
+                    val obj = org.json.JSONObject().put("uid", uid)
                     val (code, body) = httpPost("/api/users/reveal_password", obj)
                     if (code in 200..299) {
                         val j = org.json.JSONObject(body ?: "{}")
@@ -5233,9 +5279,9 @@ private fun RevealPasswordDialog(uid: String, onDismiss: () -> Unit, onToast: (S
                             saveLocalPassword(ctx, uid, pw)
                             revealed = pw
                             showResult = true
-                        } else onToast("لا توجد كلمة مرور محفوظة على الخادم")
+                        } else onToast("لا توجد كلمة مرور محفوظة")
                     } else onToast("فشل العرض ($code)")
-                } catch (t: Throwable) { onToast("خطأ: ${t.message}") } 
+                } catch (t: Throwable) { onToast("خطأ: ${t.message}") }
                 finally { sending = false }
             }
         }
@@ -5246,24 +5292,16 @@ private fun RevealPasswordDialog(uid: String, onDismiss: () -> Unit, onToast: (S
         title = { Text("عرض كلمة المرور") },
         text = {
             Column {
-                Text("لأسباب أمنية، أدخل كلمة المرور الحالية للتحقق قبل العرض.")
+                Text("لأمانك سيتم التحقق من قفل الجهاز مباشرةً، وبعد النجاح سنعرض كلمة المرور المخزّنة.", color = OnBg)
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = pwd,
-                    onValueChange = { pwd = it },
-                    label = { Text("كلمة المرور") },
-                    visualTransformation = if (showPwd) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = { TextButton(onClick = { showPwd = !showPwd }) { Text(if (showPwd) "إخفاء" else "عرض") } }
-                )
             }
         },
         confirmButton = {
             TextButton(enabled = !sending, onClick = {
-                if (pwd.isBlank()) { onToast("أدخل كلمة المرور"); return@TextButton }
                 val km = ctx.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
-                val intent = km.createConfirmDeviceCredentialIntent("تأكيد الهوية", "أدخل قفل الجهاز لعرض كلمة المرور")
+                val intent = km.createConfirmDeviceCredentialIntent("تأكيد الهوية", "أدخل قفل الجهاز للمتابعة")
                 if (intent != null && activity != null) launcher.launch(intent) else onToast("يتطلب قفل جهاز مُفعّل")
-            }) { Text(if (sending) "جاري..." else "عرض") }
+            }) { Text(if (sending) "جاري..." else "متابعة") }
         },
         dismissButton = { TextButton(enabled = !sending, onClick = onDismiss) { Text("إلغاء") } }
     )
@@ -5289,4 +5327,5 @@ private fun RevealPasswordDialog(uid: String, onDismiss: () -> Unit, onToast: (S
         )
     }
 }
+
 

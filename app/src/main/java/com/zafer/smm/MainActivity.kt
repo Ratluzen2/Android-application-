@@ -591,8 +591,8 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
         }
         
 if (loading) { CircularProgressIndicator(color = Accent); return@Column }
-        if (showBindDialog) { BindPasswordDialog(uid = uid, onDismiss = { showBindDialog = false }, onBound = { /*no-op*/ }, onToast = { snack = it }) }
-        if (showLoginDialog) { LoginUidDialog(onDismiss = { showLoginDialog = false }, onLogged = { newUid -> onUserLogin(newUid) }, onToast = { snack = it }) }
+        if (showBindDialog || showBindUserPass) { BindPasswordDialog(uid = uid, onDismiss = { showBindDialog = false; showBindUserPass = false }, onBound = { /*no-op*/ }, onToast = { snack = it }) }
+        if (showLoginDialog || showUserLogin) { LoginUidDialog(onDismiss = { showLoginDialog = false; showUserLogin = false }, onLogged = { newUid -> onUserLogin(newUid) }, onToast = { snack = it }) }
         if (showRevealDialog) { RevealPasswordDialog(uid = uid, onDismiss = { showRevealDialog = false }, onToast = { snack = it }) }
 
         snack?.let { s -> Snackbar(Modifier.fillMaxWidth()) { Text(s) }; LaunchedEffect(s) { kotlinx.coroutines.delay(2000); snack = null } }
@@ -1231,6 +1231,7 @@ Column(
                 uid = newUid
                 ownerMode = false
                 try { topBalance = apiGetBalance(newUid) } catch (_: Exception) {}
+                onUserLoginSuccess?.invoke(newUid)
             },
             onOwnerLogin = { token ->
                 ownerToken = token
@@ -4517,6 +4518,7 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
     uid: String,
     ownerMode: Boolean,
     onUserLogin: (String) -> Unit,
+    onUserLoginSuccess: ((String) -> Unit)? = null,
     onOwnerLogin: (token: String) -> Unit,
     onOwnerLogout: () -> Unit,
     onDismiss: () -> Unit
@@ -4545,8 +4547,8 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
                 Text("أمان الحساب", color = OnBg, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { showBindDialog = true }) { Text("ربط كلمة المرور") }
-                    OutlinedButton(onClick = { showLoginDialog = true }) { Text("تسجيل دخول UID") }
+                    OutlinedButton(onClick = { showBindDialog = true; showBindUserPass = true }) { Text("ربط كلمة المرور") }
+                    OutlinedButton(onClick = { showLoginDialog = true; showUserLogin = true }) { Text("تسجيل دخول UID") }
                     OutlinedButton(onClick = { showRevealDialog = true }) { Text("عرض كلمة المرور") }
                 }
                 Spacer(Modifier.height(12.dp))

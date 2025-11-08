@@ -108,6 +108,8 @@ import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import androidx.annotation.Keep
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.material.icons.outlined.Badge
 
 
 
@@ -627,9 +629,9 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
             // Diamonds
             PkgSpec("pkg.ludo.diamonds.810",     "810 الماسة",       810,     5.0),
             PkgSpec("pkg.ludo.diamonds.2280",    "2280 الماسة",      2280,    10.0),
-            PkgSpec("pkg.ludo.diamonds.5080",    "5080 الماسة",      5080,    15.0),
-            PkgSpec("pkg.ludo.diamonds.12750",    "12750 الماسة",      12750,    35.0),
-            PkgSpec("pkg.ludo.diamonds.27200",   "27200 الماسة",     27200,   85.0),
+            PkgSpec("pkg.ludo.diamonds.3180",    "3180 الماسة",      3180,    15.0),
+            PkgSpec("pkg.ludo.diamonds.8860",    "8860 الماسة",      8860,    35.0),
+            PkgSpec("pkg.ludo.diamonds.27730",   "27730 الماسة",     27730,   85.0),
             PkgSpec("pkg.ludo.diamonds.54900",   "54900 الماسة",     54900,   165.0),
             PkgSpec("pkg.ludo.diamonds.164800",  "164800 الماسة",    164800,  475.0),
             PkgSpec("pkg.ludo.diamonds.275400",  "275400 الماسة",    275400,  800.0),
@@ -3986,6 +3988,8 @@ private fun loadOwnerMode(ctx: Context): Boolean = prefs(ctx).getBoolean("owner_
 private fun saveOwnerMode(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("owner_mode", on).apply() }
 private fun loadOwnerToken(ctx: Context): String? = prefs(ctx).getString("owner_token", null)
 private fun saveOwnerToken(ctx: Context, token: String?) { prefs(ctx).edit().putString("owner_token", token).apply() }
+private fun saveUid(ctx: Context, newUid: String) { prefs(ctx).edit().putString("uid", newUid).apply() }
+
 
 private fun loadNotices(ctx: Context): List<AppNotice> {
     val raw = prefs(ctx).getString("notices_json", "[]") ?: "[]"
@@ -4210,6 +4214,19 @@ private suspend fun apiGetBalance(uid: String): Double? {
     val (code, txt) = httpGet("/api/wallet/balance?uid=$uid")
     return if (code in 200..299 && txt != null) {
         try { JSONObject(txt.trim()).optDouble("balance") } catch (_: Exception) { null }
+    } else null
+}
+
+private suspend fun apiBindUserPassword(uid: String, password: String): Boolean {
+    val body = JSONObject().put("uid", uid).put("password", password)
+    val (code, _) = httpPost("/api/users/bind_password", body)
+    return code in 200..299
+}
+private suspend fun apiUserLogin(uid: String, password: String): String? {
+    val body = JSONObject().put("uid", uid).put("password", password)
+    val (code, txt) = httpPost("/api/users/login", body)
+    return if (code in 200..299) {
+        try { JSONObject(txt ?: "{}").optString("uid", uid).ifBlank { uid } } catch (_: Exception) { uid }
     } else null
 }
 private suspend fun apiCreateProviderOrder(
@@ -4475,6 +4492,7 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
     ownerMode: Boolean,
     onOwnerLogin: (token: String) -> Unit,
     onOwnerLogout: () -> Unit,
+    onUserLoginSuccess: (newUid: String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val clip = LocalClipboardManager.current
@@ -4495,6 +4513,17 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
                 }
                 Spacer(Modifier.height(12.dp))
                 Divider(color = Surface1)
+                Spacer(Modifier.height(12.dp))
+                Text("أمان الحساب:", fontWeight = FontWeight.SemiBold, color = OnBg)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { showBindUserPass = true }) { Text("ربط كلمة المرور بالحساب") }
+                    OutlinedButton(onClick = { showUserLogin = true }) { Text("تسجيل الدخول بحساب UID") }
+                }
+                Spacer(Modifier.height(12.dp))
+                Divider(color = Surface1)
+                Spacer(Modifier.height(12.dp))
+
                 Spacer(Modifier.height(12.dp))
 
                 if (ownerMode) {
@@ -4549,6 +4578,105 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
             }
         )
     }
+    if (showBindUserPass) {
+        var pass1 by remember { mutableStateOf("") }
+        var pass2 by remember { mutableStateOf("") }
+        var err by remember { mutableStateOf<String?>(null) }
+        val scope = rememberCoroutineScope()
+
+        AlertDialog(
+            onDismissRequest = { showBindUserPass = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    err = null
+                    if (pass1.isBlank() || pass2.isBlank()) { err = "أدخل كلمة المرور مرتين"; return@TextButton }
+                    if (pass1 != pass2) { err = "كلمتا المرور غير متطابقتين"; return@TextButton }
+                    scope.launch {
+                        val ok = try { apiBindUserPassword(uid, pass1) } catch (e: Exception) { false }
+                        if (ok) { showBindUserPass = false }
+                        else { err = "تعذر ربط كلمة المرور" }
+                    }
+                }) { Text("تأكيد") }
+            },
+            dismissButton = { TextButton(onClick = { showBindUserPass = false }) { Text("إلغاء") } },
+            title = { Text("ربط كلمة المرور", color = OnBg) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = pass1,
+                        onValueChange = { pass1 = it },
+                        singleLine = true,
+                        label = { Text("كلمة المرور") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        colors = OutlinedTextFieldDefaults.colors()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = pass2,
+                        onValueChange = { pass2 = it },
+                        singleLine = true,
+                        label = { Text("تأكيد كلمة المرور") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        colors = OutlinedTextFieldDefaults.colors()
+                    )
+                    if (err != null) { Spacer(Modifier.height(6.dp)); Text(err!!, color = Bad, fontSize = 12.sp) }
+                    Spacer(Modifier.height(4.dp))
+                    Text("سيتم حفظ كلمة المرور بشكل آمن في الخادم وربطها بـ UID الحالي.", color = Dim, fontSize = 12.sp)
+                }
+            }
+        )
+    }
+
+    if (showUserLogin) {
+        var inputUid by remember { mutableStateOf(uid) }
+        var pass by remember { mutableStateOf("") }
+        var err by remember { mutableStateOf<String?>(null) }
+        val scope = rememberCoroutineScope()
+
+        AlertDialog(
+            onDismissRequest = { showUserLogin = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    err = null
+                    if (inputUid.isBlank() || pass.isBlank()) { err = "أدخل UID وكلمة المرور"; return@TextButton }
+                    scope.launch {
+                        val newUid = try { apiUserLogin(inputUid, pass) } catch (e: Exception) { null }
+                        if (newUid != null) {
+                            onUserLoginSuccess(newUid)
+                            showUserLogin = false
+                        } else {
+                            err = "بيانات غير صحيحة"
+                        }
+                    }
+                }) { Text("دخول") }
+            },
+            dismissButton = { TextButton(onClick = { showUserLogin = false }) { Text("إلغاء") } },
+            title = { Text("تسجيل الدخول", color = OnBg) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = inputUid,
+                        onValueChange = { inputUid = it.filter { ch -> ch.isDigit() }.take(7) },
+                        singleLine = true,
+                        label = { Text("UID") },
+                        leadingIcon = { Icon(Icons.Outlined.Badge, contentDescription = null) },
+                        colors = OutlinedTextFieldDefaults.colors()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = pass,
+                        onValueChange = { pass = it },
+                        singleLine = true,
+                        label = { Text("كلمة المرور") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        colors = OutlinedTextFieldDefaults.colors()
+                    )
+                    if (err != null) { Spacer(Modifier.height(6.dp)); Text(err!!, color = Bad, fontSize = 12.sp) }
+                }
+            }
+        )
+    }
+
 }
 
 

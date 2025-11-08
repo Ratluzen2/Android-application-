@@ -1,5 +1,6 @@
 package com.zafer.smm
 import com.google.gson.annotations.SerializedName
+import androidx.compose.runtime.rememberCoroutineScope
 import android.app.KeyguardManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -1222,7 +1223,7 @@ Column(
 }
 
 
-    val scope = rememberCoroutineScope()
+// removed duplicate scope
     if (showSettings) {
         SettingsDialog(
             uid = uid,
@@ -5187,3 +5188,88 @@ private fun revealPassword(ctx: Context, uid: String) {
         )
     }
 }
+
+/* ====== حوار عرض كلمة المرور (تحقّق خادم + تأكيد قفل الجهاز) ====== */
+@Composable
+private fun RevealPasswordDialog(uid: String, onDismiss: () -> Unit, onToast: (String) -> Unit) {
+    val ctx = LocalContext.current
+    var pwd by remember { mutableStateOf("") }
+    var showPwd by remember { mutableStateOf(false) }
+    var sending by remember { mutableStateOf(false) }
+    var revealed by remember { mutableStateOf<String?>(null) }
+    var showResult by remember { mutableStateOf(false) }
+
+    val activity = LocalContext.current as? android.app.Activity
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { res ->
+        if (res.resultCode == android.app.Activity.RESULT_OK) {
+            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                sending = true
+                try {
+                    val obj = org.json.JSONObject().put("uid", uid).put("password", pwd)
+                    val (code, body) = httpPost("/api/users/reveal_password", obj)
+                    if (code in 200..299) {
+                        val j = org.json.JSONObject(body ?: "{}")
+                        val pw = j.optString("password", "")
+                        if (pw.isNotBlank()) {
+                            saveLocalPassword(ctx, uid, pw)
+                            revealed = pw
+                            showResult = true
+                        } else onToast("لا توجد كلمة مرور محفوظة على الخادم")
+                    } else onToast("فشل العرض ($code)")
+                } catch (t: Throwable) { onToast("خطأ: ${t.message}") } 
+                finally { sending = false }
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!sending) onDismiss() },
+        title = { Text("عرض كلمة المرور") },
+        text = {
+            Column {
+                Text("لأسباب أمنية، أدخل كلمة المرور الحالية للتحقق قبل العرض.")
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = pwd,
+                    onValueChange = { pwd = it },
+                    label = { Text("كلمة المرور") },
+                    visualTransformation = if (showPwd) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = { TextButton(onClick = { showPwd = !showPwd }) { Text(if (showPwd) "إخفاء" else "عرض") } }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !sending, onClick = {
+                if (pwd.isBlank()) { onToast("أدخل كلمة المرور"); return@TextButton }
+                val km = ctx.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+                val intent = km.createConfirmDeviceCredentialIntent("تأكيد الهوية", "أدخل قفل الجهاز لعرض كلمة المرور")
+                if (intent != null && activity != null) launcher.launch(intent) else onToast("يتطلب قفل جهاز مُفعّل")
+            }) { Text(if (sending) "جاري..." else "عرض") }
+        },
+        dismissButton = { TextButton(enabled = !sending, onClick = onDismiss) { Text("إلغاء") } }
+    )
+
+    if (showResult) {
+        AlertDialog(
+            onDismissRequest = { showResult = false },
+            title = { Text("كلمة المرور") },
+            text = {
+                val v = revealed ?: ""
+                Column {
+                    SelectionContainer { Text(v, color = OnBg) }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val clip = LocalClipboardManager.current
+                        OutlinedButton(onClick = { clip.setText(AnnotatedString(v)) }) { Text("نسخ") }
+                        OutlinedButton(onClick = { showResult = false; onDismiss() }) { Text("تم") }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {}
+        )
+    }
+}
+

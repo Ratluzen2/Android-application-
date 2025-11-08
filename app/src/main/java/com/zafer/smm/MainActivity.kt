@@ -4585,9 +4585,10 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
                         
 Box(modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
     OutlinedButton(
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).alpha(if (isPassBound == true) 0.6f else 1f),
-                            enabled = (isPassBound != true), onClick = { if (isPassBound != true) { showBindDialog = true; showBindUserPass = true } }
-                        )
+        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).alpha(if (isPassBound == true) 0.6f else 1f),
+        enabled = (isPassBound != true),
+        onClick = { if (isPassBound != true) { showBindDialog = true; showBindUserPass = true } }
+    ) { Text("ربط كلمة المرور") }
     if (isPassBound == true) {
         Box(
             modifier = Modifier
@@ -4600,14 +4601,13 @@ Box(modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
         }
     }
 }
- { Text("ربط كلمة المرور") }
 
                         
 Box(modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
     OutlinedButton(
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
-                            onClick = { showLoginDialog = true; showUserLogin = true }
-                        )
+        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+        onClick = { showLoginDialog = true; showUserLogin = true }
+    ) { Text("تسجيل دخول UID") }
     if (loginLinked) {
         Box(
             modifier = Modifier
@@ -4620,7 +4620,6 @@ Box(modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
         }
     }
 }
- { Text("تسجيل دخول UID") }
                     }
                     Spacer(Modifier.height(8.dp))
                     if (isPassBound == true) {
@@ -5270,7 +5269,6 @@ private fun revealPassword(ctx: Context, uid: String) {
 /* ====== حوار عرض كلمة المرور (تحقّق خادم + تأكيد قفل الجهاز) ====== */
 @Composable
 
-@Composable
 private fun RevealPasswordDialog(uid: String, onDismiss: () -> Unit, onToast: (String) -> Unit) {
     val ctx = LocalContext.current
     val activity = LocalContext.current as? android.app.Activity
@@ -5343,5 +5341,4 @@ private fun RevealPasswordDialog(uid: String, onDismiss: () -> Unit, onToast: (S
         )
     }
 }
-
 

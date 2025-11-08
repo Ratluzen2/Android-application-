@@ -23,7 +23,7 @@ private const val TAG = "UpdatePrompt"
 private const val OWNER = "Ratluzen2"
 private const val REPO  = "Android-application-"
 
-private const val PREFS = "update_prompt_prefs")
+private const val PREFS = "update_prompt_prefs"
 private const val KEY_SNOOZE_UNTIL = "snooze_until"
 
 @Composable

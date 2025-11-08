@@ -191,6 +191,12 @@ object AppNotifier {
         private const val TTL_HOURS_DEFAULT = 12L
 
         private fun prefs(ctx: Context): SharedPreferences =
+
+        private fun saveBadge(ctx: Context, key: String, value: Boolean) {
+            prefs(ctx).edit().putBoolean(key, value).apply()
+        }
+        private fun readBadge(ctx: Context, key: String): Boolean =
+            prefs(ctx).getBoolean(key, false)
             ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
 
         private fun key(prefix: String, amounts: List<Int>) =
@@ -276,7 +282,7 @@ private fun NoticeBody(text: String) {
     if (match != null) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             SelectionContainer {
-                Text(text, color = Dim, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text(text, color = Dim, fontSize = 11.sp, modifier = Modifier.weight(1f))
             }
             TextButton(onClick = {
                 val c = match.groupValues.getOrNull(1) ?: text
@@ -285,7 +291,7 @@ private fun NoticeBody(text: String) {
         }
     } else {
         SelectionContainer {
-            Text(text, color = Dim, fontSize = 12.sp)
+            Text(text, color = Dim, fontSize = 11.sp)
         }
     }
 }
@@ -684,7 +690,7 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
                 Column(Modifier.padding(16.dp)) {
                     Text(p.title, fontWeight = FontWeight.SemiBold, color = OnBg)
                     Spacer(Modifier.height(4.dp))
-                    Text("الكمية الحالية: $curQty  •  السعر الحالي: ${"%.2f".format(curPrice)}", color = Dim, fontSize = 12.sp)
+                    Text("الكمية الحالية: $curQty  •  السعر الحالي: ${"%.2f".format(curPrice)}", color = Dim, fontSize = 11.sp)
                     Spacer(Modifier.height(8.dp))
                     Row {
                         Button(onClick = { open = true }, colors = ButtonDefaults.buttonColors(containerColor = Accent)) {
@@ -755,7 +761,7 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
                             Text(key, fontWeight = FontWeight.SemiBold, color = OnBg)
                             Spacer(Modifier.height(4.dp))
                             val tip = if (has) " (معدل)" else " (افتراضي)"
-                            Text("السعر/ألف: ${ov?.pricePerK ?: svc.pricePerK}  •  الحد الأدنى: ${ov?.minQty ?: svc.min}  •  الحد الأقصى: ${ov?.maxQty ?: svc.max}$tip", color = Dim, fontSize = 12.sp)
+                            Text("السعر/ألف: ${ov?.pricePerK ?: svc.pricePerK}  •  الحد الأدنى: ${ov?.minQty ?: svc.min}  •  الحد الأقصى: ${ov?.maxQty ?: svc.max}$tip", color = Dim, fontSize = 11.sp)
                             Spacer(Modifier.height(8.dp))
                             Row {
                                 TextButton(onClick = { showEdit = true }) { Text("تعديل") }
@@ -1445,7 +1451,7 @@ private fun HomeAnnouncementsList() {
                             val ts = if (ann.createdAt > 0) ann.createdAt else System.currentTimeMillis()
                             val formatted = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
                                 .format(java.util.Date(ts))
-                            Text(formatted, fontSize = 12.sp, color = Dim)
+                            Text(formatted, fontSize = 11.sp, color = Dim)
                         }
                     }
                 }
@@ -1477,7 +1483,7 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
             value = body, onValueChange = { body = it },
             label = { Text("نص الإعلان") }, minLines = 5, modifier = Modifier.fillMaxWidth()
         )
-        if (error != null) { Spacer(Modifier.height(6.dp)); Text(error!!, color = Bad, fontSize = 12.sp) }
+        if (error != null) { Spacer(Modifier.height(6.dp)); Text(error!!, color = Bad, fontSize = 11.sp) }
         Spacer(Modifier.height(12.dp))
         Button(
             onClick = {
@@ -1603,8 +1609,8 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text(svc.uiKey, fontWeight = FontWeight.SemiBold, color = OnBg)
-                        Text("الكمية: ${svc.min} - ${svc.max}", color = Dim, fontSize = 12.sp)
-                        Text("السعر لكل 1000: ${svc.pricePerK}\$", color = Dim, fontSize = 12.sp)
+                        Text("الكمية: ${svc.min} - ${svc.max}", color = Dim, fontSize = 11.sp)
+                        Text("السعر لكل 1000: ${svc.pricePerK}\$", color = Dim, fontSize = 11.sp)
                     }
                 }
             }
@@ -1681,7 +1687,7 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
         title = { Text(service.uiKey) },
         text = {
             Column {
-                Text("الكمية بين ${service.min} و ${service.max}", color = Dim, fontSize = 12.sp)
+                Text("الكمية بين ${service.min} و ${service.max}", color = Dim, fontSize = 11.sp)
                 Spacer(Modifier.height(6.dp))
                 OutlinedTextField(
                     value = qtyText,
@@ -1710,7 +1716,7 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "يرجى إطفاء زر 'تم' (تم التقييد) داخل حسابك الانستغرام قبل إرسال رابط الخدمة لضمان إكمال طلبك!",
-                        color = Dim, fontSize = 12.sp
+                        color = Dim, fontSize = 11.sp
                     )
                 }
                 if (service.uiKey.contains("تلي") || service.uiKey.contains("تيليجرام") || service.uiKey.contains("التليجرام")) {
@@ -1722,14 +1728,14 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
                         + "2. اختر خيار المشتركون.\n"
                         + "3. اضغط على الدعوة عبر رابط خاص.\n"
                         + "4. أنشئ رابط دعوة جديد.",
-                        color = Dim, fontSize = 12.sp
+                        color = Dim, fontSize = 11.sp
                     )
                 }
     
                 Spacer(Modifier.height(8.dp))
                 Text("السعر التقريبي: $price\$", fontWeight = FontWeight.SemiBold, color = OnBg)
                 Spacer(Modifier.height(4.dp))
-                Text("رصيدك الحالي: ${userBalance?.let { "%.2f".format(it) } ?: ""}\$", color = Dim, fontSize = 12.sp)
+                Text("رصيدك الحالي: ${userBalance?.let { "%.2f".format(it) } ?: ""}\$", color = Dim, fontSize = 11.sp)
             }
         }
     )
@@ -1811,7 +1817,7 @@ Column(
             Spacer(Modifier.width(6.dp))
             Column {
                 Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 12.sp)
+                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 11.sp)
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -1833,7 +1839,7 @@ Column(
                             Spacer(Modifier.height(4.dp))
                             run {
                                 val priceTxt = if (price % 1.0 == 0.0) price.toInt().toString() else "%.2f".format(price)
-                                Text("السعر: \$${priceTxt}", color = Dim, fontSize = 12.sp)
+                                Text("السعر: \$${priceTxt}", color = Dim, fontSize = 11.sp)
                             }
                         }
                     }
@@ -1863,7 +1869,7 @@ private fun ConfirmAmountDialog(
                 Spacer(Modifier.height(6.dp))
                 Text(String.format(java.util.Locale.getDefault(), "السعر المستحق: %.2f$", price), color = Dim)
                 Spacer(Modifier.height(8.dp))
-                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 12.sp)
+                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 11.sp)
             }
         }
     )
@@ -2018,7 +2024,7 @@ fun PackageGrid(
             Spacer(Modifier.width(6.dp))
             Column {
                 Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 12.sp)
+                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 11.sp)
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -2039,7 +2045,7 @@ fun PackageGrid(
                             run {
                             val p = opt.priceUsd
                             val priceTxt = if (p % 1.0 == 0.0) p.toInt().toString() else "%.2f".format(p)
-                            Text("السعر: $${priceTxt}", color = Dim, fontSize = 12.sp)
+                            Text("السعر: $${priceTxt}", color = Dim, fontSize = 11.sp)
                         }
                         }
                     }
@@ -2069,7 +2075,7 @@ fun ConfirmPackageDialog(
                 Spacer(Modifier.height(6.dp))
                 Text(String.format(java.util.Locale.getDefault(), "السعر المستحق: %.2f$", priceUsd), color = Dim)
                 Spacer(Modifier.height(8.dp))
-                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 12.sp)
+                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 11.sp)
             }
         }
     )
@@ -2107,7 +2113,7 @@ fun ConfirmPackageIdDialog(
                     label = { Text("معرّف اللاعب / Game ID") }
                 )
                 Spacer(Modifier.height(6.dp))
-                Text("أدخل رقم الحساب بدقة. الطلب لن يُرسل بدون هذا الحقل.", color = Dim, fontSize = 12.sp)
+                Text("أدخل رقم الحساب بدقة. الطلب لن يُرسل بدون هذا الحقل.", color = Dim, fontSize = 11.sp)
             }
         }
     )
@@ -2541,7 +2547,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             title = { Text("شحن عبر أسيا سيل", color = OnBg) },
             text = {
                 Column {
-                    Text("أدخل رقم الكارت (فوق 10 أرقام):", color = Dim, fontSize = 12.sp)
+                    Text("أدخل رقم الكارت (فوق 10 أرقام):", color = Dim, fontSize = 11.sp)
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = cardNumber,
@@ -2599,14 +2605,14 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Text(o.title, fontWeight = FontWeight.SemiBold, color = OnBg)
-                            Text("الكمية: ${o.quantity} | السعر: ${"%.2f".format(o.price)}$", color = Dim, fontSize = 12.sp)
-                            Text("المعرف: ${o.id}", color = Dim, fontSize = 12.sp)
+                            Text("الكمية: ${o.quantity} | السعر: ${"%.2f".format(o.price)}$", color = Dim, fontSize = 11.sp)
+                            Text("المعرف: ${o.id}", color = Dim, fontSize = 11.sp)
                             Text("الحالة: ${o.status}", color = when (o.status) {
                                 OrderStatus.Done -> Good
                                 OrderStatus.Rejected -> Bad
                                 OrderStatus.Refunded -> Accent
                                 else -> OnBg
-                            }, fontSize = 12.sp)
+                            }, fontSize = 11.sp)
                         }
                     }
                 }
@@ -2705,7 +2711,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                                 containerColor = Accent.copy(alpha = 0.18f),
                                 contentColor = OnBg
                             )
-                        ) { Text(title, fontSize = 12.sp) }
+                        ) { Text(title, fontSize = 11.sp) }
                     }
                     if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
@@ -3295,14 +3301,14 @@ if (itemFilter == null || itemFilter.invoke(item)) {
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Text(o.title, fontWeight = FontWeight.SemiBold, color = OnBg)
-                            if (o.uid.isNotBlank()) Text("UID: ${o.uid}", color = Dim, fontSize = 12.sp)
+                            if (o.uid.isNotBlank()) Text("UID: ${o.uid}", color = Dim, fontSize = 11.sp)
                             if (o.payload.isNotBlank()) {
                                 Spacer(Modifier.height(4.dp))
-                                Text("تفاصيل: ${o.payload}", color = Dim, fontSize = 12.sp)
+                                Text("تفاصيل: ${o.payload}", color = Dim, fontSize = 11.sp)
                             }
                             if (dt.isNotEmpty()) {
                                 Spacer(Modifier.height(4.dp))
-                                Text("الوقت: $dt", color = Dim, fontSize = 12.sp)
+                                Text("الوقت: $dt", color = Dim, fontSize = 11.sp)
                             }
                             if (o.accountId.isNotBlank()) {
                                 Spacer(Modifier.height(4.dp))
@@ -3501,7 +3507,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                             val hasOverride = overrides.containsKey(svc.uiKey)
                             val baseId = servicesCatalog.first { it.uiKey == svc.uiKey }.serviceId
                             val curId = overrides[svc.uiKey] ?: baseId
-                                                        Text("الرقم الحالي: $curId" + if (hasOverride) " (معدل)" else " (افتراضي)", color = Dim, fontSize = 12.sp)
+                                                        Text("الرقم الحالي: $curId" + if (hasOverride) " (معدل)" else " (افتراضي)", color = Dim, fontSize = 11.sp)
                             Spacer(Modifier.height(8.dp))
                             Row {
                                 TextButton(onClick = { showEdit = true }) { Text("تعديل") }
@@ -3542,7 +3548,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                             title = { Text("تعديل رقم الخدمة", color = OnBg) },
                             text = {
                                 Column {
-                                    Text("الخدمة: ${svc.uiKey}", color = Dim, fontSize = 12.sp)
+                                    Text("الخدمة: ${svc.uiKey}", color = Dim, fontSize = 11.sp)
                                     Spacer(Modifier.height(6.dp))
                                     OutlinedTextField(
                                         value = newIdText,
@@ -3606,7 +3612,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                         Column(Modifier.padding(16.dp)) {
                             Text("طلب #${c.id}", fontWeight = FontWeight.SemiBold, color = OnBg)
                             Spacer(Modifier.height(4.dp))
-                            Text("UID: ${c.uid}", color = Dim, fontSize = 12.sp)
+                            Text("UID: ${c.uid}", color = Dim, fontSize = 11.sp)
                             Spacer(Modifier.height(4.dp))
                             val clip = LocalClipboardManager.current
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -3624,7 +3630,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                             }
                             if (dt.isNotEmpty()) {
                                 Spacer(Modifier.height(4.dp))
-                                Text("الوقت: $dt", color = Dim, fontSize = 12.sp)
+                                Text("الوقت: $dt", color = Dim, fontSize = 11.sp)
                             }
                             Row {
 
@@ -3674,7 +3680,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
             title = { Text("تنفيذ الشحن", color = OnBg) },
             text = {
                 Column {
-                    Text("أدخل مبلغ الشحن ليُضاف لرصيد المستخدم", color = Dim, fontSize = 12.sp)
+                    Text("أدخل مبلغ الشحن ليُضاف لرصيد المستخدم", color = Dim, fontSize = 11.sp)
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = amountText,
@@ -3808,7 +3814,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text("UID: $u", fontWeight = FontWeight.SemiBold, color = OnBg)
-                                Text("الحالة: $state", color = Dim, fontSize = 12.sp)
+                                Text("الحالة: $state", color = Dim, fontSize = 11.sp)
                             }
                             Text("${"%.2f".format(bal)}$", color = OnBg, fontWeight = FontWeight.Bold)
                         }
@@ -3884,7 +3890,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
     NavigationBarItem(
         selected = selected, onClick = onClick,
         icon = { Icon(icon, contentDescription = label) },
-        label = { Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal) },
+        label = { Text(label, fontSize = 11.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal) },
         colors = NavigationBarItemDefaults.colors(
             selectedIconColor = Color.White, selectedTextColor = Color.White,
             indicatorColor = Accent.copy(alpha = 0.25f),
@@ -4536,6 +4542,15 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
     var showRevealDialog by remember { mutableStateOf(false) }
     // حالة ارتباط كلمة المرور بهذا الـ UID
     var isPassBound by remember { mutableStateOf<Boolean?>(null) }
+
+    // تحميل حالة البادجات من التخزين ثم مزامنتها من الخادم
+    val badgeKeyBound = "badge_pass_bound_$uid"
+    val badgeKeyLogin = "badge_login_linked_$uid"
+    // قراءة أولية من التخزين لتفادي اختفاء البادجات عند إغلاق/فتح النافذة
+    isPassBound = readBadge(ctx, badgeKeyBound)
+    loginLinked = readBadge(ctx, badgeKeyLogin)
+        } catch (_: Throwable) {}
+    }
     var loginLinked by remember { mutableStateOf(false) }
 
     // تحميل حالة الربط من الخادم
@@ -4592,12 +4607,12 @@ Box(modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
     if (isPassBound == true) {
         Box(
             modifier = Modifier
-                .align(Alignment.TopStart)
+                .align(Alignment.TopEnd)
                 .padding(4.dp)
                 .background(Good, RoundedCornerShape(999.dp))
-                .padding(horizontal = 8.dp, vertical = 2.dp)
+                .padding(horizontal = 6.dp, vertical = 2.dp)
         ) {
-            Text("مرتبط", color = Color.White, fontSize = 12.sp)
+            Text("مرتبط", color = Color.White, fontSize = 11.sp)
         }
     }
 }
@@ -4611,25 +4626,17 @@ Box(modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
     if (loginLinked) {
         Box(
             modifier = Modifier
-                .align(Alignment.TopStart)
+                .align(Alignment.TopEnd)
                 .padding(4.dp)
                 .background(Good, RoundedCornerShape(999.dp))
-                .padding(horizontal = 8.dp, vertical = 2.dp)
+                .padding(horizontal = 6.dp, vertical = 2.dp)
         ) {
-            Text("تم ربط", color = Color.White, fontSize = 12.sp)
+            Text("تم ربط", color = Color.White, fontSize = 11.sp)
         }
     }
 }
                     }
                     Spacer(Modifier.height(8.dp))
-                    if (isPassBound == true) {
-                        Text("مرتبط", color = Good, fontWeight = FontWeight.SemiBold)
-                    }
-                    if (loginLinked) {
-                        Text("تم ربط", color = Good, fontWeight = FontWeight.SemiBold)
-                    }
-
-
 if (isPassBound == true) {
 OutlinedButton(
                         modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
@@ -4657,10 +4664,26 @@ Spacer(Modifier.height(12.dp))
 
     // Dialogs inside Settings
     if (showBindDialog || showBindUserPass) {
-        BindPasswordDialog(uid = uid, onDismiss = { showBindDialog = false; showBindUserPass = false }, onBound = { isPassBound = true }, onToast = { snack = it })
+        BindPasswordDialog(uid = uid, onDismiss = { showBindDialog = false; showBindUserPass = false }, onBound = { isPassBound = true; saveBadge(ctx, "badge_pass_bound_$" + uid, true) }, onToast = { snack = it })
     }
     if (showLoginDialog || showUserLogin) {
-        LoginUidDialog(onDismiss = { showLoginDialog = false; showUserLogin = false }, onLogged = { newUid -> onUserLogin(newUid); loginLinked = true }, onToast = { snack = it })
+        LoginUidDialog(onDismiss = { showLoginDialog = false; showUserLogin = false }, onLogged = { newUid -> 
+                            onUserLogin(newUid)
+                            loginLinked = true
+                            saveBadge(ctx, "badge_login_linked_" + newUid, true)
+                            // تحديث حالة الربط للحساب الجديد
+                            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                                try {
+                                    val (code, body) = httpGet("/api/users/bound?uid=" + newUid)
+                                    if (code in 200..299) {
+                                        val j = org.json.JSONObject(body ?: "{}")
+                                        val b = j.optBoolean("bound", false)
+                                        isPassBound = b
+                                        saveBadge(ctx, "badge_pass_bound_" + newUid, b)
+                                    }
+                                } catch (_: Throwable) {}
+                            }
+                        }, onToast = { snack = it })
     }
     if (showRevealDialog) {
         RevealPasswordDialog(uid = uid, onDismiss = { showRevealDialog = false }, onToast = { snack = it })
@@ -4706,7 +4729,7 @@ Spacer(Modifier.height(12.dp))
                         )
                     )
                     if (err != null) {
-                        Spacer(Modifier.height(6.dp)); Text(err!!, color = Bad, fontSize = 12.sp)
+                        Spacer(Modifier.height(6.dp)); Text(err!!, color = Bad, fontSize = 11.sp)
                     }
                 }
             }
@@ -4852,7 +4875,7 @@ private fun FixedTopBar(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(10.dp).clip(CircleShape).background(clr))
                     Spacer(Modifier.width(6.dp))
-                    Text(txt, color = OnBg, fontSize = 12.sp)
+                    Text(txt, color = OnBg, fontSize = 11.sp)
                 }
                 Spacer(Modifier.width(8.dp))
 
@@ -4915,7 +4938,7 @@ private fun NotificationBellCentered(
             Box(
                 modifier = Modifier
                     .size(18.dp)
-                    .align(Alignment.TopStart)
+                    .align(Alignment.TopEnd)
                     .offset(x = (-2).dp, y = 2.dp)
                     .background(Color(0xFFE53935), CircleShape),
                 contentAlignment = Alignment.Center
@@ -5045,7 +5068,7 @@ private fun AdminAnnouncementsList(
                                 val ts = if (ann.createdAt > 0) ann.createdAt else System.currentTimeMillis()
                                 val formatted = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
                                     .format(java.util.Date(ts))
-                                Text(formatted, fontSize = 12.sp, color = Dim)
+                                Text(formatted, fontSize = 11.sp, color = Dim)
                                 Spacer(Modifier.height(8.dp))
                                 Row {
                                     TextButton(onClick = { showEdit = true }) { Text("تعديل الإعلان") }

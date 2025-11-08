@@ -105,12 +105,32 @@ jobs:
             -PVERSION_NAME=${{ env.VERSION_NAME }} -PVERSION_CODE=${{ env.VERSION_CODE }}
             -PversionName=${{ env.VERSION_NAME }} -PversionCode=${{ env.VERSION_CODE }}
 
+      # NEW: Build App Bundle (AAB) in addition to APK
+      - name: Build App Bundle with Gradle Wrapper
+        if: env.USE_WRAPPER == 'true'
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: |
+          chmod +x ./gradlew || true
+          ./gradlew :app:bundleRelease             -PVERSION_NAME="$VERSION_NAME" -PVERSION_CODE="$VERSION_CODE"             -PversionName="$VERSION_NAME" -PversionCode="$VERSION_CODE"
+
+      - name: Build App Bundle with Gradle (no wrapper)
+        if: env.USE_WRAPPER != 'true'
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: 8.7
+          build-root-directory: ${{ env.PROJECT_DIR }}
+          arguments: >-
+            :app:bundleRelease
+            -PVERSION_NAME=${{ env.VERSION_NAME }} -PVERSION_CODE=${{ env.VERSION_CODE }}
+            -PversionName=${{ env.VERSION_NAME }} -PversionCode=${{ env.VERSION_CODE }}
+
       - name: Prepare keystore (optional)
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | tr -d '\r' | base64 -d > keystore.jks
+            echo "$ANDROID_KEYSTORE_BASE64" | tr -d '
+' | base64 -d > keystore.jks
             echo "HAS_KEYSTORE=true" >> $GITHUB_ENV
           else
             echo "HAS_KEYSTORE=false" >> $GITHUB_ENV
@@ -147,8 +167,42 @@ jobs:
             fi
           fi
 
+      # NEW: Sign AAB (if keystore available), otherwise upload the produced AAB as-is
+      - name: Sign AAB (optional)
+        env:
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -e
+          BUNDLE_DIR="${{ env.PROJECT_DIR }}/app/build/outputs/bundle/release"
+          AAB=$(ls "$BUNDLE_DIR"/*.aab 2>/dev/null | head -n 1 || true)
+          if [ -z "$AAB" ]; then
+            echo "No .aab found in $BUNDLE_DIR; listing files for debug:"
+            ls -lR "${{ env.PROJECT_DIR }}/app/build/outputs" || true
+          fi
+          if [ "$HAS_KEYSTORE" = "true" ] && [ -n "$KS_ALIAS" ] && [ -n "$KS_PASS" ] && [ -n "$KEY_PASS" ] && [ -n "$AAB" ]; then
+            cp "$AAB" "$BUNDLE_DIR/app-release-unsigned.aab"
+            jarsigner -keystore keystore.jks -storepass "$KS_PASS" -keypass "$KEY_PASS" -signedjar "$BUNDLE_DIR/app-release.aab" "$BUNDLE_DIR/app-release-unsigned.aab" "$KS_ALIAS"
+            jarsigner -verify "$BUNDLE_DIR/app-release.aab" || true
+            echo "FINAL_AAB=$BUNDLE_DIR/app-release.aab" >> $GITHUB_ENV
+          else
+            if [ -n "$AAB" ]; then
+              echo "FINAL_AAB=$AAB" >> $GITHUB_ENV
+            else
+              echo "FINAL_AAB=" >> $GITHUB_ENV
+            fi
+          fi
+
       - name: Upload artifact (APK)
         uses: actions/upload-artifact@v4
         with:
           name: app-${{ env.VERSION_NAME }}
           path: ${{ env.FINAL_APK }}
+
+      # NEW: Upload artifact (AAB)
+      - name: Upload artifact (AAB)
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-bundle-${{ env.VERSION_NAME }}
+          path: ${{ env.FINAL_AAB }}

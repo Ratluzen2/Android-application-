@@ -1,5 +1,11 @@
 package com.zafer.smm
 import com.google.gson.annotations.SerializedName
+import android.app.KeyguardManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -108,8 +114,6 @@ import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import androidx.annotation.Keep
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.material.icons.outlined.Badge
 
 
 
@@ -587,6 +591,10 @@ private fun PricingEditorScreen(token: String, onBack: () -> Unit) {
         }
         
 if (loading) { CircularProgressIndicator(color = Accent); return@Column }
+        if (showBindDialog) { BindPasswordDialog(uid = uid, onDismiss = { showBindDialog = false }, onBound = { /*no-op*/ }, onToast = { snack = it }) }
+        if (showLoginDialog) { LoginUidDialog(onDismiss = { showLoginDialog = false }, onLogged = { newUid -> onUserLogin(newUid) }, onToast = { snack = it }) }
+        if (showRevealDialog) { RevealPasswordDialog(uid = uid, onDismiss = { showRevealDialog = false }, onToast = { snack = it }) }
+
         snack?.let { s -> Snackbar(Modifier.fillMaxWidth()) { Text(s) }; LaunchedEffect(s) { kotlinx.coroutines.delay(2000); snack = null } }
         err?.let { e -> Text("تعذر جلب البيانات: $e", color = Bad); return@Column }
 
@@ -1218,6 +1226,12 @@ Column(
         SettingsDialog(
             uid = uid,
             ownerMode = ownerMode,
+            onUserLogin = { newUid ->
+                saveUid(ctx, newUid)
+                uid = newUid
+                ownerMode = false
+                try { topBalance = apiGetBalance(newUid) } catch (_: Exception) {}
+            },
             onOwnerLogin = { token ->
                 ownerToken = token
                 ownerMode = true
@@ -3984,12 +3998,37 @@ private fun loadOrCreateUid(ctx: Context): String {
     return uid
 
 }
+private fun saveUid(ctx: Context, uid: String) { prefs(ctx).edit().putString("uid", uid).apply() }
+
+/* ============ Local password storage (device only) ============ */
+/* تنبيه أمني: السيرفر يخزّن كلمة المرور كـ hash فقط. محليًا نحتفظ بنسخة مشفرة-مبسّطة لأجل "العرض لاحقًا" على نفس الجهاز. */
+private fun obf(s: String): String {
+    val k = "RATLUZEN_SALT_2025".toByteArray()
+    val bytes = s.toByteArray(Charsets.UTF_8)
+    val xored = ByteArray(bytes.size) { i -> (bytes[i].toInt() xor k[i % k.size].toInt()).toByte() }
+    return android.util.Base64.encodeToString(xored, android.util.Base64.NO_WRAP)
+}
+private fun deobf(b64: String): String {
+    return try {
+        val k = "RATLUZEN_SALT_2025".toByteArray()
+        val xored = android.util.Base64.decode(b64, android.util.Base64.NO_WRAP)
+        val bytes = ByteArray(xored.size) { i -> (xored[i].toInt() xor k[i % k.size].toInt()).toByte() }
+        String(bytes, Charsets.UTF_8)
+    } catch (_: Exception) { "" }
+}
+private fun saveLocalPassword(ctx: Context, uid: String, pwd: String) {
+    prefs(ctx).edit().putString("user_pwd_$uid", obf(pwd)).apply()
+}
+private fun loadLocalPassword(ctx: Context, uid: String): String? {
+    val raw = prefs(ctx).getString("user_pwd_$uid", null) ?: return null
+    val dec = deobf(raw)
+    return if (dec.isNotBlank()) dec else null
+}
+
 private fun loadOwnerMode(ctx: Context): Boolean = prefs(ctx).getBoolean("owner_mode", false)
 private fun saveOwnerMode(ctx: Context, on: Boolean) { prefs(ctx).edit().putBoolean("owner_mode", on).apply() }
 private fun loadOwnerToken(ctx: Context): String? = prefs(ctx).getString("owner_token", null)
 private fun saveOwnerToken(ctx: Context, token: String?) { prefs(ctx).edit().putString("owner_token", token).apply() }
-private fun saveUid(ctx: Context, newUid: String) { prefs(ctx).edit().putString("uid", newUid).apply() }
-
 
 private fun loadNotices(ctx: Context): List<AppNotice> {
     val raw = prefs(ctx).getString("notices_json", "[]") ?: "[]"
@@ -4214,19 +4253,6 @@ private suspend fun apiGetBalance(uid: String): Double? {
     val (code, txt) = httpGet("/api/wallet/balance?uid=$uid")
     return if (code in 200..299 && txt != null) {
         try { JSONObject(txt.trim()).optDouble("balance") } catch (_: Exception) { null }
-    } else null
-}
-
-private suspend fun apiBindUserPassword(uid: String, password: String): Boolean {
-    val body = JSONObject().put("uid", uid).put("password", password)
-    val (code, _) = httpPost("/api/users/bind_password", body)
-    return code in 200..299
-}
-private suspend fun apiUserLogin(uid: String, password: String): String? {
-    val body = JSONObject().put("uid", uid).put("password", password)
-    val (code, txt) = httpPost("/api/users/login", body)
-    return if (code in 200..299) {
-        try { JSONObject(txt ?: "{}").optString("uid", uid).ifBlank { uid } } catch (_: Exception) { uid }
     } else null
 }
 private suspend fun apiCreateProviderOrder(
@@ -4490,9 +4516,9 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
 @Composable private fun SettingsDialog(
     uid: String,
     ownerMode: Boolean,
+    onUserLogin: (String) -> Unit,
     onOwnerLogin: (token: String) -> Unit,
     onOwnerLogout: () -> Unit,
-    onUserLoginSuccess: (newUid: String) -> Unit,
     onDismiss: () -> Unit
 ) {
     val clip = LocalClipboardManager.current
@@ -4514,17 +4540,19 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
                 Spacer(Modifier.height(12.dp))
                 Divider(color = Surface1)
                 Spacer(Modifier.height(12.dp))
-                Text("أمان الحساب:", fontWeight = FontWeight.SemiBold, color = OnBg)
-                Spacer(Modifier.height(6.dp))
+
+                // ====== أمان الحساب (ربط كلمة مرور + تسجيل دخول + عرض كلمة المرور) ======
+                Text("أمان الحساب", color = OnBg, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { showBindUserPass = true }) { Text("ربط كلمة المرور بالحساب") }
-                    OutlinedButton(onClick = { showUserLogin = true }) { Text("تسجيل الدخول بحساب UID") }
+                    OutlinedButton(onClick = { showBindDialog = true }) { Text("ربط كلمة المرور") }
+                    OutlinedButton(onClick = { showLoginDialog = true }) { Text("تسجيل دخول UID") }
+                    OutlinedButton(onClick = { showRevealDialog = true }) { Text("عرض كلمة المرور") }
                 }
                 Spacer(Modifier.height(12.dp))
                 Divider(color = Surface1)
                 Spacer(Modifier.height(12.dp))
-
-                Spacer(Modifier.height(12.dp))
+                    
 
                 if (ownerMode) {
                     Text("وضع المالك: مفعل", color = Good, fontWeight = FontWeight.SemiBold)
@@ -4578,105 +4606,6 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
             }
         )
     }
-    if (showBindUserPass) {
-        var pass1 by remember { mutableStateOf("") }
-        var pass2 by remember { mutableStateOf("") }
-        var err by remember { mutableStateOf<String?>(null) }
-        val scope = rememberCoroutineScope()
-
-        AlertDialog(
-            onDismissRequest = { showBindUserPass = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    err = null
-                    if (pass1.isBlank() || pass2.isBlank()) { err = "أدخل كلمة المرور مرتين"; return@TextButton }
-                    if (pass1 != pass2) { err = "كلمتا المرور غير متطابقتين"; return@TextButton }
-                    scope.launch {
-                        val ok = try { apiBindUserPassword(uid, pass1) } catch (e: Exception) { false }
-                        if (ok) { showBindUserPass = false }
-                        else { err = "تعذر ربط كلمة المرور" }
-                    }
-                }) { Text("تأكيد") }
-            },
-            dismissButton = { TextButton(onClick = { showBindUserPass = false }) { Text("إلغاء") } },
-            title = { Text("ربط كلمة المرور", color = OnBg) },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = pass1,
-                        onValueChange = { pass1 = it },
-                        singleLine = true,
-                        label = { Text("كلمة المرور") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        colors = OutlinedTextFieldDefaults.colors()
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = pass2,
-                        onValueChange = { pass2 = it },
-                        singleLine = true,
-                        label = { Text("تأكيد كلمة المرور") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        colors = OutlinedTextFieldDefaults.colors()
-                    )
-                    if (err != null) { Spacer(Modifier.height(6.dp)); Text(err!!, color = Bad, fontSize = 12.sp) }
-                    Spacer(Modifier.height(4.dp))
-                    Text("سيتم حفظ كلمة المرور بشكل آمن في الخادم وربطها بـ UID الحالي.", color = Dim, fontSize = 12.sp)
-                }
-            }
-        )
-    }
-
-    if (showUserLogin) {
-        var inputUid by remember { mutableStateOf(uid) }
-        var pass by remember { mutableStateOf("") }
-        var err by remember { mutableStateOf<String?>(null) }
-        val scope = rememberCoroutineScope()
-
-        AlertDialog(
-            onDismissRequest = { showUserLogin = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    err = null
-                    if (inputUid.isBlank() || pass.isBlank()) { err = "أدخل UID وكلمة المرور"; return@TextButton }
-                    scope.launch {
-                        val newUid = try { apiUserLogin(inputUid, pass) } catch (e: Exception) { null }
-                        if (newUid != null) {
-                            onUserLoginSuccess(newUid)
-                            showUserLogin = false
-                        } else {
-                            err = "بيانات غير صحيحة"
-                        }
-                    }
-                }) { Text("دخول") }
-            },
-            dismissButton = { TextButton(onClick = { showUserLogin = false }) { Text("إلغاء") } },
-            title = { Text("تسجيل الدخول", color = OnBg) },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = inputUid,
-                        onValueChange = { inputUid = it.filter { ch -> ch.isDigit() }.take(7) },
-                        singleLine = true,
-                        label = { Text("UID") },
-                        leadingIcon = { Icon(Icons.Outlined.Badge, contentDescription = null) },
-                        colors = OutlinedTextFieldDefaults.colors()
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = pass,
-                        onValueChange = { pass = it },
-                        singleLine = true,
-                        label = { Text("كلمة المرور") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        colors = OutlinedTextFieldDefaults.colors()
-                    )
-                    if (err != null) { Spacer(Modifier.height(6.dp)); Text(err!!, color = Bad, fontSize = 12.sp) }
-                }
-            }
-        )
-    }
-
 }
 
 
@@ -5087,5 +5016,146 @@ private fun AdminAnnouncementsList(
             Text(it, color = OnBg)
             androidx.compose.runtime.LaunchedEffect(it) { kotlinx.coroutines.delay(2000); snack = null }
         }
+    }
+}
+
+
+
+/* ====== حوار ربط كلمة المرور ====== */
+@Composable
+private fun BindPasswordDialog(uid: String, onDismiss: () -> Unit, onBound: (String) -> Unit, onToast: (String)->Unit) {
+    val ctx = LocalContext.current
+    var pwd by remember { mutableStateOf("") }
+    var pwd2 by remember { mutableStateOf("") }
+    var show1 by remember { mutableStateOf(false) }
+    var show2 by remember { mutableStateOf(false) }
+    var sending by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = { if (!sending) onDismiss() },
+        title = { Text("ربط كلمة المرور بالحساب") },
+        text = {
+            Column {
+                OutlinedTextField(value = pwd, onValueChange = { pwd = it }, label = { Text("كلمة المرور") },
+                    visualTransformation = if (show1) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    trailingIcon = {
+                        TextButton(onClick = { show1 = !show1 }) { Text(if (show1) "إخفاء" else "عرض") }
+                    })
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = pwd2, onValueChange = { pwd2 = it }, label = { Text("تأكيد كلمة المرور") },
+                    visualTransformation = if (show2) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    trailingIcon = {
+                        TextButton(onClick = { show2 = !show2 }) { Text(if (show2) "إخفاء" else "عرض") }
+                    })
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !sending, onClick = {
+                if (pwd.length < 4) { onToast("كلمة المرور قصيرة"); return@TextButton }
+                if (pwd != pwd2)   { onToast("كلمتا المرور غير متطابقتين"); return@TextButton }
+                sending = true
+                kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                    try {
+                        val obj = org.json.JSONObject().put("uid", uid).put("password", pwd)
+                        val (code, _) = httpPost("/api/users/bind_password", obj)
+                        if (code in 200..299) {
+                            saveLocalPassword(ctx, uid, pwd)
+                            onToast("تم الربط بنجاح")
+                            onBound(pwd)
+                            onDismiss()
+                        } else onToast("فشل الربط ($code)")
+                    } catch (t: Throwable) { onToast("خطأ: ${t.message}") }
+                    finally { sending = false }
+                }
+            }) { Text(if (sending) "يرسل" else "تثبيت") }
+        },
+        dismissButton = { TextButton(enabled = !sending, onClick = onDismiss) { Text("إلغاء") } }
+    )
+}
+
+/* ====== حوار تسجيل الدخول ====== */
+@Composable
+private fun LoginUidDialog(onDismiss: () -> Unit, onLogged: (String) -> Unit, onToast: (String)->Unit) {
+    val ctx = LocalContext.current
+    var uidIn by remember { mutableStateOf("") }
+    var pwd by remember { mutableStateOf("") }
+    var show by remember { mutableStateOf(false) }
+    var sending by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = { if (!sending) onDismiss() },
+        title = { Text("تسجيل دخول UID") },
+        text = {
+            Column {
+                OutlinedTextField(value = uidIn, onValueChange = { if (it.length <= 24) uidIn = it.filter { ch -> ch.isLetterOrDigit() } }, label = { Text("UID") })
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = pwd, onValueChange = { pwd = it }, label = { Text("كلمة المرور") },
+                    visualTransformation = if (show) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    trailingIcon = { TextButton(onClick = { show = !show }) { Text(if (show) "إخفاء" else "عرض") } })
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !sending, onClick = {
+                if (uidIn.isBlank() || pwd.isBlank()) { onToast("أكمل الحقول") ; return@TextButton }
+                sending = true
+                kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                    try {
+                        val obj = org.json.JSONObject().put("uid", uidIn).put("password", pwd)
+                        val (code, _) = httpPost("/api/users/login", obj)
+                        if (code in 200..299) {
+                            saveLocalPassword(ctx, uidIn, pwd)
+                            onToast("تم تسجيل الدخول")
+                            onLogged(uidIn)
+                            onDismiss()
+                        } else onToast("فشل تسجيل الدخول ($code)")
+                    } catch (t: Throwable) { onToast("خطأ: ${t.message}") }
+                    finally { sending = false }
+                }
+            }) { Text(if (sending) "يدخل" else "تسجيل الدخول") }
+        },
+        dismissButton = { TextButton(enabled = !sending, onClick = onDismiss) { Text("إلغاء") } }
+    )
+}
+
+/* ====== طلب تأكيد قفل الجهاز + إظهار كلمة المرور ====== */
+@Composable
+private fun revealPassword(ctx: Context, uid: String) {
+    var show by remember { mutableStateOf(false) }
+    var value by remember { mutableStateOf<String?>(null) }
+    val activity = LocalContext.current as? android.app.Activity
+    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { res ->
+        if (res.resultCode == android.app.Activity.RESULT_OK) {
+            value = loadLocalPassword(ctx, uid)
+            show = true
+        }
+    }
+    LaunchedEffect(Unit) {
+        val km = ctx.getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+        val intent = km.createConfirmDeviceCredentialIntent("تأكيد الهوية", "أدخل قفل الجهاز لعرض كلمة المرور")
+        if (intent != null && activity != null) {
+            launcher.launch(intent)
+        } else {
+            value = loadLocalPassword(ctx, uid); show = true
+        }
+    }
+    if (show) {
+        AlertDialog(
+            onDismissRequest = { show = false },
+            title = { Text("كلمة المرور المحفوظة") },
+            text = {
+                val v = value ?: "لا توجد كلمة مرور محفوظة"
+                Column {
+                    SelectionContainer { Text(v, color = OnBg) }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val clip = LocalClipboardManager.current
+                        OutlinedButton(onClick = { clip.setText(AnnotatedString(v)) }) { Text("نسخ") }
+                        OutlinedButton(onClick = { show = false }) { Text("تم") }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {}
+        )
     }
 }

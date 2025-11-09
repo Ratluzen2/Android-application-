@@ -4608,7 +4608,7 @@ Box(modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
                 .background(Good, RoundedCornerShape(999.dp))
                 .padding(horizontal = 4.dp, vertical = 1.dp)
         ) {
-            Text("تم ربط", color = Color.White, fontSize = 10.sp)
+            Text("تم دخول", color = Color.White, fontSize = 10.sp)
         }
     }
 }

@@ -181,57 +181,16 @@ object AppNotifier {
 
 
     // --- Pricing cache (prefix+amounts -> map) persisted in SharedPreferences with TTL ---
-    
-    // --- Pricing cache (prefix+amounts -> map) persisted in SharedPreferences with TTL ---
     private object PricingCache {
-        private const val PREF = "pricing_cache_v1"
-        private const val TTL_HOURS_DEFAULT = 12L
-
-        private fun prefs(ctx: Context): SharedPreferences =
-            ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-
-        private fun key(prefix: String, amounts: List<Int>) =
-            prefix + ":" + amounts.joinToString(",")
-
         private fun verKey(prefix: String, amounts: List<Int>) = "ver:" + key(prefix, amounts)
-
-        fun getVersion(ctx: Context, prefix: String, amounts: List<Int>): Long =
-            prefs(ctx).getLong(verKey(prefix, amounts), 0L)
-
+        fun getVersion(ctx: Context, prefix: String, amounts: List<Int>): Long = prefs(ctx).getLong(verKey(prefix, amounts), 0L)
         fun saveVersion(ctx: Context, prefix: String, amounts: List<Int>, ver: Long) {
             prefs(ctx).edit().putLong(verKey(prefix, amounts), ver).apply()
         }
-
-        fun load(ctx: Context, prefix: String, amounts: List<Int>): Map<String, PublicPricingEntry> {
-            val json = prefs(ctx).getString("data:" + key(prefix, amounts), null) ?: return emptyMap()
-            return try {
-                val type = object : TypeToken<Map<String, PublicPricingEntry>>() {}.type
-                Gson().fromJson<Map<String, PublicPricingEntry>>(json, type) ?: emptyMap()
-            } catch (_: Throwable) { emptyMap() }
-        }
-
-        fun save(ctx: Context, prefix: String, amounts: List<Int>, data: Map<String, PublicPricingEntry>) {
-            val k = key(prefix, amounts)
-            prefs(ctx).edit()
-                .putString("data:" + k, Gson().toJson(data))
-                .putLong("ts:" + k, System.currentTimeMillis())
-                .apply()
-        }
-
-        fun isFresh(ctx: Context, prefix: String, amounts: List<Int>, ttlHours: Long = TTL_HOURS_DEFAULT): Boolean {
-            val ts = prefs(ctx).getLong("ts:" + key(prefix, amounts), 0L)
-            if (ts <= 0L) return false
-            val age = System.currentTimeMillis() - ts
-            return age < ttlHours * 60L * 60L * 1000L
-        }
-    }
-
         private const val PREF = "pricing_cache_v1"
         private const val TTL_HOURS_DEFAULT = 12L
 
         private fun prefs(ctx: Context): SharedPreferences =
-            ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-            prefs(ctx).getBoolean(key, false)
             ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
 
         private fun key(prefix: String, amounts: List<Int>) =
@@ -308,18 +267,6 @@ object AppNotifier {
         fun getVersion(ctx: Context, cat: String): Long = prefs(ctx).getLong(verKey(cat), 0L)
         fun saveVersion(ctx: Context, cat: String, ver: Long) { prefs(ctx).edit().putLong(verKey(cat), ver).apply() }
     }
-
-    // --- Badge state persistence ---
-    private const val BADGE_PREF = "badge_state_v1"
-    private fun badgePrefs(ctx: Context): SharedPreferences =
-        ctx.getSharedPreferences(BADGE_PREF, Context.MODE_PRIVATE)
-    private fun saveBadge(ctx: Context, key: String, value: Boolean) {
-        badgePrefs(ctx).edit().putBoolean(key, value).apply()
-    }
-    private fun readBadge(ctx: Context, key: String): Boolean =
-        badgePrefs(ctx).getBoolean(key, false)
-
-
     // -------------------------------------------------------------------------------
     @Composable
 private fun NoticeBody(text: String) {
@@ -329,7 +276,7 @@ private fun NoticeBody(text: String) {
     if (match != null) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             SelectionContainer {
-                Text(text, color = Dim, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                Text(text, color = Dim, fontSize = 12.sp, modifier = Modifier.weight(1f))
             }
             TextButton(onClick = {
                 val c = match.groupValues.getOrNull(1) ?: text
@@ -338,7 +285,7 @@ private fun NoticeBody(text: String) {
         }
     } else {
         SelectionContainer {
-            Text(text, color = Dim, fontSize = 11.sp)
+            Text(text, color = Dim, fontSize = 12.sp)
         }
     }
 }
@@ -737,7 +684,7 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
                 Column(Modifier.padding(16.dp)) {
                     Text(p.title, fontWeight = FontWeight.SemiBold, color = OnBg)
                     Spacer(Modifier.height(4.dp))
-                    Text("الكمية الحالية: $curQty  •  السعر الحالي: ${"%.2f".format(curPrice)}", color = Dim, fontSize = 11.sp)
+                    Text("الكمية الحالية: $curQty  •  السعر الحالي: ${"%.2f".format(curPrice)}", color = Dim, fontSize = 12.sp)
                     Spacer(Modifier.height(8.dp))
                     Row {
                         Button(onClick = { open = true }, colors = ButtonDefaults.buttonColors(containerColor = Accent)) {
@@ -808,7 +755,7 @@ if (selectedCat in listOf("ببجي", "لودو", "ايتونز", "أثير", "�
                             Text(key, fontWeight = FontWeight.SemiBold, color = OnBg)
                             Spacer(Modifier.height(4.dp))
                             val tip = if (has) " (معدل)" else " (افتراضي)"
-                            Text("السعر/ألف: ${ov?.pricePerK ?: svc.pricePerK}  •  الحد الأدنى: ${ov?.minQty ?: svc.min}  •  الحد الأقصى: ${ov?.maxQty ?: svc.max}$tip", color = Dim, fontSize = 11.sp)
+                            Text("السعر/ألف: ${ov?.pricePerK ?: svc.pricePerK}  •  الحد الأدنى: ${ov?.minQty ?: svc.min}  •  الحد الأقصى: ${ov?.maxQty ?: svc.max}$tip", color = Dim, fontSize = 12.sp)
                             Spacer(Modifier.height(8.dp))
                             Row {
                                 TextButton(onClick = { showEdit = true }) { Text("تعديل") }
@@ -1498,7 +1445,7 @@ private fun HomeAnnouncementsList() {
                             val ts = if (ann.createdAt > 0) ann.createdAt else System.currentTimeMillis()
                             val formatted = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
                                 .format(java.util.Date(ts))
-                            Text(formatted, fontSize = 11.sp, color = Dim)
+                            Text(formatted, fontSize = 12.sp, color = Dim)
                         }
                     }
                 }
@@ -1530,7 +1477,7 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
             value = body, onValueChange = { body = it },
             label = { Text("نص الإعلان") }, minLines = 5, modifier = Modifier.fillMaxWidth()
         )
-        if (error != null) { Spacer(Modifier.height(6.dp)); Text(error!!, color = Bad, fontSize = 11.sp) }
+        if (error != null) { Spacer(Modifier.height(6.dp)); Text(error!!, color = Bad, fontSize = 12.sp) }
         Spacer(Modifier.height(12.dp))
         Button(
             onClick = {
@@ -1656,8 +1603,8 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         Text(svc.uiKey, fontWeight = FontWeight.SemiBold, color = OnBg)
-                        Text("الكمية: ${svc.min} - ${svc.max}", color = Dim, fontSize = 11.sp)
-                        Text("السعر لكل 1000: ${svc.pricePerK}\$", color = Dim, fontSize = 11.sp)
+                        Text("الكمية: ${svc.min} - ${svc.max}", color = Dim, fontSize = 12.sp)
+                        Text("السعر لكل 1000: ${svc.pricePerK}\$", color = Dim, fontSize = 12.sp)
                     }
                 }
             }
@@ -1734,7 +1681,7 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
         title = { Text(service.uiKey) },
         text = {
             Column {
-                Text("الكمية بين ${service.min} و ${service.max}", color = Dim, fontSize = 11.sp)
+                Text("الكمية بين ${service.min} و ${service.max}", color = Dim, fontSize = 12.sp)
                 Spacer(Modifier.height(6.dp))
                 OutlinedTextField(
                     value = qtyText,
@@ -1763,7 +1710,7 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "يرجى إطفاء زر 'تم' (تم التقييد) داخل حسابك الانستغرام قبل إرسال رابط الخدمة لضمان إكمال طلبك!",
-                        color = Dim, fontSize = 11.sp
+                        color = Dim, fontSize = 12.sp
                     )
                 }
                 if (service.uiKey.contains("تلي") || service.uiKey.contains("تيليجرام") || service.uiKey.contains("التليجرام")) {
@@ -1775,14 +1722,14 @@ private fun AdminAnnouncementScreen(token: String, onBack: () -> Unit, onSent: (
                         + "2. اختر خيار المشتركون.\n"
                         + "3. اضغط على الدعوة عبر رابط خاص.\n"
                         + "4. أنشئ رابط دعوة جديد.",
-                        color = Dim, fontSize = 11.sp
+                        color = Dim, fontSize = 12.sp
                     )
                 }
     
                 Spacer(Modifier.height(8.dp))
                 Text("السعر التقريبي: $price\$", fontWeight = FontWeight.SemiBold, color = OnBg)
                 Spacer(Modifier.height(4.dp))
-                Text("رصيدك الحالي: ${userBalance?.let { "%.2f".format(it) } ?: ""}\$", color = Dim, fontSize = 11.sp)
+                Text("رصيدك الحالي: ${userBalance?.let { "%.2f".format(it) } ?: ""}\$", color = Dim, fontSize = 12.sp)
             }
         }
     )
@@ -1864,7 +1811,7 @@ Column(
             Spacer(Modifier.width(6.dp))
             Column {
                 Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 11.sp)
+                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 12.sp)
             }
         }
         Spacer(Modifier.height(10.dp))
@@ -1886,7 +1833,7 @@ Column(
                             Spacer(Modifier.height(4.dp))
                             run {
                                 val priceTxt = if (price % 1.0 == 0.0) price.toInt().toString() else "%.2f".format(price)
-                                Text("السعر: \$${priceTxt}", color = Dim, fontSize = 11.sp)
+                                Text("السعر: \$${priceTxt}", color = Dim, fontSize = 12.sp)
                             }
                         }
                     }
@@ -1916,7 +1863,7 @@ private fun ConfirmAmountDialog(
                 Spacer(Modifier.height(6.dp))
                 Text(String.format(java.util.Locale.getDefault(), "السعر المستحق: %.2f$", price), color = Dim)
                 Spacer(Modifier.height(8.dp))
-                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 11.sp)
+                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 12.sp)
             }
         }
     )
@@ -2071,7 +2018,7 @@ fun PackageGrid(
             Spacer(Modifier.width(6.dp))
             Column {
                 Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = OnBg)
-                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 11.sp)
+                if (subtitle.isNotBlank()) Text(subtitle, color = Dim, fontSize = 12.sp)
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -2092,7 +2039,7 @@ fun PackageGrid(
                             run {
                             val p = opt.priceUsd
                             val priceTxt = if (p % 1.0 == 0.0) p.toInt().toString() else "%.2f".format(p)
-                            Text("السعر: $${priceTxt}", color = Dim, fontSize = 11.sp)
+                            Text("السعر: $${priceTxt}", color = Dim, fontSize = 12.sp)
                         }
                         }
                     }
@@ -2122,7 +2069,7 @@ fun ConfirmPackageDialog(
                 Spacer(Modifier.height(6.dp))
                 Text(String.format(java.util.Locale.getDefault(), "السعر المستحق: %.2f$", priceUsd), color = Dim)
                 Spacer(Modifier.height(8.dp))
-                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 11.sp)
+                Text("سيتم إرسال الطلب للمراجعة من قِبل المالك وسيصلك إشعار عند التنفيذ.", color = Dim, fontSize = 12.sp)
             }
         }
     )
@@ -2160,7 +2107,7 @@ fun ConfirmPackageIdDialog(
                     label = { Text("معرّف اللاعب / Game ID") }
                 )
                 Spacer(Modifier.height(6.dp))
-                Text("أدخل رقم الحساب بدقة. الطلب لن يُرسل بدون هذا الحقل.", color = Dim, fontSize = 11.sp)
+                Text("أدخل رقم الحساب بدقة. الطلب لن يُرسل بدون هذا الحقل.", color = Dim, fontSize = 12.sp)
             }
         }
     )
@@ -2594,7 +2541,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             title = { Text("شحن عبر أسيا سيل", color = OnBg) },
             text = {
                 Column {
-                    Text("أدخل رقم الكارت (فوق 10 أرقام):", color = Dim, fontSize = 11.sp)
+                    Text("أدخل رقم الكارت (فوق 10 أرقام):", color = Dim, fontSize = 12.sp)
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = cardNumber,
@@ -2652,14 +2599,14 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Text(o.title, fontWeight = FontWeight.SemiBold, color = OnBg)
-                            Text("الكمية: ${o.quantity} | السعر: ${"%.2f".format(o.price)}$", color = Dim, fontSize = 11.sp)
-                            Text("المعرف: ${o.id}", color = Dim, fontSize = 11.sp)
+                            Text("الكمية: ${o.quantity} | السعر: ${"%.2f".format(o.price)}$", color = Dim, fontSize = 12.sp)
+                            Text("المعرف: ${o.id}", color = Dim, fontSize = 12.sp)
                             Text("الحالة: ${o.status}", color = when (o.status) {
                                 OrderStatus.Done -> Good
                                 OrderStatus.Rejected -> Bad
                                 OrderStatus.Refunded -> Accent
                                 else -> OnBg
-                            }, fontSize = 11.sp)
+                            }, fontSize = 12.sp)
                         }
                     }
                 }
@@ -2758,7 +2705,7 @@ private fun isApiOrder(o: OrderItem): Boolean {
                                 containerColor = Accent.copy(alpha = 0.18f),
                                 contentColor = OnBg
                             )
-                        ) { Text(title, fontSize = 11.sp) }
+                        ) { Text(title, fontSize = 12.sp) }
                     }
                     if (row.size == 1) Spacer(Modifier.weight(1f))
                 }
@@ -3348,14 +3295,14 @@ if (itemFilter == null || itemFilter.invoke(item)) {
                     ) {
                         Column(Modifier.padding(16.dp)) {
                             Text(o.title, fontWeight = FontWeight.SemiBold, color = OnBg)
-                            if (o.uid.isNotBlank()) Text("UID: ${o.uid}", color = Dim, fontSize = 11.sp)
+                            if (o.uid.isNotBlank()) Text("UID: ${o.uid}", color = Dim, fontSize = 12.sp)
                             if (o.payload.isNotBlank()) {
                                 Spacer(Modifier.height(4.dp))
-                                Text("تفاصيل: ${o.payload}", color = Dim, fontSize = 11.sp)
+                                Text("تفاصيل: ${o.payload}", color = Dim, fontSize = 12.sp)
                             }
                             if (dt.isNotEmpty()) {
                                 Spacer(Modifier.height(4.dp))
-                                Text("الوقت: $dt", color = Dim, fontSize = 11.sp)
+                                Text("الوقت: $dt", color = Dim, fontSize = 12.sp)
                             }
                             if (o.accountId.isNotBlank()) {
                                 Spacer(Modifier.height(4.dp))
@@ -3554,7 +3501,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                             val hasOverride = overrides.containsKey(svc.uiKey)
                             val baseId = servicesCatalog.first { it.uiKey == svc.uiKey }.serviceId
                             val curId = overrides[svc.uiKey] ?: baseId
-                                                        Text("الرقم الحالي: $curId" + if (hasOverride) " (معدل)" else " (افتراضي)", color = Dim, fontSize = 11.sp)
+                                                        Text("الرقم الحالي: $curId" + if (hasOverride) " (معدل)" else " (افتراضي)", color = Dim, fontSize = 12.sp)
                             Spacer(Modifier.height(8.dp))
                             Row {
                                 TextButton(onClick = { showEdit = true }) { Text("تعديل") }
@@ -3595,7 +3542,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                             title = { Text("تعديل رقم الخدمة", color = OnBg) },
                             text = {
                                 Column {
-                                    Text("الخدمة: ${svc.uiKey}", color = Dim, fontSize = 11.sp)
+                                    Text("الخدمة: ${svc.uiKey}", color = Dim, fontSize = 12.sp)
                                     Spacer(Modifier.height(6.dp))
                                     OutlinedTextField(
                                         value = newIdText,
@@ -3659,7 +3606,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                         Column(Modifier.padding(16.dp)) {
                             Text("طلب #${c.id}", fontWeight = FontWeight.SemiBold, color = OnBg)
                             Spacer(Modifier.height(4.dp))
-                            Text("UID: ${c.uid}", color = Dim, fontSize = 11.sp)
+                            Text("UID: ${c.uid}", color = Dim, fontSize = 12.sp)
                             Spacer(Modifier.height(4.dp))
                             val clip = LocalClipboardManager.current
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -3677,7 +3624,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                             }
                             if (dt.isNotEmpty()) {
                                 Spacer(Modifier.height(4.dp))
-                                Text("الوقت: $dt", color = Dim, fontSize = 11.sp)
+                                Text("الوقت: $dt", color = Dim, fontSize = 12.sp)
                             }
                             Row {
 
@@ -3727,7 +3674,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
             title = { Text("تنفيذ الشحن", color = OnBg) },
             text = {
                 Column {
-                    Text("أدخل مبلغ الشحن ليُضاف لرصيد المستخدم", color = Dim, fontSize = 11.sp)
+                    Text("أدخل مبلغ الشحن ليُضاف لرصيد المستخدم", color = Dim, fontSize = 12.sp)
                     Spacer(Modifier.height(6.dp))
                     OutlinedTextField(
                         value = amountText,
@@ -3861,7 +3808,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text("UID: $u", fontWeight = FontWeight.SemiBold, color = OnBg)
-                                Text("الحالة: $state", color = Dim, fontSize = 11.sp)
+                                Text("الحالة: $state", color = Dim, fontSize = 12.sp)
                             }
                             Text("${"%.2f".format(bal)}$", color = OnBg, fontWeight = FontWeight.Bold)
                         }
@@ -3937,7 +3884,7 @@ private fun ServiceIdEditorScreen(token: String, onBack: () -> Unit) {
     NavigationBarItem(
         selected = selected, onClick = onClick,
         icon = { Icon(icon, contentDescription = label) },
-        label = { Text(label, fontSize = 11.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal) },
+        label = { Text(label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal) },
         colors = NavigationBarItemDefaults.colors(
             selectedIconColor = Color.White, selectedTextColor = Color.White,
             indicatorColor = Accent.copy(alpha = 0.25f),
@@ -4591,11 +4538,18 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
     var isPassBound by remember { mutableStateOf<Boolean?>(null) }
     var loginLinked by remember { mutableStateOf(false) }
 
-    // تحميل حالة البادجات من التخزين فقط (بدون مزامنة لحظية)
-    val badgeKeyBound = "badge_pass_bound_$uid"
-    val badgeKeyLogin = "badge_login_linked_$uid"
-    isPassBound = readBadge(ctx, badgeKeyBound)
-    loginLinked = readBadge(ctx, badgeKeyLogin)
+    // تحميل حالة الربط من الخادم
+    LaunchedEffect(uid) {
+        try {
+            val (code, body) = httpGet("/api/users/bound?uid=" + uid)
+            if (code in 200..299) {
+                val j = org.json.JSONObject(body ?: "{}")
+                isPassBound = j.optBoolean("bound", false)
+            } else {
+                isPassBound = false
+            }
+        } catch (t: Throwable) { isPassBound = false }
+    }
 
     // Legacy aliases
     var showBindUserPass by remember { mutableStateOf(false) }
@@ -4638,12 +4592,12 @@ Box(modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
     if (isPassBound == true) {
         Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
+                .align(Alignment.TopStart)
                 .padding(4.dp)
                 .background(Good, RoundedCornerShape(999.dp))
-                .padding(horizontal = 6.dp, vertical = 2.dp)
+                .padding(horizontal = 8.dp, vertical = 2.dp)
         ) {
-            Text("مرتبط", color = Color.White, fontSize = 11.sp)
+            Text("مرتبط", color = Color.White, fontSize = 12.sp)
         }
     }
 }
@@ -4657,17 +4611,25 @@ Box(modifier = Modifier.weight(1f).heightIn(min = 44.dp)) {
     if (loginLinked) {
         Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
+                .align(Alignment.TopStart)
                 .padding(4.dp)
                 .background(Good, RoundedCornerShape(999.dp))
-                .padding(horizontal = 6.dp, vertical = 2.dp)
+                .padding(horizontal = 8.dp, vertical = 2.dp)
         ) {
-            Text("تم ربط", color = Color.White, fontSize = 11.sp)
+            Text("تم ربط", color = Color.White, fontSize = 12.sp)
         }
     }
 }
                     }
                     Spacer(Modifier.height(8.dp))
+                    if (isPassBound == true) {
+                        Text("مرتبط", color = Good, fontWeight = FontWeight.SemiBold)
+                    }
+                    if (loginLinked) {
+                        Text("تم ربط", color = Good, fontWeight = FontWeight.SemiBold)
+                    }
+
+
 if (isPassBound == true) {
 OutlinedButton(
                         modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
@@ -4695,7 +4657,7 @@ Spacer(Modifier.height(12.dp))
 
     // Dialogs inside Settings
     if (showBindDialog || showBindUserPass) {
-        BindPasswordDialog(uid = uid, onDismiss = { showBindDialog = false; showBindUserPass = false }, onBound = { isPassBound = true; saveBadge(ctx, "badge_pass_bound_" + uid, true) }, onToast = { snack = it })
+        BindPasswordDialog(uid = uid, onDismiss = { showBindDialog = false; showBindUserPass = false }, onBound = { isPassBound = true }, onToast = { snack = it })
     }
     if (showLoginDialog || showUserLogin) {
         LoginUidDialog(onDismiss = { showLoginDialog = false; showUserLogin = false }, onLogged = { newUid -> 
@@ -4704,13 +4666,6 @@ Spacer(Modifier.height(12.dp))
                             saveBadge(ctx, "badge_login_linked_" + newUid, true)
                             isPassBound = true
                             saveBadge(ctx, "badge_pass_bound_" + newUid, true)
-                        }")
-                                        val b = j.optBoolean("bound", false)
-                                        isPassBound = b
-                                        saveBadge(ctx, "badge_pass_bound_" + newUid, b)
-                                    }
-                                } catch (_: Throwable) {}
-                            }
                         }, onToast = { snack = it })
     }
     if (showRevealDialog) {
@@ -4757,7 +4712,7 @@ Spacer(Modifier.height(12.dp))
                         )
                     )
                     if (err != null) {
-                        Spacer(Modifier.height(6.dp)); Text(err!!, color = Bad, fontSize = 11.sp)
+                        Spacer(Modifier.height(6.dp)); Text(err!!, color = Bad, fontSize = 12.sp)
                     }
                 }
             }
@@ -4903,7 +4858,7 @@ private fun FixedTopBar(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(10.dp).clip(CircleShape).background(clr))
                     Spacer(Modifier.width(6.dp))
-                    Text(txt, color = OnBg, fontSize = 11.sp)
+                    Text(txt, color = OnBg, fontSize = 12.sp)
                 }
                 Spacer(Modifier.width(8.dp))
 
@@ -4966,7 +4921,7 @@ private fun NotificationBellCentered(
             Box(
                 modifier = Modifier
                     .size(18.dp)
-                    .align(Alignment.TopEnd)
+                    .align(Alignment.TopStart)
                     .offset(x = (-2).dp, y = 2.dp)
                     .background(Color(0xFFE53935), CircleShape),
                 contentAlignment = Alignment.Center
@@ -5096,7 +5051,7 @@ private fun AdminAnnouncementsList(
                                 val ts = if (ann.createdAt > 0) ann.createdAt else System.currentTimeMillis()
                                 val formatted = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
                                     .format(java.util.Date(ts))
-                                Text(formatted, fontSize = 11.sp, color = Dim)
+                                Text(formatted, fontSize = 12.sp, color = Dim)
                                 Spacer(Modifier.height(8.dp))
                                 Row {
                                     TextButton(onClick = { showEdit = true }) { Text("تعديل الإعلان") }
@@ -5320,6 +5275,7 @@ private fun revealPassword(ctx: Context, uid: String) {
 /* ====== حوار عرض كلمة المرور (تحقّق خادم + تأكيد قفل الجهاز) ====== */
 @Composable
 
+@Composable
 private fun RevealPasswordDialog(uid: String, onDismiss: () -> Unit, onToast: (String) -> Unit) {
     val ctx = LocalContext.current
     val activity = LocalContext.current as? android.app.Activity
@@ -5331,7 +5287,6 @@ private fun RevealPasswordDialog(uid: String, onDismiss: () -> Unit, onToast: (S
         ActivityResultContracts.StartActivityForResult()
     ) { res ->
         if (res.resultCode == android.app.Activity.RESULT_OK) {
-            // After device credential success, fetch password from server (no current password needed)
             kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
                 sending = true
                 try {
@@ -5392,3 +5347,15 @@ private fun RevealPasswordDialog(uid: String, onDismiss: () -> Unit, onToast: (S
         )
     }
 }
+
+
+
+    // --- Badge state persistence ---
+    private const val BADGE_PREF = "badge_state_v1"
+    private fun badgePrefs(ctx: Context): android.content.SharedPreferences =
+        ctx.getSharedPreferences(BADGE_PREF, android.content.Context.MODE_PRIVATE)
+    private fun saveBadge(ctx: Context, key: String, value: Boolean) {
+        badgePrefs(ctx).edit().putBoolean(key, value).apply()
+    }
+    private fun readBadge(ctx: Context, key: String): Boolean =
+        badgePrefs(ctx).getBoolean(key, false)

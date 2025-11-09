@@ -181,21 +181,56 @@ object AppNotifier {
 
 
     // --- Pricing cache (prefix+amounts -> map) persisted in SharedPreferences with TTL ---
+    
+    // --- Pricing cache (prefix+amounts -> map) persisted in SharedPreferences with TTL ---
     private object PricingCache {
-        private fun verKey(prefix: String, amounts: List<Int>) = "ver:" + key(prefix, amounts)
-        fun getVersion(ctx: Context, prefix: String, amounts: List<Int>): Long = prefs(ctx).getLong(verKey(prefix, amounts), 0L)
-        fun saveVersion(ctx: Context, prefix: String, amounts: List<Int>, ver: Long) {
-            prefs(ctx).edit().putLong(verKey(prefix, amounts), ver).apply()
-        }
         private const val PREF = "pricing_cache_v1"
         private const val TTL_HOURS_DEFAULT = 12L
 
         private fun prefs(ctx: Context): SharedPreferences =
+            ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
 
-        private fun saveBadge(ctx: Context, key: String, value: Boolean) {
-            prefs(ctx).edit().putBoolean(key, value).apply()
+        private fun key(prefix: String, amounts: List<Int>) =
+            prefix + ":" + amounts.joinToString(",")
+
+        private fun verKey(prefix: String, amounts: List<Int>) = "ver:" + key(prefix, amounts)
+
+        fun getVersion(ctx: Context, prefix: String, amounts: List<Int>): Long =
+            prefs(ctx).getLong(verKey(prefix, amounts), 0L)
+
+        fun saveVersion(ctx: Context, prefix: String, amounts: List<Int>, ver: Long) {
+            prefs(ctx).edit().putLong(verKey(prefix, amounts), ver).apply()
         }
-        private fun readBadge(ctx: Context, key: String): Boolean =
+
+        fun load(ctx: Context, prefix: String, amounts: List<Int>): Map<String, PublicPricingEntry> {
+            val json = prefs(ctx).getString("data:" + key(prefix, amounts), null) ?: return emptyMap()
+            return try {
+                val type = object : TypeToken<Map<String, PublicPricingEntry>>() {}.type
+                Gson().fromJson<Map<String, PublicPricingEntry>>(json, type) ?: emptyMap()
+            } catch (_: Throwable) { emptyMap() }
+        }
+
+        fun save(ctx: Context, prefix: String, amounts: List<Int>, data: Map<String, PublicPricingEntry>) {
+            val k = key(prefix, amounts)
+            prefs(ctx).edit()
+                .putString("data:" + k, Gson().toJson(data))
+                .putLong("ts:" + k, System.currentTimeMillis())
+                .apply()
+        }
+
+        fun isFresh(ctx: Context, prefix: String, amounts: List<Int>, ttlHours: Long = TTL_HOURS_DEFAULT): Boolean {
+            val ts = prefs(ctx).getLong("ts:" + key(prefix, amounts), 0L)
+            if (ts <= 0L) return false
+            val age = System.currentTimeMillis() - ts
+            return age < ttlHours * 60L * 60L * 1000L
+        }
+    }
+
+        private const val PREF = "pricing_cache_v1"
+        private const val TTL_HOURS_DEFAULT = 12L
+
+        private fun prefs(ctx: Context): SharedPreferences =
+            ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
             prefs(ctx).getBoolean(key, false)
             ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
 
@@ -273,6 +308,18 @@ object AppNotifier {
         fun getVersion(ctx: Context, cat: String): Long = prefs(ctx).getLong(verKey(cat), 0L)
         fun saveVersion(ctx: Context, cat: String, ver: Long) { prefs(ctx).edit().putLong(verKey(cat), ver).apply() }
     }
+
+    // --- Badge state persistence ---
+    private const val BADGE_PREF = "badge_state_v1"
+    private fun badgePrefs(ctx: Context): SharedPreferences =
+        ctx.getSharedPreferences(BADGE_PREF, Context.MODE_PRIVATE)
+    private fun saveBadge(ctx: Context, key: String, value: Boolean) {
+        badgePrefs(ctx).edit().putBoolean(key, value).apply()
+    }
+    private fun readBadge(ctx: Context, key: String): Boolean =
+        badgePrefs(ctx).getBoolean(key, false)
+
+
     // -------------------------------------------------------------------------------
     @Composable
 private fun NoticeBody(text: String) {
@@ -4542,29 +4589,13 @@ private suspend fun apiAdminExecuteTopupCard(id: Int, amount: Double, token: Str
     var showRevealDialog by remember { mutableStateOf(false) }
     // حالة ارتباط كلمة المرور بهذا الـ UID
     var isPassBound by remember { mutableStateOf<Boolean?>(null) }
-
-    // تحميل حالة البادجات من التخزين ثم مزامنتها من الخادم
-    val badgeKeyBound = "badge_pass_bound_$uid"
-    val badgeKeyLogin = "badge_login_linked_$uid"
-    // قراءة أولية من التخزين لتفادي اختفاء البادجات عند إغلاق/فتح النافذة
-    isPassBound = readBadge(ctx, badgeKeyBound)
-    loginLinked = readBadge(ctx, badgeKeyLogin)
-        } catch (_: Throwable) {}
-    }
     var loginLinked by remember { mutableStateOf(false) }
 
-    // تحميل حالة الربط من الخادم
-    LaunchedEffect(uid) {
-        try {
-            val (code, body) = httpGet("/api/users/bound?uid=" + uid)
-            if (code in 200..299) {
-                val j = org.json.JSONObject(body ?: "{}")
-                isPassBound = j.optBoolean("bound", false)
-            } else {
-                isPassBound = false
-            }
-        } catch (t: Throwable) { isPassBound = false }
-    }
+    // تحميل حالة البادجات من التخزين فقط (بدون مزامنة لحظية)
+    val badgeKeyBound = "badge_pass_bound_$uid"
+    val badgeKeyLogin = "badge_login_linked_$uid"
+    isPassBound = readBadge(ctx, badgeKeyBound)
+    loginLinked = readBadge(ctx, badgeKeyLogin)
 
     // Legacy aliases
     var showBindUserPass by remember { mutableStateOf(false) }
@@ -4664,19 +4695,16 @@ Spacer(Modifier.height(12.dp))
 
     // Dialogs inside Settings
     if (showBindDialog || showBindUserPass) {
-        BindPasswordDialog(uid = uid, onDismiss = { showBindDialog = false; showBindUserPass = false }, onBound = { isPassBound = true; saveBadge(ctx, "badge_pass_bound_$" + uid, true) }, onToast = { snack = it })
+        BindPasswordDialog(uid = uid, onDismiss = { showBindDialog = false; showBindUserPass = false }, onBound = { isPassBound = true; saveBadge(ctx, "badge_pass_bound_" + uid, true) }, onToast = { snack = it })
     }
     if (showLoginDialog || showUserLogin) {
         LoginUidDialog(onDismiss = { showLoginDialog = false; showUserLogin = false }, onLogged = { newUid -> 
                             onUserLogin(newUid)
                             loginLinked = true
                             saveBadge(ctx, "badge_login_linked_" + newUid, true)
-                            // تحديث حالة الربط للحساب الجديد
-                            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Main) {
-                                try {
-                                    val (code, body) = httpGet("/api/users/bound?uid=" + newUid)
-                                    if (code in 200..299) {
-                                        val j = org.json.JSONObject(body ?: "{}")
+                            isPassBound = true
+                            saveBadge(ctx, "badge_pass_bound_" + newUid, true)
+                        }")
                                         val b = j.optBoolean("bound", false)
                                         isPassBound = b
                                         saveBadge(ctx, "badge_pass_bound_" + newUid, b)
@@ -5364,4 +5392,3 @@ private fun RevealPasswordDialog(uid: String, onDismiss: () -> Unit, onToast: (S
         )
     }
 }
-

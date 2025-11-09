@@ -5273,7 +5273,6 @@ private fun revealPassword(ctx: Context, uid: String) {
 }
 
 /* ====== حوار عرض كلمة المرور (تحقّق خادم + تأكيد قفل الجهاز) ====== */
-@Composable
 
 @Composable
 private fun RevealPasswordDialog(uid: String, onDismiss: () -> Unit, onToast: (String) -> Unit) {

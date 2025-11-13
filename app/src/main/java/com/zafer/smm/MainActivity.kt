@@ -2510,8 +2510,12 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             confirmButton = {
                 TextButton(enabled = !payTabsSending, onClick = {
                     val amount = payTabsAmount.replace(',', '.').toDoubleOrNull()
-                    if (amount == null || amount <= 0.0) {
+                    if (amount == null) {
                         onToast("الرجاء إدخال مبلغ صحيح بالدولار.")
+                        return@TextButton
+                    }
+                    if (amount < 1.0) {
+                        onToast("أقل مبلغ للشحن هو 1 دولار.")
                         return@TextButton
                     }
                     payTabsSending = true

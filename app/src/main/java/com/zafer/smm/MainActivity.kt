@@ -2578,7 +2578,17 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                         factory = { context ->
                             WebView(context).apply {
                                 settings.javaScriptEnabled = true
-                                webViewClient = object : WebViewClient() {}
+                                webViewClient = object : WebViewClient() {
+                                    override fun onPageFinished(view: WebView?, url: String?) {
+                                        super.onPageFinished(view, url)
+                                        view?.loadUrl(
+                                            "javascript:(function() { " +
+                                                "var imgs = document.getElementsByTagName('img');" +
+                                                "if (imgs && imgs.length > 0) { imgs[0].style.display='none'; }" +
+                                            "})()"
+                                        )
+                                    }
+                                }
                                 loadUrl(payTabsUrl!!)
                             }
                         },

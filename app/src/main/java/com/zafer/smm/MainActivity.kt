@@ -8,7 +8,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -40,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -2557,6 +2557,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
         )
     }
 
+    
     if (payTabsUrl != null) {
         AlertDialog(
             onDismissRequest = { payTabsUrl = null },
@@ -2578,15 +2579,33 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                         factory = { context ->
                             WebView(context).apply {
                                 settings.javaScriptEnabled = true
+                                settings.domStorageEnabled = true
                                 webViewClient = object : WebViewClient() {
                                     override fun onPageFinished(view: WebView?, url: String?) {
                                         super.onPageFinished(view, url)
-                                        view?.loadUrl(
-                                            "javascript:(function() { " +
-                                                "var imgs = document.getElementsByTagName('img');" +
-                                                "if (imgs && imgs.length > 0) { imgs[0].style.display='none'; }" +
-                                            "})()"
-                                        )
+                                        val js = """
+                                            (function() {
+                                                try {
+                                                    // ابحث عن عنصر يحتوي على نص "وضع تجريبي"
+                                                    var nodes = document.querySelectorAll('div, span');
+                                                    var testNode = null;
+                                                    for (var i = 0; i < nodes.length; i++) {
+                                                        if (nodes[i].innerText && nodes[i].innerText.indexOf('وضع تجريبي') !== -1) {
+                                                            testNode = nodes[i];
+                                                            break;
+                                                        }
+                                                    }
+                                                    if (testNode && testNode.parentElement && testNode.parentElement.previousElementSibling) {
+                                                        // إخفاء القسم العلوي (الهيدر الأزرق) الذي يسبق الكارت الأبيض
+                                                        testNode.parentElement.previousElementSibling.style.display = 'none';
+                                                    }
+                                                } catch (e) {
+                                                    console.log('ratluzen header hide error', e);
+                                                }
+                                            })();
+                                        """.trimIndent()
+
+                                        view?.evaluateJavascript(js, null)
                                     }
                                 }
                                 loadUrl(payTabsUrl!!)
@@ -2602,7 +2621,6 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             }
         )
     }
-
 
     if (askAsiacell) {
         AlertDialog(

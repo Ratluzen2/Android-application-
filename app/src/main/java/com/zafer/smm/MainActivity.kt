@@ -51,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.runtime.getValue
@@ -81,6 +82,8 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -2443,7 +2446,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     var showPayTabs by remember { mutableStateOf(false) }
     var payTabsAmount by remember { mutableStateOf("") }
     var payTabsSending by remember { mutableStateOf(false) }
-    val uri = LocalUriHandler.current
+    var payTabsUrl by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) { balance = apiGetBalance(uid) }
     LaunchedEffect(noticeTick) { balance = apiGetBalance(uid) }
@@ -2522,11 +2525,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                                     forOwner = false
                                 )
                             )
-                            try {
-                                uri.openUri(url)
-                            } catch (_: Exception) {
-                                onToast("تعذر فتح رابط الدفع، يرجى المحاولة مرة أخرى.")
-                            }
+                            payTabsUrl = url
                             showPayTabs = false
                             payTabsAmount = ""
                         } else {
@@ -2553,6 +2552,37 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                         label = { Text("المبلغ بالدولار") }
                     )
                 }
+            }
+        )
+    }
+
+    if (payTabsUrl != null) {
+        AlertDialog(
+            onDismissRequest = { payTabsUrl = null },
+            confirmButton = {
+                TextButton(onClick = { payTabsUrl = null }) {
+                    Text("إغلاق")
+                }
+            },
+            title = { Text("إتمام الدفع", color = OnBg) },
+            text = {
+                AndroidView(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(400.dp),
+                    factory = { context ->
+                        WebView(context).apply {
+                            settings.javaScriptEnabled = true
+                            webViewClient = object : WebViewClient() {}
+                            loadUrl(payTabsUrl!!)
+                        }
+                    },
+                    update = { view ->
+                        if (payTabsUrl != null && view.url != payTabsUrl) {
+                            view.loadUrl(payTabsUrl!!)
+                        }
+                    }
+                )
             }
         )
     }

@@ -2496,7 +2496,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                 Icon(Icons.Filled.CreditCard, null, tint = Accent)
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    "شحن عبر بطاقة ماستر / فيزا (PayTabs)",
+                    "شحن عبر بطاقة ماستر / فيزا",
                     fontWeight = FontWeight.SemiBold,
                     color = OnBg
                 )
@@ -2526,7 +2526,7 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                             onAddNotice(
                                 AppNotice(
                                     "شحن رصيد",
-                                    "تم إنشاء رابط دفع PayTabs بمبلغ ${amount}$",
+                                    "تم إنشاء رابط دفع بمبلغ ${amount}$",
                                     forOwner = false
                                 )
                             )

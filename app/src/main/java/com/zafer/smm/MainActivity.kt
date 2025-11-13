@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -2564,28 +2565,34 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
                     Text("إغلاق")
                 }
             },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
             title = { Text("إتمام الدفع", color = OnBg) },
             text = {
-                AndroidView(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(400.dp),
-                    factory = { context ->
-                        WebView(context).apply {
-                            settings.javaScriptEnabled = true
-                            webViewClient = object : WebViewClient() {}
-                            loadUrl(payTabsUrl!!)
+                        .fillMaxHeight(0.9f)
+                ) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
+                        factory = { context ->
+                            WebView(context).apply {
+                                settings.javaScriptEnabled = true
+                                webViewClient = object : WebViewClient() {}
+                                loadUrl(payTabsUrl!!)
+                            }
+                        },
+                        update = { view ->
+                            if (payTabsUrl != null && view.url != payTabsUrl) {
+                                view.loadUrl(payTabsUrl!!)
+                            }
                         }
-                    },
-                    update = { view ->
-                        if (payTabsUrl != null && view.url != payTabsUrl) {
-                            view.loadUrl(payTabsUrl!!)
-                        }
-                    }
-                )
+                    )
+                }
             }
         )
     }
+
 
     if (askAsiacell) {
         AlertDialog(

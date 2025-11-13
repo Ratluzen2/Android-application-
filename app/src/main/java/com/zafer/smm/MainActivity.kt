@@ -2440,6 +2440,10 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
     var sending by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     var banPopup by remember { mutableStateOf<String?>(null) }
+    var showPayTabs by remember { mutableStateOf(false) }
+    var payTabsAmount by remember { mutableStateOf("") }
+    var payTabsSending by remember { mutableStateOf(false) }
+    val uri = LocalUriHandler.current
 
     LaunchedEffect(Unit) { balance = apiGetBalance(uid) }
     LaunchedEffect(noticeTick) { balance = apiGetBalance(uid) }
@@ -2477,27 +2481,80 @@ if (selectedManualFlow != null && pendingUsd != null && pendingPrice != null) {
             }
         }
 
-        listOf(
-            "شحن عبر هلا بي",
-            "شحن عبر نقاط سنتات",
-            "شحن عبر سوبركي",
-            "شحن عبر زين كاش",
-            "شحن عبر عملات رقمية (USDT)"
-        ).forEach {
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable {
-                    onToast("لإتمام الشحن تواصل مع الدعم (واتساب/تيليجرام).")
-                    onAddNotice(AppNotice("شحن رصيد", "يرجى التواصل مع الدعم لإكمال شحن: $it", forOwner = false))
-                },
-                colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
-            ) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.AttachMoney, null, tint = Accent)
-                    Spacer(Modifier.width(8.dp))
-                    Text(it, fontWeight = FontWeight.SemiBold, color = OnBg)
-                }
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp)
+                .clickable { showPayTabs = true },
+            colors = CardDefaults.cardColors(containerColor = Surface1, contentColor = OnBg)
+        ) {
+            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.CreditCard, null, tint = Accent)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "شحن عبر بطاقة ماستر / فيزا (PayTabs)",
+                    fontWeight = FontWeight.SemiBold,
+                    color = OnBg
+                )
             }
         }
+    }
+
+    if (showPayTabs) {
+        AlertDialog(
+            onDismissRequest = { if (!payTabsSending) showPayTabs = false },
+            confirmButton = {
+                TextButton(enabled = !payTabsSending, onClick = {
+                    val amount = payTabsAmount.replace(',', '.').toDoubleOrNull()
+                    if (amount == null || amount <= 0.0) {
+                        onToast("الرجاء إدخال مبلغ صحيح بالدولار.")
+                        return@TextButton
+                    }
+                    payTabsSending = true
+                    scope.launch {
+                        val url = apiCreatePayTabsPayment(uid, amount)
+                        payTabsSending = false
+                        if (url != null) {
+                            onAddNotice(
+                                AppNotice(
+                                    "شحن رصيد",
+                                    "تم إنشاء رابط دفع PayTabs بمبلغ ${amount}$",
+                                    forOwner = false
+                                )
+                            )
+                            try {
+                                uri.openUri(url)
+                            } catch (_: Exception) {
+                                onToast("تعذر فتح رابط الدفع، يرجى المحاولة مرة أخرى.")
+                            }
+                            showPayTabs = false
+                            payTabsAmount = ""
+                        } else {
+                            onToast("فشل إنشاء رابط الدفع، حاول مرة أخرى.")
+                        }
+                    }
+                }) {
+                    Text(if (payTabsSending) "ينشئ الرابط" else "متابعة")
+                }
+            },
+            dismissButton = {
+                TextButton(enabled = !payTabsSending, onClick = { showPayTabs = false }) {
+                    Text("إلغاء")
+                }
+            },
+            title = { Text("شحن عبر بطاقة ماستر / فيزا", color = OnBg) },
+            text = {
+                Column {
+                    Text("أدخل مبلغ الشحن بالدولار (USD)", color = OnBg)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = payTabsAmount,
+                        onValueChange = { payTabsAmount = it },
+                        label = { Text("المبلغ بالدولار") }
+                    )
+                }
+            }
+        )
     }
 
     if (askAsiacell) {
@@ -4287,6 +4344,21 @@ private suspend fun apiSubmitAsiacellCard(uid: String, card: String): Boolean {
         val obj = JSONObject(txt.trim())
         obj.optBoolean("ok", true) || obj.optString("status").equals("received", true)
     } catch (_: Exception) { true }
+}
+
+/* PayTabs – شحن الرصيد عبر الماستر/فيزا */
+private suspend fun apiCreatePayTabsPayment(uid: String, amountUsd: Double): String? {
+    val body = JSONObject()
+        .put("uid", uid)
+        .put("usd", amountUsd)
+    val (code, txt) = httpPost("/api/wallet/paytabs/create", body)
+    if (code !in 200..299 || txt == null) return null
+    return try {
+        val obj = JSONObject(txt.trim())
+        obj.optString("payment_url", null)
+    } catch (_: Exception) {
+        null
+    }
 }
 
 private suspend fun apiCreateManualOrder(uid: String, name: String): Boolean {
